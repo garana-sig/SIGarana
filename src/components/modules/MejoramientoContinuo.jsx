@@ -24,6 +24,7 @@ import {
 // Importar submódulos (por ahora solo Actas)
 import ActasManager from './MejoramientoContinuo/Actas/ActasManager';
 import AccionesMejoraManager from './MejoramientoContinuo/AccionesMejora/AccionesMejoraManager';
+import IndicadoresManager from "./MejoramientoContinuo/Indicadores/IndicadoresManager";
 
 // Definición de submódulos
 const SUBMODULES = [
@@ -79,7 +80,7 @@ const SUBMODULES = [
     icon: TrendingUp,
     color: '#6f7b2c',
     count: 15,
-    enabled: false
+    enabled: true
   },
   {
     id: 'requisitos_legales',
@@ -182,6 +183,11 @@ export default function MejoramientoContinuo() {
   );
 }
 
+  if (activeSubmodule === 'indicadores') {
+  return (
+    <IndicadoresManager onBack={() => setActiveSubmodule(null)} />
+  );
+}
   // Dashboard principal con cards
   return (
     <div className="space-y-6">
