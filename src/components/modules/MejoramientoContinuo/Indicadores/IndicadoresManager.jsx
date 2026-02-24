@@ -14,6 +14,7 @@ import {
 } from '@/hooks/useIndicadores';
 import { useAuth } from '@/context/AuthContext';
 import IndicadorModal   from './IndicadorModal';
+import { exportIndicadores } from '@/utils/exportIndicadores';
 import MedicionModal    from './MedicionModal';
 
 // ─── Colores del formato CMI (fiel al Excel RE-DP-02) ────────────────────────
@@ -137,11 +138,33 @@ export default function IndicadoresManager({ onBack }) {
   const [medicionOpen, setMedicionOpen] = useState(false);
   const [medicionInd,  setMedicionInd]  = useState(null);
   const [actionMsg,    setActionMsg]    = useState(null);
+  const [exporting,    setExporting]    = useState(false);
 
+  const { hasPermission } = useAuth();
   const isAdmin    = profile?.role === 'admin';
   const isGerencia = profile?.role === 'gerencia';
-  const canCreate  = isAdmin || isGerencia;
-  const canDelete  = isAdmin;
+
+  // Permisos granulares — admin/gerencia siempre pueden todo,
+  // usuarios con permiso específico también
+  const canView    = isAdmin || isGerencia || hasPermission('cmi:indicadores:view');
+  const canCreate  = isAdmin || isGerencia || hasPermission('cmi:indicadores:create');
+  const canEdit    = isAdmin || isGerencia || hasPermission('cmi:indicadores:edit');
+  const canDelete  = isAdmin               || hasPermission('cmi:indicadores:delete');
+  const canMeasure = isAdmin || isGerencia || hasPermission('cmi:indicadores:measure');
+  const canExport  = isAdmin || isGerencia || hasPermission('cmi:indicadores:export');
+
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      await exportIndicadores(indicators);
+      showMsg('success', `✅ Excel generado con ${indicators.length} indicador(es).`);
+    } catch (err) {
+      showMsg('error', `❌ ${err.message}`);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => {
     fetchIndicators();
@@ -233,9 +256,7 @@ export default function IndicadoresManager({ onBack }) {
   // ── Render fila de indicador ────────────────────────────────────────────────
   const renderRow = (ind, idx) => {
     const rowBg = idx % 2 === 0 ? CMI.rowOdd : CMI.rowEven;
-    const canEdit = isAdmin || isGerencia
-      || ind.responsible_id === profile?.id
-      || ind.created_by     === profile?.id;
+
 
     return (
       <tr key={ind.id} style={{ backgroundColor: rowBg }}
@@ -276,7 +297,7 @@ export default function IndicadoresManager({ onBack }) {
         </Cell>
 
         {/* Proceso fuente */}
-        <Cell maxW={100}><span style={{ fontSize: 9 }}>{ind.process_source || '—'}</span></Cell>
+        <Cell maxW={100}><span style={{ fontSize: 9 }}>{ind.process_name || '—'}</span></Cell>
 
         {/* Responsable */}
         <Cell maxW={100}><span style={{ fontSize: 9 }}>{ind.responsible_name}</span></Cell>
@@ -309,15 +330,15 @@ export default function IndicadoresManager({ onBack }) {
                 <Edit size={12} />
               </button>
             )}
-            {/* Registrar medición — responsable, admin o gerencia */}
-            {(isAdmin || isGerencia || ind.responsible_id === profile?.id) && (
+            {/* Registrar medición — canMeasure o responsable directo */}
+            {(canMeasure || ind.responsible_id === profile?.id) && (
               <button title="Registrar medición" onClick={() => openMedicion(ind)}
                 style={{ background:'none', border:'none', cursor:'pointer', padding: 2, color:'#16A34A' }}>
                 <BarChart2 size={12} />
               </button>
             )}
             {canDelete && (
-              <button title="Archivar" onClick={() => handleDelete(ind)}
+              <button title="Eliminar permanentemente" onClick={() => handleDelete(ind)}
                 style={{ background:'none', border:'none', cursor:'pointer', padding: 2, color:'#DC2626' }}>
                 <Trash2 size={12} />
               </button>
@@ -348,12 +369,23 @@ export default function IndicadoresManager({ onBack }) {
             <p style={{ color:'#6B7280', fontSize:12 }}>RE-DP-02 — Cuadro de Mando Integral</p>
           </div>
         </div>
-        {canCreate && (
-          <Button onClick={() => openModal('create')}
-            style={{ backgroundColor:'#2e5244', color:'white', fontSize:12 }}>
-            <Plus size={14} className="mr-1" /> Nuevo Indicador
-          </Button>
-        )}
+        <div style={{ display:'flex', gap:8 }}>
+          {canExport && (
+            <Button variant="outline" onClick={handleExport} disabled={exporting || indicators.length === 0}
+              style={{ fontSize:12, borderColor:'#2e5244', color:'#2e5244', opacity: exporting ? 0.6 : 1 }}>
+              {exporting
+                ? <><Loader2 size={14} className="mr-1 animate-spin" /> Generando...</>
+                : <><FileDown size={14} className="mr-1" /> Exportar Excel</>
+              }
+            </Button>
+          )}
+          {canCreate && (
+            <Button onClick={() => openModal('create')}
+              style={{ backgroundColor:'#2e5244', color:'white', fontSize:12 }}>
+              <Plus size={14} className="mr-1" /> Nuevo Indicador
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* ── Mensaje de acción ── */}

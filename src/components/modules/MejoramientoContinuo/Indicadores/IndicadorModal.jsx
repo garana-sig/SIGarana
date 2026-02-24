@@ -471,7 +471,7 @@ export default function IndicadorModal({
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
                   <thead>
                     <tr style={{ backgroundColor:'#F3F4F6' }}>
-                      {['Período','Fecha','Resultado','Meta','% Cumplimiento','Estado','Registrado por','Notas'].map(h => (
+                      {['Período','Fecha','Resultado','Meta','% Cumplimiento','Estado','Registrado por','Notas',''].map(h => (
                         <th key={h} style={{ padding:'6px 8px', textAlign:'left', fontSize:10, fontWeight:700, color:'#374151', borderBottom:'1px solid #E5E7EB' }}>{h}</th>
                       ))}
                     </tr>
@@ -503,6 +503,20 @@ export default function IndicadorModal({
                           <td style={{ padding:'5px 8px', borderBottom:'1px solid #F3F4F6', color:'#6B7280' }}>{m.created_by_name}</td>
                           <td style={{ padding:'5px 8px', borderBottom:'1px solid #F3F4F6', color:'#6B7280', maxWidth:140 }}>
                             <span style={{ fontSize:10 }}>{m.notes || '—'}</span>
+                          </td>
+                          <td style={{ padding:'5px 8px', borderBottom:'1px solid #F3F4F6', textAlign:'center' }}>
+                            {deleteMeasurement && (
+                              <button
+                                title="Eliminar medición"
+                                onClick={async () => {
+                                  if (!window.confirm(`¿Eliminar la medición del período "${m.period_label}"?`)) return;
+                                  await deleteMeasurement(m.id);
+                                  setMeasurements(prev => prev.filter(x => x.id !== m.id));
+                                }}
+                                style={{ background:'none', border:'none', cursor:'pointer', color:'#DC2626', padding:2 }}>
+                                <Trash2 size={12} />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );

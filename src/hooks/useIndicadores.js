@@ -241,6 +241,17 @@ export function useIndicadores() {
       const pm = {};
       (profilesData || []).forEach(p => { pm[p.id] = p; });
 
+      // Cargar nombres de procesos
+      const processIds = [...new Set(data.map(i => i.process_id).filter(Boolean))];
+      let procMap = {};
+      if (processIds.length > 0) {
+        const { data: procs } = await supabase
+          .from('process')
+          .select('id, name')
+          .in('id', processIds);
+        (procs || []).forEach(p => { procMap[p.id] = p.name; });
+      }
+
       // Última medición por indicador (para semáforo en tabla)
       const indicatorIds = data.map(i => i.id);
       const { data: lastMeasurements } = await supabase
@@ -259,6 +270,7 @@ export function useIndicadores() {
         const last = lastByInd[ind.id] || null;
         return {
           ...ind,
+          process_name:            procMap[ind.process_id] || '—',
           responsible:             pm[ind.responsible_id] || null,
           responsible_name:        pm[ind.responsible_id]?.full_name || '—',
           created_by_name:         pm[ind.created_by]?.full_name     || '—',
@@ -357,16 +369,29 @@ export function useIndicadores() {
 
       const parsedGoal = parseGoalText(formData.goal);
 
+      // Extraer solo campos editables (evitar RLS por campos como created_by, consecutive)
+      const {
+        indicator_type, perspective, strategic_initiative, objective,
+        indicator_name, indicator_subtype, formula, formula_expression,
+        formula_variables, process_id, definition, goal, disclosed_to,
+        responsible_id, frequency, measurement_start_date, measurement_end_date,
+        status,
+      } = formData;
+
       const { error: updateError } = await supabase
         .from('indicator')
         .update({
-          ...formData,
-          perspective:       formData.indicator_type === 'process' ? null : formData.perspective,
-          formula_variables: formData.formula_variables || [],
+          indicator_type,
+          perspective:          indicator_type === 'process' ? null : perspective,
+          strategic_initiative, objective, indicator_name, indicator_subtype,
+          formula, formula_expression,
+          formula_variables:    formula_variables || [],
+          process_id:           process_id || null,
+          definition, goal, disclosed_to, responsible_id,
+          frequency, measurement_start_date, measurement_end_date,
+          status,
           goal_value_parsed: parsedGoal.value,
           goal_direction:    parsedGoal.direction,
-          goal_value: formData.goal_value !== '' && formData.goal_value != null
-            ? parseFloat(formData.goal_value) : null,
         })
         .eq('id', id);
 
@@ -402,9 +427,17 @@ export function useIndicadores() {
   // ── DELETE (soft) ──────────────────────────────────────────────────────────
   const deleteIndicator = async (id) => {
     try {
+      // Primero eliminar mediciones asociadas (FK constraint)
+      const { error: delMedError } = await supabase
+        .from('indicator_measurement')
+        .delete()
+        .eq('indicator_id', id);
+      if (delMedError) throw delMedError;
+
+      // Luego eliminar el indicador permanentemente
       const { error: deleteError } = await supabase
         .from('indicator')
-        .update({ status: 'archived', deleted_at: new Date().toISOString() })
+        .delete()
         .eq('id', id);
 
       if (deleteError) throw deleteError;
