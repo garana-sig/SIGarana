@@ -1,16 +1,16 @@
 // src/components/modules/MejoramientoContinuo/AccionesMejora/AccionesMejoraManager.jsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Input }  from '@/app/components/ui/input';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
-// Agregar junto a los imports existentes:
 import { FileDown } from 'lucide-react';
 import { exportAccionesMejora } from '@/utils/exportAccionesMejora';
 import { supabase } from '@/lib/supabase';
 import {
   Plus, Search, RefreshCw, Filter, Loader2,
-  AlertTriangle, ChevronLeft, Edit, Trash2, Eye, Archive, CheckCircle2
+  AlertTriangle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  Edit, Trash2, Eye, Archive, CheckCircle2,
 } from 'lucide-react';
 import { useAccionesMejora, getTrafficLight } from '@/hooks/useAccionesMejora';
 import { useProcesses } from '@/hooks/useDocuments';
@@ -18,6 +18,7 @@ import { useAuth } from '@/context/AuthContext';
 import AccionMejoraModal from './AccionMejoraModal';
 import CierreAccionModal from './CierreAccionModal';
 
+// ── Paleta de colores (fiel al Excel formato AM) ──────────────────────────────
 const XL = {
   identificacion: '#FFD966',
   analisis:       '#9DC3E6',
@@ -36,6 +37,9 @@ const XL = {
   accBg:          '#EDF7ED',
 };
 
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+
+// ── Componentes de tabla ──────────────────────────────────────────────────────
 const HHead = ({ children, bg, colSpan = 1, rowSpan = 1, textColor = '#1F2937', small = false }) => (
   <th colSpan={colSpan} rowSpan={rowSpan} style={{
     backgroundColor: bg, border: `1px solid ${XL.border}`,
@@ -109,16 +113,69 @@ function Semaforo({ proposedDate, isClosed }) {
   );
 }
 
+// ── Paginación (inline, mismo patrón que RiskMatrixManager) ──────────────────
+function Pagination({ currentPage, totalPages, totalRows, pageSize, onPage, onPageSize }) {
+  if (totalRows === 0) return null;
+
+  const from = (currentPage - 1) * pageSize + 1;
+  const to   = Math.min(currentPage * pageSize, totalRows);
+
+  const pages = [];
+  const delta = 2;
+  const left  = Math.max(1, currentPage - delta);
+  const right = Math.min(totalPages, currentPage + delta);
+  for (let i = left; i <= right; i++) pages.push(i);
+
+  const btnBase = {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    width: 32, height: 32, borderRadius: 6, border: '1px solid #D1D5DB',
+    cursor: 'pointer', fontSize: 12, fontWeight: 500,
+    background: 'white', color: '#374151',
+  };
+  const btnActive   = { ...btnBase, background: '#2e5244', color: 'white', border: '1px solid #2e5244' };
+  const btnDisabled = { ...btnBase, opacity: 0.4, cursor: 'not-allowed' };
+
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginTop:8 }}>
+      <span style={{ fontSize:11, color:'#6B7280' }}>
+        Mostrando <strong>{from}–{to}</strong> de <strong>{totalRows}</strong> acción(es)
+      </span>
+      <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+        <button style={currentPage === 1 ? btnDisabled : btnBase} onClick={() => currentPage > 1 && onPage(1)} title="Primera">
+          <ChevronsLeft style={{ width:14, height:14 }} />
+        </button>
+        <button style={currentPage === 1 ? btnDisabled : btnBase} onClick={() => currentPage > 1 && onPage(currentPage - 1)} title="Anterior">
+          <ChevronLeft style={{ width:14, height:14 }} />
+        </button>
+        {left > 1 && (<><button style={btnBase} onClick={() => onPage(1)}>1</button>{left > 2 && <span style={{ fontSize:12, color:'#9CA3AF', padding:'0 2px' }}>…</span>}</>)}
+        {pages.map(p => (<button key={p} style={p === currentPage ? btnActive : btnBase} onClick={() => onPage(p)}>{p}</button>))}
+        {right < totalPages && (<>{right < totalPages - 1 && <span style={{ fontSize:12, color:'#9CA3AF', padding:'0 2px' }}>…</span>}<button style={btnBase} onClick={() => onPage(totalPages)}>{totalPages}</button></>)}
+        <button style={currentPage === totalPages ? btnDisabled : btnBase} onClick={() => currentPage < totalPages && onPage(currentPage + 1)} title="Siguiente">
+          <ChevronRight style={{ width:14, height:14 }} />
+        </button>
+        <button style={currentPage === totalPages ? btnDisabled : btnBase} onClick={() => currentPage < totalPages && onPage(totalPages)} title="Última">
+          <ChevronsRight style={{ width:14, height:14 }} />
+        </button>
+      </div>
+      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+        <span style={{ fontSize:11, color:'#6B7280' }}>Filas por página:</span>
+        <select value={pageSize} onChange={e => { onPageSize(Number(e.target.value)); onPage(1); }}
+          style={{ padding:'2px 6px', border:'1px solid #D1D5DB', borderRadius:6, fontSize:12, height:28 }}>
+          {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </div>
+    </div>
+  );
+}
+
+// ── Componente principal ──────────────────────────────────────────────────────
 export default function AccionesMejoraManager({ onBack }) {
-  const { user, profile } = useAuth();
+  const { user, profile, hasPermission } = useAuth();
   const role      = profile?.role;
-  // ✅ Cambiar por esto
-const { hasPermission } = useAuth();
-const canManage = ['admin', 'gerencia'].includes(role) || 
-                  hasPermission('auditorias:acciones_mejora:close');
+  const canManage = ['admin', 'gerencia'].includes(role) ||
+                    hasPermission('auditorias:acciones_mejora:close');
 
-  const [exporting, setExporting] = useState(false);
-
+  const [exporting,     setExporting]     = useState(false);
   const [modalOpen,     setModalOpen]     = useState(false);
   const [modalMode,     setModalMode]     = useState('create');
   const [selected,      setSelected]      = useState(null);
@@ -129,15 +186,31 @@ const canManage = ['admin', 'gerencia'].includes(role) ||
   const [fStatus,       setFStatus]       = useState('');
   const [actionMsg,     setActionMsg]     = useState(null);
 
+  // ── Paginación ────────────────────────────────────────────────────────────
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize,    setPageSize]    = useState(20);
+
   const { acciones, loading, error, fetchAcciones, deleteAccion, closeAccion } = useAccionesMejora();
   const { processes = [] } = useProcesses() || {};
 
-  const rows = acciones.filter(a =>
+  // ── Filtrado ──────────────────────────────────────────────────────────────
+  const rows = useMemo(() => acciones.filter(a =>
     (!search  || a.consecutive?.toLowerCase().includes(search.toLowerCase())
               || a.finding_description?.toLowerCase().includes(search.toLowerCase()))
     && (!fStatus || a.status === fStatus)
-  );
+  ), [acciones, search, fStatus]);
 
+  // ── Cálculo de página ─────────────────────────────────────────────────────
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const safePage   = Math.min(currentPage, totalPages);
+  const pageRows   = rows.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  // Resetear a pág 1 al cambiar filtros
+  const handleSearch  = (v) => { setSearch(v);   setCurrentPage(1); };
+  const handleStatus  = (v) => { setFStatus(v);  setCurrentPage(1); };
+  const handleClear   = ()  => { setSearch(''); setFStatus(''); setCurrentPage(1); };
+
+  // ── Stats (siempre sobre el total, no sobre la página) ───────────────────
   const stats = {
     total: acciones.length,
     open:  acciones.filter(a => a.status === 'open').length,
@@ -153,7 +226,7 @@ const canManage = ['admin', 'gerencia'].includes(role) ||
     setTimeout(() => setActionMsg(null), 4000);
   };
 
-  const openModal = (mode, a = null) => { setModalMode(mode); setSelected(a); setModalOpen(true); };
+  const openModal  = (mode, a = null) => { setModalMode(mode); setSelected(a); setModalOpen(true); };
 
   const openCierre = (a) => {
     setAccionACerrar({ ...a, responsible_name: a.responsible_name || a.responsible?.full_name || '—' });
@@ -172,69 +245,43 @@ const canManage = ['admin', 'gerencia'].includes(role) ||
     else           showMsg('error',   `Error al eliminar: ${r.error}`);
   };
 
-  // ── Exportar filas visibles en pantalla ──────────────────────────────
-const handleExportVisible = async () => {
-  if (rows.length === 0) return;
-  setExporting(true);
-  try {
-    await exportAccionesMejora(
-      rows,
-      (id) => procName(id),
-      'AccionesMejora_Filtradas'
-    );
-    showMsg('success', `✅ Excel generado con ${rows.length} acción(es).`);
-  } catch {
-    showMsg('error', '❌ Error al generar el Excel.');
-  } finally {
-    setExporting(false);
-  }
-};
+  const handleExportVisible = async () => {
+    if (rows.length === 0) return;
+    setExporting(true);
+    try {
+      await exportAccionesMejora(rows, (id) => procName(id), 'AccionesMejora_Filtradas');
+      showMsg('success', `✅ Excel generado con ${rows.length} acción(es).`);
+    } catch {
+      showMsg('error', '❌ Error al generar el Excel.');
+    } finally { setExporting(false); }
+  };
 
-// ── Exportar TODAS las acciones desde BD (sin filtros) ───────────────
-const handleExportAll = async () => {
-  setExporting(true);
-  try {
-    const { data, error: fetchErr } = await supabase
-      .from('improvement_action')
-      .select('*')
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false });
+  const handleExportAll = async () => {
+    setExporting(true);
+    try {
+      const { data, error: fetchErr } = await supabase
+        .from('improvement_action').select('*').is('deleted_at', null)
+        .order('created_at', { ascending: false });
+      if (fetchErr) throw fetchErr;
 
-    if (fetchErr) throw fetchErr;
+      const ids = [...new Set([...data.map(a => a.responsible_id), ...data.map(a => a.auditor_id)].filter(Boolean))];
+      const { data: profiles } = await supabase.from('profile').select('id, full_name, email').in('id', ids);
+      const pm = {};
+      (profiles || []).forEach(p => { pm[p.id] = p; });
 
-    // Enriquecer con nombres de perfiles
-    const ids = [...new Set([
-      ...data.map(a => a.responsible_id),
-      ...data.map(a => a.auditor_id),
-    ].filter(Boolean))];
+      const enriquecidas = data.map(a => ({
+        ...a,
+        responsible_name:  pm[a.responsible_id]?.full_name || '—',
+        responsible_email: pm[a.responsible_id]?.email     || null,
+        auditor:           pm[a.auditor_id] || null,
+      }));
 
-    const { data: profiles } = await supabase
-      .from('profile')
-      .select('id, full_name, email')
-      .in('id', ids);
-
-    const pm = {};
-    (profiles || []).forEach(p => { pm[p.id] = p; });
-
-    const enriquecidas = data.map(a => ({
-      ...a,
-      responsible_name:  pm[a.responsible_id]?.full_name || '—',
-      responsible_email: pm[a.responsible_id]?.email     || null,
-      auditor:           pm[a.auditor_id]     || null,
-    }));
-
-    await exportAccionesMejora(
-      enriquecidas,
-      (id) => procName(id),
-      'AccionesMejora_Completo'
-    );
-    showMsg('success', `✅ Excel con ${enriquecidas.length} acción(es) generado.`);
-  } catch {
-    showMsg('error', '❌ Error al exportar todo.');
-  } finally {
-    setExporting(false);
-  }
-};
+      await exportAccionesMejora(enriquecidas, (id) => procName(id), 'AccionesMejora_Completo');
+      showMsg('success', `✅ Excel con ${enriquecidas.length} acción(es) generado.`);
+    } catch {
+      showMsg('error', '❌ Error al exportar todo.');
+    } finally { setExporting(false); }
+  };
 
   return (
     <div className="space-y-4 px-2">
@@ -298,54 +345,39 @@ const handleExportAll = async () => {
         </CardHeader>
 
         <CardContent className="space-y-3">
+
+          {/* Barra de herramientas */}
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input placeholder="Buscar consecutivo o descripción..."
-                value={search} onChange={e => setSearch(e.target.value)}
+                value={search} onChange={e => handleSearch(e.target.value)}
                 className="pl-10 text-sm" />
             </div>
             <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
               <Filter className="h-4 w-4" />
             </Button>
-           <Button variant="outline" size="sm" onClick={fetchAcciones}>
-  <RefreshCw className="h-4 w-4" />
-</Button>
-
-{/* Botón exportar visible */}
-<Button
-  variant="outline" size="sm"
-  onClick={handleExportVisible}
-  disabled={exporting || rows.length === 0}
-  title={`Exportar ${rows.length} acción(es) visibles`}
-  className="border-green-300 text-green-700 hover:bg-green-50"
->
-  {exporting
-    ? <Loader2 className="h-4 w-4 animate-spin" />
-    : <><FileDown className="h-4 w-4 mr-1" />{rows.length}</>
-  }
-</Button>
-
-{/* Botón exportar todo */}
-<Button
-  variant="outline" size="sm"
-  onClick={handleExportAll}
-  disabled={exporting}
-  title="Exportar todas las acciones de la BD"
-  className="border-blue-300 text-blue-700 hover:bg-blue-50"
->
-  {exporting
-    ? <Loader2 className="h-4 w-4 animate-spin" />
-    : <><FileDown className="h-4 w-4 mr-1" />Todo</>
-  }
-</Button>
+            <Button variant="outline" size="sm" onClick={fetchAcciones}>
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExportVisible}
+              disabled={exporting || rows.length === 0} title={`Exportar ${rows.length} acción(es) filtradas`}
+              className="border-green-300 text-green-700 hover:bg-green-50">
+              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><FileDown className="h-4 w-4 mr-1" />{rows.length}</>}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExportAll}
+              disabled={exporting} title="Exportar todas las acciones de la BD"
+              className="border-blue-300 text-blue-700 hover:bg-blue-50">
+              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><FileDown className="h-4 w-4 mr-1" />Todo</>}
+            </Button>
           </div>
 
+          {/* Filtros */}
           {showFilters && (
             <div className="flex gap-3 p-3 bg-gray-50 rounded-lg border">
               <div className="flex-1">
                 <label className="text-xs font-medium text-gray-600 mb-1 block">Estado</label>
-                <select value={fStatus} onChange={e => setFStatus(e.target.value)}
+                <select value={fStatus} onChange={e => handleStatus(e.target.value)}
                   className="w-full p-2 border rounded text-sm">
                   <option value="">Todos</option>
                   <option value="open">Abierta</option>
@@ -353,23 +385,13 @@ const handleExportAll = async () => {
                 </select>
               </div>
               <div className="flex items-end">
-                <Button variant="outline" size="sm" onClick={() => { setFStatus(''); setSearch(''); }}>
-                  Limpiar
-                </Button>
+                <Button variant="outline" size="sm" onClick={handleClear}>Limpiar</Button>
               </div>
             </div>
           )}
 
-          {/*
-            ── Tabla Excel ──
-            El wrapper exterior maneja el scroll horizontal.
-            paddingBottom: 16 → deja espacio entre la última fila y el scrollbar
-            para que la barra no tape el contenido.
-          */}
-          <div
-            className="border rounded-lg"
-            style={{ overflowX: 'auto', paddingBottom: 2 }}
-          >
+          {/* ── Tabla Excel ── */}
+          <div className="border rounded-lg" style={{ overflowX: 'auto', paddingBottom: 2 }}>
             <div style={{ zoom: '0.75', minWidth: 'fit-content', paddingBottom: 8 }}>
               {loading ? (
                 <div className="flex items-center justify-center p-12">
@@ -386,42 +408,16 @@ const handleExportAll = async () => {
               ) : rows.length === 0 ? (
                 <div className="text-center p-12 text-gray-400">
                   <Archive className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                  <p className="font-medium">No hay acciones de mejora registradas</p>
-                  <p className="text-sm mt-1">Crea la primera usando "Nueva Acción"</p>
+                  <p className="font-medium">
+                    {search || fStatus ? 'No hay acciones con los filtros aplicados.' : 'No hay acciones de mejora registradas'}
+                  </p>
+                  {!search && !fStatus && (
+                    <p className="text-sm mt-1">Crea la primera usando "Nueva Acción"</p>
+                  )}
                 </div>
               ) : (
                 <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed' }}>
-                  <colgroup>
-                    <col style={{ width: 56 }} />
-                    <col style={{ width: 70 }} />
-                    <col style={{ width: 52 }} />
-                    <col style={{ width: 90 }} />
-                    <col style={{ width: 26 }} />
-                    <col style={{ width: 26 }} />
-                    <col style={{ width: 26 }} />
-                    <col style={{ width: 26 }} />
-                    <col style={{ width: 26 }} />
-                    <col style={{ width: 26 }} />
-                    <col style={{ width: 130 }} />
-                    <col style={{ width: 26 }} />
-                    <col style={{ width: 26 }} />
-                    <col style={{ width: 26 }} />
-                    <col style={{ width: 100 }} />
-                    <col style={{ width: 120 }} />
-                    <col style={{ width: 90 }} />
-                    <col style={{ width: 75 }} />
-                    <col style={{ width: 80 }} />
-                    <col style={{ width: 52 }} />
-                    <col style={{ width: 100 }} />
-                    <col style={{ width: 100 }} />
-                    <col style={{ width: 50 }} />
-                    <col style={{ width: 50 }} />
-                    <col style={{ width: 30 }} />
-                    <col style={{ width: 30 }} />
-                    <col style={{ width: 30 }} />
-                    <col style={{ width: 80 }} />
-                  </colgroup>
-
+                  <colgroup><col style={{ width: 56 }} /><col style={{ width: 70 }} /><col style={{ width: 52 }} /><col style={{ width: 90 }} /><col style={{ width: 26 }} /><col style={{ width: 26 }} /><col style={{ width: 26 }} /><col style={{ width: 26 }} /><col style={{ width: 26 }} /><col style={{ width: 26 }} /><col style={{ width: 130 }} /><col style={{ width: 26 }} /><col style={{ width: 26 }} /><col style={{ width: 26 }} /><col style={{ width: 100 }} /><col style={{ width: 120 }} /><col style={{ width: 90 }} /><col style={{ width: 75 }} /><col style={{ width: 80 }} /><col style={{ width: 52 }} /><col style={{ width: 100 }} /><col style={{ width: 100 }} /><col style={{ width: 50 }} /><col style={{ width: 50 }} /><col style={{ width: 30 }} /><col style={{ width: 30 }} /><col style={{ width: 30 }} /><col style={{ width: 80 }} /></colgroup>
                   <thead>
                     <tr>
                       <HHead bg="#E2EFDA" rowSpan={3}>ACC.</HHead>
@@ -451,24 +447,16 @@ const handleExportAll = async () => {
                       <VHead rowSpan={2} w={80}>Auditor</VHead>
                     </tr>
                     <tr>
-                      <VHead w={26}>Auditoría</VHead>
-                      <VHead w={26}>QRS</VHead>
-                      <VHead w={26}>Satisfacción</VHead>
-                      <VHead w={26}>Autocontrol /|Gest. cambio</VHead>
-                      <VHead w={26}>Análisis de|riesgos</VHead>
-                      <VHead w={26}>Pto no conforme</VHead>
-                      <VHead w={26}>Corrección</VHead>
-                      <VHead w={26}>Correctiva</VHead>
-                      <VHead w={26}>Preventiva</VHead>
-                      <VHead w={50}>Verificación</VHead>
-                      <VHead w={50}>Eficacia</VHead>
-                      <VHead w={30}>SI</VHead>
-                      <VHead w={30}>NO</VHead>
+                      <VHead w={26}>Auditoría</VHead><VHead w={26}>QRS</VHead>
+                      <VHead w={26}>Satisfacción</VHead><VHead w={26}>Autocontrol /|Gest. cambio</VHead>
+                      <VHead w={26}>Análisis de|riesgos</VHead><VHead w={26}>Pto no conforme</VHead>
+                      <VHead w={26}>Corrección</VHead><VHead w={26}>Correctiva</VHead><VHead w={26}>Preventiva</VHead>
+                      <VHead w={50}>Verificación</VHead><VHead w={50}>Eficacia</VHead>
+                      <VHead w={30}>SI</VHead><VHead w={30}>NO</VHead>
                     </tr>
                   </thead>
-
                   <tbody>
-                    {rows.map((a, idx) => {
+                    {pageRows.map((a, idx) => {
                       const light     = getTrafficLight(a.proposed_date, a.is_closed);
                       const isOverdue = light.color === 'red' && !a.is_closed;
                       const bg        = isOverdue ? XL.rowOverdue : idx % 2 === 0 ? XL.rowOdd : XL.rowEven;
@@ -476,40 +464,29 @@ const handleExportAll = async () => {
                         <tr key={a.id} style={{ backgroundColor: bg }}
                           onMouseEnter={e => e.currentTarget.style.backgroundColor = XL.rowHover}
                           onMouseLeave={e => e.currentTarget.style.backgroundColor = bg}>
-
-                          {/* ACC */}
-                          <td style={{
-                            border: `1px solid ${XL.border}`, padding: '2px',
-                            textAlign: 'center', verticalAlign: 'middle', backgroundColor: XL.accBg,
-                          }}>
-                            <div style={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
-                              <button onClick={() => openModal('view', a)} title="Ver"
-                                style={{ background:'none', border:'none', cursor:'pointer', padding:1, borderRadius:3 }}>
+                          <td style={{ border:`1px solid ${XL.border}`, padding:'2px', textAlign:'center', verticalAlign:'middle', backgroundColor: XL.accBg }}>
+                            <div style={{ display:'flex', gap:2, justifyContent:'center' }}>
+                              <button onClick={() => openModal('view', a)} title="Ver" style={{ background:'none', border:'none', cursor:'pointer', padding:1, borderRadius:3 }}>
                                 <Eye style={{ width:13, height:13, color:'#3B82F6' }} />
                               </button>
                               {(canManage || a.created_by === user?.id) && !a.is_closed && (
-                                <button onClick={() => openModal('edit', a)} title="Editar"
-                                  style={{ background:'none', border:'none', cursor:'pointer', padding:1, borderRadius:3 }}>
+                                <button onClick={() => openModal('edit', a)} title="Editar" style={{ background:'none', border:'none', cursor:'pointer', padding:1, borderRadius:3 }}>
                                   <Edit style={{ width:13, height:13, color:'#6B7280' }} />
                                 </button>
                               )}
                               {canManage && (
-                                <button onClick={() => handleDelete(a)} title="Eliminar"
-                                  style={{ background:'none', border:'none', cursor:'pointer', padding:1, borderRadius:3 }}>
+                                <button onClick={() => handleDelete(a)} title="Eliminar" style={{ background:'none', border:'none', cursor:'pointer', padding:1, borderRadius:3 }}>
                                   <Trash2 style={{ width:13, height:13, color:'#EF4444' }} />
                                 </button>
                               )}
                             </div>
                           </td>
-
                           <Cell center bold color="#2e5244">{a.consecutive}</Cell>
                           <Cell center><Fecha v={a.date} /></Cell>
                           <Cell>
-                            <span style={{
-                              background:'#6dbd9618', color:'#2e5244', padding:'1px 4px',
-                              borderRadius:3, fontSize:9, whiteSpace:'nowrap',
-                              overflow:'hidden', display:'block', textOverflow:'ellipsis',
-                            }}>{procName(a.process_id)}</span>
+                            <span style={{ background:'#6dbd9618', color:'#2e5244', padding:'1px 4px', borderRadius:3, fontSize:9, whiteSpace:'nowrap', overflow:'hidden', display:'block', textOverflow:'ellipsis' }}>
+                              {procName(a.process_id)}
+                            </span>
                           </Cell>
                           <Cell center><Tick v={a.origin_audit} /></Cell>
                           <Cell center><Tick v={a.origin_qrs} /></Cell>
@@ -531,38 +508,21 @@ const handleExportAll = async () => {
                           <Cell><Clamp v={a.verification_finding} muted /></Cell>
                           <Cell center><Fecha v={a.verification_date} /></Cell>
                           <Cell center><Fecha v={a.efficacy_date} /></Cell>
-                          <Cell center>
-                            <Semaforo proposedDate={a.proposed_date} isClosed={a.is_closed} />
-                          </Cell>
-
-                          {/* CIERRE SI */}
+                          <Cell center><Semaforo proposedDate={a.proposed_date} isClosed={a.is_closed} /></Cell>
                           <td style={{ border:`1px solid ${XL.border}`, textAlign:'center', verticalAlign:'middle', padding:'2px' }}>
                             {canManage && !a.is_closed ? (
-                              <button onClick={() => openCierre(a)} style={{
-                                backgroundColor:'#22c55e', color:'white', border:'none',
-                                borderRadius:3, padding:'1px 5px', fontSize:9, fontWeight:700, cursor:'pointer',
-                              }}>SI</button>
+                              <button onClick={() => openCierre(a)} style={{ backgroundColor:'#22c55e', color:'white', border:'none', borderRadius:3, padding:'1px 5px', fontSize:9, fontWeight:700, cursor:'pointer' }}>SI</button>
                             ) : (
-                              <span style={{ fontSize:10, fontWeight:700, color: a.closure_approved === 'SI' ? '#22c55e' : '#D1D5DB' }}>
-                                {a.closure_approved === 'SI' ? '✓' : '-'}
-                              </span>
+                              <span style={{ fontSize:10, fontWeight:700, color: a.closure_approved === 'SI' ? '#22c55e' : '#D1D5DB' }}>{a.closure_approved === 'SI' ? '✓' : '-'}</span>
                             )}
                           </td>
-
-                          {/* CIERRE NO */}
                           <td style={{ border:`1px solid ${XL.border}`, textAlign:'center', verticalAlign:'middle', padding:'2px' }}>
                             {canManage && !a.is_closed ? (
-                              <button onClick={() => openCierre(a)} style={{
-                                backgroundColor:'#9CA3AF', color:'white', border:'none',
-                                borderRadius:3, padding:'1px 5px', fontSize:9, fontWeight:700, cursor:'pointer',
-                              }}>NO</button>
+                              <button onClick={() => openCierre(a)} style={{ backgroundColor:'#9CA3AF', color:'white', border:'none', borderRadius:3, padding:'1px 5px', fontSize:9, fontWeight:700, cursor:'pointer' }}>NO</button>
                             ) : (
-                              <span style={{ fontSize:10, fontWeight:700, color: a.closure_approved === 'NO' ? '#6B7280' : '#D1D5DB' }}>
-                                {a.closure_approved === 'NO' ? '✓' : '-'}
-                              </span>
+                              <span style={{ fontSize:10, fontWeight:700, color: a.closure_approved === 'NO' ? '#6B7280' : '#D1D5DB' }}>{a.closure_approved === 'NO' ? '✓' : '-'}</span>
                             )}
                           </td>
-
                           <Cell>{a.auditor?.full_name || '-'}</Cell>
                         </tr>
                       );
@@ -573,32 +533,29 @@ const handleExportAll = async () => {
             </div>
           </div>
 
+          {/* ── Paginación ── */}
           {!loading && rows.length > 0 && (
-            <p style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'right' }}>
-              {rows.length} acción(es) activa(s)
-            </p>
+            <Pagination
+              currentPage={safePage}
+              totalPages={totalPages}
+              totalRows={rows.length}
+              pageSize={pageSize}
+              onPage={setCurrentPage}
+              onPageSize={(s) => { setPageSize(s); setCurrentPage(1); }}
+            />
           )}
+
         </CardContent>
       </Card>
 
-      {/* Modal crear/editar/ver */}
       {modalOpen && (
-        <AccionMejoraModal
-          isOpen={modalOpen}
-          mode={modalMode}
-          accion={selected}
+        <AccionMejoraModal isOpen={modalOpen} mode={modalMode} accion={selected}
           onClose={() => { setModalOpen(false); setSelected(null); }}
-          onSuccess={() => { setModalOpen(false); setSelected(null); fetchAcciones(); }}
-        />
+          onSuccess={() => { setModalOpen(false); setSelected(null); fetchAcciones(); }} />
       )}
-
-      {/* Modal cierre */}
-      <CierreAccionModal
-        open={cierreOpen}
-        accion={accionACerrar}
+      <CierreAccionModal open={cierreOpen} accion={accionACerrar}
         onClose={() => { setCierreOpen(false); setAccionACerrar(null); }}
-        onConfirm={handleConfirmCierre}
-      />
+        onConfirm={handleConfirmCierre} />
     </div>
   );
 }
