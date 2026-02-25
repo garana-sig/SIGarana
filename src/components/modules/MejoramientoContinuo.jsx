@@ -25,6 +25,8 @@ import {
 import ActasManager from './MejoramientoContinuo/Actas/ActasManager';
 import AccionesMejoraManager from './MejoramientoContinuo/AccionesMejora/AccionesMejoraManager';
 import IndicadoresManager from "./MejoramientoContinuo/Indicadores/IndicadoresManager";
+import RiskMatrixManager from "./MejoramientoContinuo/RiskMatrix/RiskMatrixManager";
+
 
 // Definición de submódulos
 const SUBMODULES = [
@@ -116,7 +118,7 @@ const SUBMODULES = [
     icon: BarChart3,
     color: '#2e5244',
     count: 18,
-    enabled: false
+    enabled: true
   },
   {
     id: 'reporte_incidentes',
@@ -172,6 +174,14 @@ export default function MejoramientoContinuo() {
   if (activeSubmodule === 'actas') {
     return (
       <ActasManager
+        onBack={() => setActiveSubmodule(null)}
+      />
+    );
+  }
+
+  if (activeSubmodule === 'matriz_riesgos') {
+    return (
+      <RiskMatrixManager
         onBack={() => setActiveSubmodule(null)}
       />
     );
