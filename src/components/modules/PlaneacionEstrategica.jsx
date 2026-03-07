@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { Progress } from '@/app/components/ui/progress';
+import ModuleHero from '@/components/ModuleHero';
 import { 
   Target, 
   TrendingUp,
@@ -56,23 +57,14 @@ export default function PlaneacionEstrategica() {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-        <div>
-          <h2 style={{ color: '#2e5244' }}>Planeación Estratégica</h2>
-          <p className="text-sm mt-1" style={{ color: '#6f7b2c' }}>
-            Gestión de objetivos, políticas y cuadro de mando integral
-          </p>
-        </div>
-        {canWrite && (
-          <Button style={{ backgroundColor: '#2e5244' }} className="text-white">
-            <Plus className="h-4 w-4 mr-2" />
-            Nuevo Objetivo
-          </Button>
-        )}
-      </div>
-
+    <div className="space-y-6">
+      <ModuleHero
+        title="Planeación Estratégica"
+        subtitle="Gestión de objetivos, políticas y cuadro de mando integral"
+        icon={Target}
+        color="#6f7b2c"
+      />
+      <div className="px-2">
       {/* Perspectives Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {PERSPECTIVES.map((perspective, index) => (
@@ -240,6 +232,7 @@ export default function PlaneacionEstrategica() {
           </Card>
         </TabsContent>
       </Tabs>
+      </div> {/* /px-2 */}
     </div>
   );
 }

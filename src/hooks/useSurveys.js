@@ -389,3 +389,113 @@ export function useSurveyResponses(surveyTypeCode, periodId = null) {
     getStatus,
   };
 }
+// ─── useAllPeriodsStats ──────────────────────────────────────────────────────
+// Trae promedios de TODOS los períodos para graficar tendencia histórica.
+// Carga UNA VEZ todas las respuestas y answers, agrupa por período en memoria.
+export function useAllPeriodsStats(surveyTypeCode) {
+  const [data,    setData]    = useState([]); // [{ periodId, periodName, semLabel, avg, count, categoryAvgs }]
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(null);
+
+  const load = useCallback(async () => {
+    if (!surveyTypeCode) return;
+    setLoading(true);
+    setError(null);
+    try {
+      // 1. Tipo
+      const { data: typeData, error: typeError } = await supabase
+        .from('survey_type').select('id').eq('code', surveyTypeCode).single();
+      if (typeError) throw typeError;
+
+      // 2. Todos los períodos ordenados cronológicamente (asc para el eje X)
+      const { data: periods, error: pErr } = await supabase
+        .from('survey_period')
+        .select('id, name, semester, year, is_active')
+        .eq('survey_type_id', typeData.id)
+        .order('year',     { ascending: true })
+        .order('semester', { ascending: true });
+      if (pErr) throw pErr;
+      if (!periods?.length) { setData([]); return; }
+
+      // 3. Preguntas activas (para categorías en clima)
+      const { data: questions } = await supabase
+        .from('survey_question')
+        .select('id, category, question_type')
+        .eq('survey_type_id', typeData.id)
+        .eq('is_active', true);
+
+      const scaleQIds = (questions || [])
+        .filter(q => q.question_type === 'scale')
+        .map(q => q.id);
+
+      // 4. Todas las respuestas (sin filtro de período)
+      const periodIds = periods.map(p => p.id);
+      const { data: responses, error: rErr } = await supabase
+        .from('survey_response')
+        .select('id, survey_period_id, work_area')
+        .in('survey_period_id', periodIds);
+      if (rErr) throw rErr;
+      if (!responses?.length) { setData([]); return; }
+
+      // 5. Todos los answers de esas respuestas (solo scale)
+      const responseIds = responses.map(r => r.id);
+      const { data: answers, error: aErr } = await supabase
+        .from('survey_answer')
+        .select('response_id, question_id, value_number')
+        .in('response_id', responseIds)
+        .in('question_id', scaleQIds)
+        .not('value_number', 'is', null);
+      if (aErr) throw aErr;
+
+      // 6. Agrupar por período en memoria
+      const result = periods.map(period => {
+        const periodResponses = responses.filter(r => r.survey_period_id === period.id);
+        const periodResponseIds = new Set(periodResponses.map(r => r.id));
+        const periodAnswers = (answers || []).filter(a => periodResponseIds.has(a.response_id));
+
+        // Promedio general
+        const avg = periodAnswers.length
+          ? parseFloat((periodAnswers.reduce((s, a) => s + a.value_number, 0) / periodAnswers.length).toFixed(2))
+          : null;
+
+        // % satisfacción (≥4)
+        const satisfactionRate = periodAnswers.length
+          ? Math.round((periodAnswers.filter(a => a.value_number >= 4).length / periodAnswers.length) * 100)
+          : null;
+
+        // Promedios por categoría (para clima laboral)
+        const catMap = {};
+        (questions || []).filter(q => q.category && q.question_type === 'scale').forEach(q => {
+          if (!catMap[q.category]) catMap[q.category] = { sum: 0, count: 0 };
+          const qAnswers = periodAnswers.filter(a => a.question_id === q.id);
+          qAnswers.forEach(a => { catMap[q.category].sum += a.value_number; catMap[q.category].count++; });
+        });
+        const categoryAvgs = Object.entries(catMap).reduce((acc, [cat, v]) => {
+          acc[cat] = v.count ? parseFloat((v.sum / v.count).toFixed(2)) : null;
+          return acc;
+        }, {});
+
+        return {
+          periodId:       period.id,
+          periodName:     period.name,
+          semLabel:       `${period.semester === 1 ? 'I' : 'II'} Sem ${period.year}`,
+          isActive:       period.is_active,
+          avg,
+          satisfactionRate,
+          count:          periodResponses.length,
+          categoryAvgs,
+        };
+      }).filter(d => d.count > 0); // solo períodos con datos
+
+      setData(result);
+    } catch (err) {
+      console.error('useAllPeriodsStats error:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [surveyTypeCode]);
+
+  useEffect(() => { load(); }, [load]);
+  return { data, loading, error, reload: load };
+}

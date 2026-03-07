@@ -1,5 +1,6 @@
 // src/components/modules/MejoramientoContinuo/MejoramientoContinuo.jsx
 import { useState } from 'react';
+import ModuleHero from '@/components/ModuleHero';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import {
@@ -202,14 +203,12 @@ export default function MejoramientoContinuo() {
   return (
     <div className="space-y-6">
 
-      <div>
-        <h2 className="text-2xl font-bold" style={{ color: '#2e5244' }}>
-          Mejoramiento Continuo
-        </h2>
-        <p className="text-sm mt-1" style={{ color: '#6f7b2c' }}>
-          Gestión integral de mejoramiento y calidad
-        </p>
-      </div>
+      <ModuleHero
+        title="Mejoramiento Continuo"
+        subtitle="Gestión integral de mejoramiento y calidad"
+        icon={TrendingUp}
+        color="#6dbd96"
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {SUBMODULES.map((submodule) => {

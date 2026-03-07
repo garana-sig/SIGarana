@@ -1,5 +1,6 @@
 // src/app/modules/GestionUsuarios.jsx
 import { useState, useEffect } from 'react';
+import ModuleHero from '@/components/ModuleHero';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -189,8 +190,17 @@ export default function GestionUsuarios() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Alerta Informativa - Versión Simple sin componente Alert */}
+    <div className="space-y-0">
+      {/* ── Hero del módulo ── */}
+      <ModuleHero
+        title="Gestión de Usuarios"
+        subtitle="Administración de usuarios y permisos del sistema"
+        icon={Users}
+        color="#6dbd96"
+      />
+
+      <div className="space-y-6">
+      {/* Alerta Informativa */}
       <div 
         className="p-4 rounded-lg border-2 flex items-start gap-3"
         style={{ borderColor: '#6dbd96', backgroundColor: '#f0f9f4' }}
@@ -206,16 +216,8 @@ export default function GestionUsuarios() {
         </div>
       </div>
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-        <div>
-          <h2 className="text-2xl font-bold" style={{ color: '#2e5244' }}>
-            Gestión de Usuarios
-          </h2>
-          <p className="text-sm mt-1" style={{ color: '#6f7b2c' }}>
-            Administración de usuarios y permisos del sistema
-          </p>
-        </div>
+      {/* Botón nuevo usuario */}
+      <div className="flex justify-end">
         <Button 
           style={{ backgroundColor: '#2e5244' }} 
           className="text-white hover:opacity-90"
@@ -518,6 +520,7 @@ export default function GestionUsuarios() {
           />
         </DialogContent>
       </Dialog>
-    </div>
+      </div> {/* cierra p-6 */}
+    </div>   
   );
 }

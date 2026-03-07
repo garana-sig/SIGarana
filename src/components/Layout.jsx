@@ -61,13 +61,7 @@ const MODULES = [
     color: '#6dbd96', 
     permission: 'sst_bienestar:view' 
   },
-  { 
-    id: 'inventario', 
-    name: 'Inventario', 
-    icon: Package, 
-    color: '#6f7b2c', 
-    permission: 'inventario:view' 
-  },
+ 
 ];
 
 export default function Layout({ children, currentModule, onModuleChange }) {
@@ -75,8 +69,13 @@ export default function Layout({ children, currentModule, onModuleChange }) {
   const { user, profile, permissions, logout, hasPermission } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false); // Mobile
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Desktop
+  // ✅ resetKey: clic en módulo activo → remount → vuelve al dashboard del módulo
+  const [resetKey, setResetKey] = useState(0);
 
   const handleModuleClick = (moduleId) => {
+    if (moduleId === currentModule) {
+      setResetKey(k => k + 1);
+    }
     onModuleChange(moduleId);
     setSidebarOpen(false);
   };
@@ -325,7 +324,7 @@ export default function Layout({ children, currentModule, onModuleChange }) {
         {/* ============================================
             CONTENT - PADDING REDUCIDO
         ============================================ */}
-        <main className="flex-1 overflow-auto">
+        <main key={`${currentModule}-${resetKey}`} className="flex-1 overflow-auto">
           <div className="p-4">
             {children}
           </div>

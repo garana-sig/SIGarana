@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { motion } from 'framer-motion';
+import ModuleHero from '@/components/ModuleHero';
 import ListadoMaestro from './GestionDocumental/ListadoMaestro';
 import FormularioCreacion from './GestionDocumental/FormularioCreacion';
 import PorArea from './GestionDocumental/PorArea';
@@ -439,45 +440,32 @@ export default function GestionDocumental() {
     }
   };
 
-  return (
-    <div className="p-3 space-y-3">
-      {/* Header minimalista */}
-      {activeView !== 'dashboard' ? (
-        <div className="flex items-center gap-2 mb-2">
-          <Button
-            variant="ghost"
-            onClick={handleBack}
-            className="gap-1"
-            size="sm"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span className="text-sm">Volver</span>
-          </Button>
-        </div>
-      ) : (
-        <div className="text-center mb-6">
-          <motion.h2
-            className="text-3xl font-bold mb-2"
-            style={{ color: '#2e5244' }}
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            Gestión Documental
-          </motion.h2>
-          <motion.p
-            className="text-sm"
-            style={{ color: '#6f7b2c' }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-          >
-            Sistema de control y gestión de documentos
-          </motion.p>
-        </div>
-      )}
+return (
+  <div className="p-3 space-y-3">
+    {/* Header: hero en dashboard, botón volver en subvistas */}
+    {activeView !== 'dashboard' ? (
+      <div className="flex items-center gap-2 mb-2">
+        <Button
+          variant="ghost"
+          onClick={handleBack}
+          className="gap-1"
+          size="sm"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span className="text-sm">Volver</span>
+        </Button>
+      </div>
+    ) : (
+      <ModuleHero
+        title="Gestión Documental"
+        subtitle="Sistema de control y gestión de documentos"
+        icon={FileText}
+        color="#6dbd96"
+      />
+    )}
 
-      {/* Contenido dinámico */}
-      {renderActiveView()}
-    </div>
-  );
+    {/* Contenido dinámico */}
+    {renderActiveView()}
+  </div>
+);
 }

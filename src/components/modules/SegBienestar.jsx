@@ -16,6 +16,7 @@ import {
   HardHat
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
+import ModuleHero from '@/components/ModuleHero';
 
 const MOCK_INSPECCIONES = [
   { id: 1, type: 'Condiciones de Seguridad', area: 'Planta Producción', date: '2026-01-12', status: 'Completada', findings: 2, responsible: 'Coordinador SST' },
@@ -57,22 +58,25 @@ export default function SegBienestar() {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-        <div>
-          <h2 style={{ color: '#2e5244' }}>Seguridad y Salud en el Trabajo</h2>
-          <p className="text-sm mt-1" style={{ color: '#6f7b2c' }}>
-            Gestión de SST, bienestar e inspecciones
-          </p>
-        </div>
-        {canWrite && (
+    <div className="space-y-0">
+      {/* ── Hero del módulo ── */}
+      <ModuleHero
+        title="SST y Bienestar"
+        subtitle="Gestión de Seguridad, Salud en el Trabajo e inspecciones"
+        icon={Shield}
+        color="#6dbd96"
+      />
+
+      <div className="space-y-6">
+      {/* Botón acción */}
+      {canWrite && (
+        <div className="flex justify-end">
           <Button style={{ backgroundColor: '#2e5244' }} className="text-white">
             <Plus className="h-4 w-4 mr-2" />
             Nueva Inspección
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -341,6 +345,7 @@ export default function SegBienestar() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+      </div> {/* cierra p-6 */}
+    </div>   
   );
 }

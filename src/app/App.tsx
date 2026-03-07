@@ -30,12 +30,30 @@ function AppContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#dedecc' }}>
-        <div className="text-center">
-          <img src="/garana1.png" alt="Garana Art"
-            style={{ height: 72, objectFit: 'contain', marginBottom: 16 }} />
-          <p style={{ color: '#2e5244', fontSize: 14 }}>Cargando...</p>
-        </div>
+      <div
+        className="min-h-screen flex flex-col items-center justify-center gap-6"
+        style={{ backgroundColor: '#1a2e25' }}
+      >
+        <img
+          src="/garana1.png"
+          alt="Garana Art"
+          style={{
+            height: 140,
+            objectFit: 'contain',
+            filter: 'brightness(0) invert(1)',
+            opacity: 0.95,
+          }}
+        />
+        <div
+          style={{
+            width: 36, height: 36,
+            borderRadius: '50%',
+            border: '3px solid rgba(109,189,150,0.2)',
+            borderTopColor: '#6dbd96',
+            animation: 'spin 0.9s linear infinite',
+          }}
+        />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
