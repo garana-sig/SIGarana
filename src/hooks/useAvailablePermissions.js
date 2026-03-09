@@ -35,9 +35,17 @@ export function useAvailablePermissions() {
 
       if (permError) throw permError;
 
-      setPermissions(data || []);
+      // Deduplicar por code — si la BD tiene filas repetidas, quedarse con la primera
+      const seen = new Set();
+      const deduped = (data || []).filter(perm => {
+        if (seen.has(perm.code)) return false;
+        seen.add(perm.code);
+        return true;
+      });
 
-      const grouped = (data || []).reduce((acc, perm) => {
+      setPermissions(deduped);
+
+      const grouped = deduped.reduce((acc, perm) => {
         const moduleCode = perm.module?.code || 'other';
         if (!acc[moduleCode]) {
           acc[moduleCode] = {

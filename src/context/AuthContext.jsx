@@ -241,15 +241,7 @@ export const AuthProvider = ({ children }) => {
   const isGerencia = profile?.role === 'gerencia';
 
   const hasPermission = (permissionCode) => {
-    // Admin y Gerencia tienen acceso total
     if (isAdmin || isGerencia) return true;
-    
-    // Permisos :view automáticos para TODOS los usuarios
-    if (permissionCode?.endsWith(':view')) {
-      return true;
-    }
-    
-    // Verificar permiso asignado en la BD
     return permissions.includes(permissionCode);
   };
 

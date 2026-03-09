@@ -1,329 +1,356 @@
 // src/components/users/UserPermissionsManager.jsx
-// ✅ VERSIÓN MEJORADA con Accordion jerárquico y estructura escalable
+// ✅ Módulo → checkbox "Puede ver módulo" (module:view)
+// ✅ Submodulos → permisos CRUD específicos
+// ✅ Sin grupo "General"
 
 import { useState } from 'react';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { useAvailablePermissions } from '@/hooks/useAvailablePermissions';
-import { Button } from '@/app/components/ui/button';
 import { Checkbox } from '@/app/components/ui/checkbox';
 import { Badge } from '@/app/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from '@/app/components/ui/accordion';
-import { Shield, ChevronRight, Check } from 'lucide-react';
+import { Shield, Loader2, ChevronRight, Eye } from 'lucide-react';
 
-/**
- * Componente para gestionar permisos de un usuario con estructura jerárquica
- */
+// ── Nombres legibles ──────────────────────────────────────────────────
+const SUBMODULE_NAMES = {
+  // Gestión Documental
+  documentos:              'Documentos',
+  procesos:                'Procesos',
+  formatos:                'Formatos',
+  procedimientos:          'Procedimientos',
+  guias:                   'Guías',
+  instructivos:            'Instructivos',
+  // Mejoramiento Continuo
+  actas:                   'Actas de Reunión',
+  acciones_mejora:         'Acciones de Mejora',
+  producto_no_conforme:    'Producto No Conforme',
+  revision_direccion:      'Revisión por la Dirección',
+  informes:                'Informes',
+  indicadores:             'Indicadores CMI',
+  requisitos_legales:      'Requisitos Legales',
+  auditorias_internas:     'Auditorías Internas',
+  evaluacion_auditores:    'Evaluación de Auditores',
+  matriz_riesgos:          'Matriz de Riesgos',
+  reporte_incidentes:      'Reporte de Incidentes',
+  clima_laboral:           'Clima Laboral',
+  satisfaccion_clientes:   'Satisfacción Clientes',
+  evaluacion_competencias: 'Evaluación de Competencias',
+  qrsf:                    'QRSF',
+  // Planeación Estratégica
+  perspectivas:            'Perspectivas',
+  objetivos:               'Objetivos Estratégicos',
+  indicadores_cmi:         'Indicadores CMI',
+  iniciativas:             'Iniciativas',
+  // SST y Bienestar
+  bienestar_social:        'Bienestar Social',
+  sst:                     'Seguridad y Salud',
+  epps:                    'EPPs',
+  capacitaciones:          'Capacitaciones',
+  examenes_medicos:        'Exámenes Médicos',
+  // Usuarios
+  gestion_usuarios:        'Gestión de Usuarios',
+  permisos:                'Permisos',
+};
+
+const ACTION_NAMES = {
+  view:    'Ver',
+  create:  'Crear',
+  edit:    'Editar',
+  delete:  'Eliminar',
+  approve: 'Aprobar',
+  manage:  'Administrar',
+};
+
+const ACTION_COLORS = {
+  view:    { bg: '#f0f7f4', color: '#2e5244' },
+  create:  { bg: '#f0fdf4', color: '#16a34a' },
+  edit:    { bg: '#eff6ff', color: '#1d4ed8' },
+  delete:  { bg: '#fef2f2', color: '#dc2626' },
+  approve: { bg: '#fdf4ff', color: '#7c3aed' },
+  manage:  { bg: '#fff7ed', color: '#c2410c' },
+};
+
+const C = { green: '#2e5244', mint: '#6dbd96', sand: '#dedecc' };
+
+const HIDDEN_MODULES = ['clientes_ventas', 'inventario'];
+
+// ══════════════════════════════════════════════════════════════════════
+// COMPONENTE PRINCIPAL
+// ══════════════════════════════════════════════════════════════════════
 export function UserPermissionsManager({ userId, userName, userRole, onSuccess }) {
-  const [saving, setSaving] = useState(false);
-  
-  const { 
-    permissions: userPermissions, 
+  const [saving, setSaving] = useState(null); // guardamos el code que está siendo guardado
+
+  const {
     permissionCodes,
     loading: loadingUser,
     assignPermissions,
-    revokePermissions
+    revokePermissions,
   } = useUserPermissions(userId);
 
-  const { 
-    permissionsByModule, 
-    loading: loadingAvailable 
+  const {
+    permissionsByModule,
+    loading: loadingAvailable,
   } = useAvailablePermissions();
 
-  /**
-   * Organiza permisos en estructura jerárquica
-   * TODOS los permisos van a submódulos
-   * Si no tiene ":", va a submódulo "General"
-   */
-  const organizePermissions = (permissions) => {
-    const submodules = {};
-
-    permissions.forEach(perm => {
-      // Detectar si tiene submódulo
-      const parts = perm.code.split(':');
-      
-      if (parts.length > 2) {
-        // Tiene submódulo: modulo:submodulo:accion
-        const submoduleName = parts[1];
-        
-        if (!submodules[submoduleName]) {
-          submodules[submoduleName] = [];
-        }
-        submodules[submoduleName].push(perm);
-      } else {
-        // Sin submódulo específico → va a "general"
-        if (!submodules['general']) {
-          submodules['general'] = [];
-        }
-        submodules['general'].push(perm);
-      }
-    });
-
-    return { submodules };
-  };
-
-  /**
-   * Obtiene nombre legible del submódulo
-   */
-  const getSubmoduleName = (code) => {
-    const names = {
-      // General
-      'general': 'General',
-      
-      // Mejoramiento Continuo
-      'actas': 'Actas de Reunión',
-      'acciones_mejora': 'Acciones de Mejora',
-      'hallazgos': 'Hallazgos',
-      'actions': 'Acciones Correctivas',
-      'findings': 'Hallazgos',
-      
-      // Gestión Documental
-      'formatos': 'Formatos',
-      'procedimientos': 'Procedimientos',
-      'guias': 'Guías',
-      'instructivos': 'Instructivos',
-      
-      // Planeación Estratégica
-      'indicadores': 'Indicadores',
-      'objetivos': 'Objetivos Estratégicos',
-      'perspectivas': 'Perspectivas',
-      
-      // Seguridad y Bienestar
-      'comite': 'Comité de Bienestar',
-      'epps': 'EPPs',
-      'capacitaciones': 'Capacitaciones',
-      'examenes': 'Exámenes Médicos',
-      
-      // Clientes y Ventas
-      'orders': 'Pedidos',
-      
-      // Inventario
-      'products': 'Productos',
-      'movements': 'Movimientos',
-      'stock': 'Control de Stock',
-      
-      // Usuarios
-      'permissions': 'Gestión de Permisos'
-    };
-    
-    return names[code] || code.charAt(0).toUpperCase() + code.slice(1);
-  };
-
-  const handleTogglePermission = async (permissionCode, currentlyHas) => {
-    setSaving(true);
+  // ── Toggle individual ──────────────────────────────────────────────
+  const handleToggle = async (code, currentlyHas) => {
+    setSaving(code);
     try {
-      let result;
       if (currentlyHas) {
-        result = await revokePermissions([permissionCode]);
+        await revokePermissions([code]);
       } else {
-        result = await assignPermissions([permissionCode]);
+        await assignPermissions([code]);
       }
-
-      if (result.success && onSuccess) {
-        onSuccess();
-      }
+      if (onSuccess) onSuccess();
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   };
 
   if (loadingUser || loadingAvailable) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" 
-               style={{ borderColor: '#2e5244' }}></div>
-          <p style={{ color: '#6f7b2c' }}>Cargando permisos...</p>
-        </div>
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin" style={{ color: C.mint }} />
       </div>
     );
   }
 
-  // Si es admin, mostrar mensaje especial
   if (userRole === 'admin') {
     return (
       <div className="p-6 text-center">
-        <Shield className="h-16 w-16 mx-auto mb-4" style={{ color: '#6f7b2c' }} />
-        <h3 className="text-lg font-bold mb-2" style={{ color: '#2e5244' }}>
-          Usuario Administrador
-        </h3>
-        <p className="text-sm text-gray-600">
-          Los administradores tienen acceso completo a todos los módulos del sistema.
-          No es necesario asignar permisos específicos.
+        <Shield className="h-14 w-14 mx-auto mb-3" style={{ color: C.mint }} />
+        <h3 className="text-base font-bold mb-1" style={{ color: C.green }}>Administrador</h3>
+        <p className="text-sm text-gray-500">
+          Los administradores tienen acceso completo. No es necesario asignar permisos.
         </p>
       </div>
     );
   }
 
+  // ── Separar permisos de módulo (:view) de permisos de submodulo ────
+  const parsePermission = (code) => {
+    const parts = code.split(':');
+    if (parts.length === 2) return { type: 'module', module: parts[0], action: parts[1] };
+    if (parts.length === 3) return { type: 'submodule', module: parts[0], submodule: parts[1], action: parts[2] };
+    return null;
+  };
+
+  const modules = Object.entries(permissionsByModule)
+    .filter(([code]) => !HIDDEN_MODULES.includes(code))
+    .sort((a, b) => (a[1].module?.display_order || 99) - (b[1].module?.display_order || 99));
+
+  const totalActive = permissionCodes.length;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+      <div
+        className="flex items-center justify-between p-4 rounded-xl"
+        style={{ backgroundColor: '#f0f7f4', border: `1px solid ${C.mint}30` }}
+      >
         <div>
-          <h3 className="text-base font-bold" style={{ color: '#2e5244' }}>
-            Permisos de {userName}
-          </h3>
-          <p className="text-sm text-gray-600 mt-1">
-            {permissionCodes.length} permisos activos
-          </p>
+          <p className="text-sm font-bold" style={{ color: C.green }}>Permisos de {userName}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{totalActive} permisos activos asignados</p>
         </div>
-        <Badge 
-          variant="outline" 
-          className="text-sm px-3 py-1"
-          style={{ 
-            borderColor: '#6dbd96',
-            backgroundColor: '#f0f7f4',
-            color: '#2e5244'
-          }}
+        <span
+          className="text-xs font-bold px-3 py-1.5 rounded-full"
+          style={{ backgroundColor: '#e0f2fe', color: '#0369a1' }}
         >
           {userRole === 'gerencia' ? 'Gerencia' : 'Usuario'}
-        </Badge>
+        </span>
       </div>
 
-      {/* Accordion por Módulo */}
+      {/* Info gerencia */}
+      {userRole === 'gerencia' && (
+        <div
+          className="flex items-start gap-2 p-3 rounded-xl text-xs"
+          style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
+        >
+          <Shield className="h-4 w-4 flex-shrink-0 mt-0.5" />
+          <span>Gerencia ya tiene acceso total automático. Los permisos aquí son opcionales y solo aplican si se implementan restricciones específicas en el futuro.</span>
+        </div>
+      )}
+
+      {/* Módulos */}
       <Accordion type="multiple" className="space-y-2">
-        {Object.entries(permissionsByModule)
-          .filter(([moduleCode]) => {
-            // Ocultar módulos que aún no se usan
-            const hiddenModules = ['clientes_ventas', 'inventario'];
-            return !hiddenModules.includes(moduleCode);
-          })
-          .sort((a, b) => {
-            const orderA = a[1].module?.display_order || 999;
-            const orderB = b[1].module?.display_order || 999;
-            return orderA - orderB;
-          })
-          .map(([moduleCode, { module, permissions }]) => {
-            const organized = organizePermissions(permissions);
-            const modulePermCount = permissions.filter(p => 
-              permissionCodes.includes(p.code)
-            ).length;
+        {modules.map(([moduleCode, { module, permissions }]) => {
+          // Separar: permiso de vista del módulo vs permisos de submodulos
+          const moduleViewPerm = permissions.find(p => {
+            const parsed = parsePermission(p.code);
+            return parsed?.type === 'module' && parsed?.action === 'view';
+          });
 
-            return (
-              <AccordionItem 
-                key={moduleCode} 
-                value={moduleCode}
-                className="border-2 rounded-lg"
-                style={{ borderColor: '#dedecc' }}
-              >
-                <AccordionTrigger className="px-4 py-3 hover:no-underline">
-                  <div className="flex items-center justify-between w-full pr-4">
+          // Agrupar permisos de submodulo
+          const submoduleMap = {};
+          permissions.forEach(p => {
+            const parsed = parsePermission(p.code);
+            if (!parsed) return;
+            if (parsed.type === 'submodule') {
+              if (!submoduleMap[parsed.submodule]) submoduleMap[parsed.submodule] = [];
+              submoduleMap[parsed.submodule].push(p);
+            }
+          });
+
+          const hasSubmodules    = Object.keys(submoduleMap).length > 0;
+          const moduleViewActive = moduleViewPerm ? permissionCodes.includes(moduleViewPerm.code) : false;
+
+          // Contar permisos activos del módulo
+          const activeCount = permissions.filter(p => permissionCodes.includes(p.code)).length;
+
+          return (
+            <AccordionItem
+              key={moduleCode}
+              value={moduleCode}
+              className="rounded-xl border-2 overflow-hidden"
+              style={{ borderColor: activeCount > 0 ? `${C.mint}60` : '#e5e7eb' }}
+            >
+              <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50">
+                <div className="flex items-center gap-3 w-full pr-2">
+                  {/* Nombre módulo */}
+                  <span className="font-semibold text-sm" style={{ color: C.green }}>
+                    {module?.name || moduleCode}
+                  </span>
+                  {/* Badge activos */}
+                  {activeCount > 0 && (
+                    <span
+                      className="text-xs font-bold px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: `${C.mint}25`, color: C.green }}
+                    >
+                      {activeCount} activos
+                    </span>
+                  )}
+                </div>
+              </AccordionTrigger>
+
+              <AccordionContent className="px-4 pb-4 pt-1 space-y-4">
+
+                {/* ── Permiso VER MÓDULO ─────────────────────────────── */}
+                {moduleViewPerm && (
+                  <div
+                    className="flex items-center justify-between p-3 rounded-xl"
+                    style={{
+                      backgroundColor: moduleViewActive ? '#f0f7f4' : '#fafafa',
+                      border: `1.5px solid ${moduleViewActive ? C.mint : '#e5e7eb'}`,
+                    }}
+                  >
                     <div className="flex items-center gap-3">
-                      <span className="font-semibold" style={{ color: '#2e5244' }}>
-                        {module?.name || moduleCode}
-                      </span>
-                      {modulePermCount > 0 && (
-                        <Badge 
-                          variant="secondary" 
-                          className="text-xs"
-                          style={{
-                            backgroundColor: '#6dbd9620',
-                            color: '#2e5244'
-                          }}
-                        >
-                          {modulePermCount} activos
-                        </Badge>
-                      )}
+                      <Checkbox
+                        checked={moduleViewActive}
+                        onCheckedChange={() => handleToggle(moduleViewPerm.code, moduleViewActive)}
+                        disabled={saving === moduleViewPerm.code}
+                      />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Eye className="h-4 w-4" style={{ color: C.mint }} />
+                          <span className="text-sm font-semibold" style={{ color: C.green }}>
+                            Puede ver el módulo
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          Permite acceder y navegar a {module?.name || moduleCode}
+                        </p>
+                      </div>
                     </div>
+                    {saving === moduleViewPerm.code && (
+                      <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                    )}
                   </div>
-                </AccordionTrigger>
-                
-                <AccordionContent className="px-4 pb-4">
-                  <div className="space-y-4">
-                    
-                    {/* SOLO Submódulos - TODO organizado aquí */}
-                    {Object.keys(organized.submodules).length > 0 && (
-                      <Accordion type="multiple" className="space-y-2">
-                        {Object.entries(organized.submodules)
-                          .sort((a, b) => {
-                            // "general" siempre primero
-                            if (a[0] === 'general') return -1;
-                            if (b[0] === 'general') return 1;
-                            return a[0].localeCompare(b[0]);
-                          })
-                          .map(([submoduleCode, subPerms]) => {
-                            const subPermCount = subPerms.filter(p => 
-                              permissionCodes.includes(p.code)
-                            ).length;
+                )}
 
-                            return (
-                              <AccordionItem 
-                                key={submoduleCode}
-                                value={submoduleCode}
-                                className="border rounded"
-                                style={{ borderColor: '#e5e7eb' }}
-                              >
-                                <AccordionTrigger className="px-3 py-2 hover:no-underline text-sm">
-                                  <div className="flex items-center gap-2">
-                                    <ChevronRight className="h-4 w-4" />
-                                    <span className="font-medium" style={{ color: '#2e5244' }}>
-                                      {getSubmoduleName(submoduleCode)}
+                {/* ── Submodulos ─────────────────────────────────────── */}
+                {hasSubmodules && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">
+                      Permisos por submódulo
+                    </p>
+                    <Accordion type="multiple" className="space-y-1.5">
+                      {Object.entries(submoduleMap)
+                        .sort((a, b) => a[0].localeCompare(b[0]))
+                        .map(([subCode, subPerms]) => {
+                          const subActive = subPerms.filter(p => permissionCodes.includes(p.code)).length;
+
+                          return (
+                            <AccordionItem
+                              key={subCode}
+                              value={subCode}
+                              className="rounded-lg border"
+                              style={{ borderColor: subActive > 0 ? `${C.mint}50` : '#f0f0f0' }}
+                            >
+                              <AccordionTrigger className="px-3 py-2 hover:no-underline hover:bg-gray-50 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+                                  <span className="font-medium" style={{ color: C.green }}>
+                                    {SUBMODULE_NAMES[subCode] || subCode}
+                                  </span>
+                                  {subActive > 0 && (
+                                    <span
+                                      className="text-xs font-bold px-1.5 py-0.5 rounded-full"
+                                      style={{ backgroundColor: `${C.mint}20`, color: C.green }}
+                                    >
+                                      {subActive}/{subPerms.length}
                                     </span>
-                                    {subPermCount > 0 && (
-                                      <Badge 
-                                        variant="secondary" 
-                                        className="text-xs"
-                                        style={{
-                                          backgroundColor: '#6dbd9620',
-                                          color: '#2e5244'
-                                        }}
-                                      >
-                                        {subPermCount}/{subPerms.length}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </AccordionTrigger>
-                                
-                                <AccordionContent className="px-3 pb-2">
-                                  <div className="space-y-1">
-                                    {subPerms.map(perm => {
-                                      const hasPermission = permissionCodes.includes(perm.code);
-                                      
+                                  )}
+                                </div>
+                              </AccordionTrigger>
+
+                              <AccordionContent className="px-3 pb-3 pt-1">
+                                <div className="flex flex-wrap gap-2">
+                                  {subPerms
+                                    .sort((a, b) => {
+                                      const order = ['view','create','edit','delete','approve','manage'];
+                                      const aIdx  = order.indexOf(a.code.split(':')[2]) ?? 9;
+                                      const bIdx  = order.indexOf(b.code.split(':')[2]) ?? 9;
+                                      return aIdx - bIdx;
+                                    })
+                                    .map(perm => {
+                                      const action    = perm.code.split(':')[2];
+                                      const isActive  = permissionCodes.includes(perm.code);
+                                      const isSaving  = saving === perm.code;
+                                      const colors    = ACTION_COLORS[action] || ACTION_COLORS.view;
+                                      const actionLabel = ACTION_NAMES[action] || action;
+
                                       return (
-                                        <div 
-                                          key={perm.id} 
-                                          className="flex items-start space-x-2 p-2 rounded hover:bg-gray-50"
+                                        <button
+                                          key={perm.id}
+                                          onClick={() => handleToggle(perm.code, isActive)}
+                                          disabled={isSaving}
+                                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all border"
+                                          style={{
+                                            backgroundColor: isActive ? colors.bg : '#f9fafb',
+                                            color:           isActive ? colors.color : '#9ca3af',
+                                            borderColor:     isActive ? `${colors.color}40` : '#e5e7eb',
+                                            opacity:         isSaving ? 0.6 : 1,
+                                          }}
+                                          title={perm.description || perm.name}
                                         >
-                                          <Checkbox
-                                            checked={hasPermission}
-                                            onCheckedChange={() => handleTogglePermission(perm.code, hasPermission)}
-                                            disabled={saving}
-                                            className="mt-0.5"
-                                          />
-                                          <div className="flex-1 min-w-0">
-                                            <label className="text-sm cursor-pointer" style={{ color: '#2e5244' }}>
-                                              {perm.name}
-                                            </label>
-                                            {perm.description && (
-                                              <p className="text-xs text-gray-500 mt-0.5">
-                                                {perm.description}
-                                              </p>
-                                            )}
-                                          </div>
-                                          {hasPermission && (
-                                            <Check className="h-4 w-4 text-green-600 flex-shrink-0" />
-                                          )}
-                                        </div>
+                                          {isSaving
+                                            ? <Loader2 className="h-3 w-3 animate-spin" />
+                                            : (
+                                              <span
+                                                className="w-2 h-2 rounded-full flex-shrink-0"
+                                                style={{ backgroundColor: isActive ? colors.color : '#d1d5db' }}
+                                              />
+                                            )
+                                          }
+                                          {actionLabel}
+                                        </button>
                                       );
                                     })}
-                                  </div>
-                                </AccordionContent>
-                              </AccordionItem>
-                            );
-                          })}
-                        </Accordion>
-                      )}
-
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          );
+                        })}
+                    </Accordion>
                   </div>
-                </AccordionContent>
-              </AccordionItem>
-            );
-          })}
+                )}
+
+              </AccordionContent>
+            </AccordionItem>
+          );
+        })}
       </Accordion>
     </div>
   );

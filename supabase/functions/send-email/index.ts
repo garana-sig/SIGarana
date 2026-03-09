@@ -1,6 +1,7 @@
 // supabase/functions/send-document-notification/index.ts
 // ══════════════════════════════════════════════════════════════════════
 // Edge Function unificada: Documentos + Acciones de Mejora + Indicadores CMI
+//                        + Bienvenida de Usuarios  ← NUEVO
 // Usa nodemailer + Gmail. Logo corporativo desde Supabase Storage.
 // ══════════════════════════════════════════════════════════════════════
 
@@ -27,7 +28,10 @@ interface EmailRequest {
     | "indicador_creacion"
     | "indicador_edicion"
     | "indicador_critico"
-    | "indicador_vencimiento";
+    | "indicador_vencimiento"
+    | "indicador_recordatorio"
+    // Usuarios ← NUEVO
+    | "user_bienvenida";
   to: string | string[];
   document?: {
     id: string;
@@ -62,11 +66,16 @@ const getBaseTemplate = (title: string, content: string): string => `
     .message { font-size: 15px; color: #444; line-height: 1.65; margin-bottom: 24px; }
     .info-box { background-color: #f8f9fa; border-left: 4px solid #6dbd96; padding: 18px 20px; margin: 20px 0; border-radius: 4px; }
     .info-box-blue { background-color: #eff6ff; border-left: 4px solid #2E75B6; padding: 18px 20px; margin: 20px 0; border-radius: 4px; }
+    .info-box-warning { background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 18px 20px; margin: 20px 0; border-radius: 4px; }
     .info-row { display: flex; margin-bottom: 10px; font-size: 14px; }
     .info-row:last-child { margin-bottom: 0; }
     .info-label { font-weight: 700; color: #2e5244; min-width: 160px; }
     .info-value { color: #333; }
     .reason-box { background-color: #f0f7f4; border-left: 4px solid #2e5244; padding: 16px 20px; margin: 20px 0; border-radius: 4px; font-size: 14px; color: #333; line-height: 1.6; }
+    .credentials-box { background-color: #1a2e25; border-radius: 8px; padding: 24px; margin: 24px 0; }
+    .credentials-label { color: #6dbd96; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
+    .credentials-value { color: #ffffff; font-size: 18px; font-weight: 700; font-family: monospace; letter-spacing: 1px; }
+    .credentials-divider { height: 1px; background: #2e5244; margin: 16px 0; }
     .formula-box { background-color: #1e293b; border-radius: 6px; padding: 14px 18px; margin: 12px 0; font-family: monospace; color: #7dd3fc; font-size: 15px; letter-spacing: 0.5px; }
     .btn { display: inline-block; background: linear-gradient(135deg, #6dbd96 0%, #2e5244 100%); color: white !important; padding: 13px 28px; text-decoration: none; border-radius: 6px; font-weight: 700; font-size: 14px; margin-top: 10px; }
     .btn-red { display: inline-block; background: linear-gradient(135deg, #ef4444 0%, #991b1b 100%); color: white !important; padding: 13px 28px; text-decoration: none; border-radius: 6px; font-weight: 700; font-size: 14px; margin-top: 10px; }
@@ -74,26 +83,32 @@ const getBaseTemplate = (title: string, content: string): string => `
     .badge-green  { background: #dcfce7; color: #166534; }
     .badge-amber  { background: #fef3c7; color: #92400e; }
     .badge-red    { background: #fee2e2; color: #991b1b; }
+    .badge-blue   { background: #dbeafe; color: #1e40af; }
     .alert-danger { background-color: #fee2e2; border-left: 4px solid #dc2626; padding: 14px 18px; margin: 16px 0; border-radius: 4px; color: #7f1d1d; font-size: 14px; }
     .alert-warning { background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 14px 18px; margin: 16px 0; border-radius: 4px; color: #78350f; font-size: 14px; }
+    .alert-info { background-color: #f0fdf4; border-left: 4px solid #6dbd96; padding: 14px 18px; margin: 16px 0; border-radius: 4px; color: #14532d; font-size: 14px; }
     .footer { background-color: #2e5244; color: white; padding: 28px 20px; text-align: center; }
     .footer-title { font-size: 16px; margin-bottom: 8px; color: #6dbd96; font-weight: 700; }
     .footer-text  { font-size: 13px; color: #dedecc; margin: 4px 0; }
     .footer-note  { margin-top: 14px; font-size: 11px; color: #dedecc; opacity: 0.7; }
     .divider { height: 1px; background: linear-gradient(to right, transparent, #6dbd96, transparent); margin: 28px 0; }
+    .steps-list { list-style: none; padding: 0; margin: 16px 0; }
+    .steps-list li { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; color: #444; }
+    .steps-list li:last-child { border-bottom: none; }
+    .step-num { background: #2e5244; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
       <img src="${LOGO_URL}" alt="Garana Art" />
-      <div class="header-sub">SISTEMA DE GESTIÓN INTEGRAL</div>
+      <div class="header-sub">SISTEMA INTEGRADO DE GESTIÓN </div>
     </div>
     ${content}
     <div class="footer">
       <div class="footer-title">Garana Art</div>
-      <div class="footer-text">Sistema de Gestión Integral · SIG</div>
-      <div class="footer-text">Manizales, Caldas — Colombia</div>
+      <div class="footer-text">Sistema Integrado de Gestión  · SIG</div>
+      <div class="footer-text">Riosucio, Caldas — Colombia</div>
       <div class="footer-note">Este es un correo automático, por favor no responder.</div>
     </div>
   </div>
@@ -233,8 +248,6 @@ const getAccionSeguimientoTemplate = (data: EmailRequest): string => {
 // ══════════════════════════════════════════════════════════════════════
 // TEMPLATES — INDICADORES CMI
 // ══════════════════════════════════════════════════════════════════════
-
-// ── Helper: bloque de fórmula ─────────────────────────────────────────
 const formulaBlock = (d: Record<string, any>): string => {
   if (!d.formula_expression) return "";
   const variables = Array.isArray(d.formula_variables)
@@ -248,7 +261,6 @@ const formulaBlock = (d: Record<string, any>): string => {
   `;
 };
 
-// 1️⃣ Creación — al responsable al ser asignado
 const getIndicadorCreacionTemplate = (data: EmailRequest): string => {
   const d = data.data!;
   return getBaseTemplate("Indicador CMI Asignado", `
@@ -278,7 +290,6 @@ const getIndicadorCreacionTemplate = (data: EmailRequest): string => {
     </div>`);
 };
 
-// 2️⃣ Edición — al responsable cuando se modifica el indicador
 const getIndicadorEdicionTemplate = (data: EmailRequest): string => {
   const d = data.data!;
   return getBaseTemplate("Indicador CMI Actualizado", `
@@ -308,7 +319,6 @@ const getIndicadorEdicionTemplate = (data: EmailRequest): string => {
     </div>`);
 };
 
-// 3️⃣ Crítico — al responsable y gerencia cuando el estado pasa a crítico
 const getIndicadorCriticoTemplate = (data: EmailRequest): string => {
   const d = data.data!;
   return getBaseTemplate("Alerta: Indicador en Estado Crítico", `
@@ -330,18 +340,12 @@ const getIndicadorCriticoTemplate = (data: EmailRequest): string => {
         <div class="info-row"><div class="info-label">Meta:</div><div class="info-value"><strong>${d.goal}</strong></div></div>
         <div class="info-row"><div class="info-label">Registrado por:</div><div class="info-value">${d.registered_by}</div></div>
       </div>
-      <div class="divider"></div>
-      <p style="font-size:14px;color:#444;line-height:1.6;">
-        Por favor toma las acciones correctivas necesarias y registra una nueva medición
-        en cuanto el indicador mejore.
-      </p>
       <div style="text-align:center;margin-top:28px;">
         <a href="${APP_URL}/mejoramiento-continuo" class="btn-red">Ver Indicador Ahora</a>
       </div>
     </div>`);
 };
 
-// 4️⃣ Vencimiento — cuando faltan 7 días para el fin del período
 const getIndicadorVencimientoTemplate = (data: EmailRequest): string => {
   const d = data.data!;
   return getBaseTemplate("Recordatorio: Indicador por Vencer", `
@@ -350,7 +354,6 @@ const getIndicadorVencimientoTemplate = (data: EmailRequest): string => {
       <div class="message">
         Hola <strong>${d.recipient_name || "equipo"}</strong>,<br><br>
         El período de medición del siguiente indicador está por finalizar.
-        Si aún no has registrado la medición de este período, hazlo antes de la fecha de cierre.
       </div>
       <div class="alert-warning">
         ⚠️ Quedan <strong>${d.days_remaining} día(s)</strong> para el cierre del período.
@@ -370,7 +373,6 @@ const getIndicadorVencimientoTemplate = (data: EmailRequest): string => {
     </div>`);
 };
 
-// 5️⃣ Recordatorio periódico — inicio de nuevo período (trimestral, mensual, etc.)
 const getIndicadorRecordatorioTemplate = (data: EmailRequest): string => {
   const d = data.data!;
   return getBaseTemplate("Nuevo Período de Medición", `
@@ -394,6 +396,86 @@ const getIndicadorRecordatorioTemplate = (data: EmailRequest): string => {
       </div>
     </div>`);
 };
+
+// ══════════════════════════════════════════════════════════════════════
+// TEMPLATE — BIENVENIDA DE USUARIO  ← NUEVO
+// ══════════════════════════════════════════════════════════════════════
+const getUserBienvenidaTemplate = (data: EmailRequest): string => {
+  const d = data.data!;
+
+  const rolLabels: Record<string, string> = {
+    admin:    "Administrador",
+    gerencia: "Gerencia",
+    usuario:  "Usuario",
+  };
+  const rolLabel = rolLabels[d.role] || d.role;
+
+  return getBaseTemplate("Bienvenido al Sistema SIG Garana ", `
+    <div class="content">
+      <div class="title">👋 ¡Bienvenido a SIG Garana !</div>
+      <div class="message">
+        Hola <strong>${d.full_name}</strong>,<br><br>
+        Tu cuenta ha sido creada en el <strong>Sistema Integrado de Gestión de Garana Art</strong>.
+        A continuación encontrarás tus credenciales de acceso.
+      </div>
+
+      <!-- Credenciales -->
+      <div class="credentials-box">
+        <div class="credentials-label">📧 Correo de acceso</div>
+        <div class="credentials-value">${d.email}</div>
+        <div class="credentials-divider"></div>
+        <div class="credentials-label">🔑 Contraseña temporal</div>
+        <div class="credentials-value">${d.temp_password}</div>
+      </div>
+
+      <!-- Info de perfil -->
+      <div class="info-box">
+        <div class="info-row"><div class="info-label">Nombre completo:</div><div class="info-value">${d.full_name}</div></div>
+        <div class="info-row"><div class="info-label">Rol asignado:</div><div class="info-value"><span class="badge badge-green">${rolLabel}</span></div></div>
+        ${d.department ? `<div class="info-row"><div class="info-label">Departamento:</div><div class="info-value">${d.department}</div></div>` : ""}
+        <div class="info-row"><div class="info-label">Cuenta creada por:</div><div class="info-value">${d.created_by_name}</div></div>
+      </div>
+
+      <!-- Alerta cambio de contraseña -->
+      <div class="alert-warning">
+        <strong>⚠️ Importante:</strong> Al ingresar por primera vez, el sistema te pedirá
+        que cambies tu contraseña temporal por una segura y personal.
+      </div>
+
+      <!-- Pasos para ingresar -->
+      <div class="divider"></div>
+      <p style="font-size:14px;font-weight:700;color:#2e5244;margin-bottom:12px;">📋 Pasos para ingresar:</p>
+      <ul class="steps-list">
+        <li>
+          <div class="step-num">1</div>
+          <span>Haz clic en el botón <strong>"Ingresar al Sistema"</strong> de abajo</span>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <span>Ingresa tu correo <strong>${d.email}</strong> y la contraseña temporal</span>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <span>El sistema te pedirá crear una <strong>nueva contraseña segura</strong></span>
+        </li>
+        <li>
+          <div class="step-num">4</div>
+          <span>¡Listo! Ya puedes usar el sistema con tus módulos asignados</span>
+        </li>
+      </ul>
+
+      <div style="text-align:center;margin-top:32px;">
+        <a href="${APP_URL}" class="btn">🚀 Ingresar al Sistema</a>
+      </div>
+
+      <div class="divider"></div>
+      <p style="font-size:12px;color:#888;text-align:center;line-height:1.6;">
+        Si tienes algún inconveniente para ingresar, comunícate con el administrador del sistema.<br>
+        Por seguridad, no compartas tus credenciales con nadie.
+      </p>
+    </div>`);
+};
+
 
 // ══════════════════════════════════════════════════════════════════════
 // FUNCIÓN PRINCIPAL
@@ -422,16 +504,17 @@ serve(async (req) => {
       );
     }
 
-    const isAccionType     = type.startsWith("accion_mejora");
-    const isIndicadorType  = type.startsWith("indicador");
+    const isAccionType    = type.startsWith("accion_mejora");
+    const isIndicadorType = type.startsWith("indicador");
+    const isUserType      = type.startsWith("user_");
 
-    if (!isAccionType && !isIndicadorType && !document) {
+    if (!isAccionType && !isIndicadorType && !isUserType && !document) {
       return new Response(
         JSON.stringify({ error: "Falta el campo document para tipos de documento" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
-    if ((isAccionType || isIndicadorType) && !data) {
+    if ((isAccionType || isIndicadorType || isUserType) && !data) {
       return new Response(
         JSON.stringify({ error: "Falta el campo data" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
@@ -507,6 +590,12 @@ serve(async (req) => {
         html    = getIndicadorRecordatorioTemplate({ type, to, data });
         break;
 
+      // ── Usuarios ────────────────────────────────────────────────────
+      case "user_bienvenida":
+        subject = `👋 Bienvenido a SIG Garana  — Tus credenciales de acceso`;
+        html    = getUserBienvenidaTemplate({ type, to, data });
+        break;
+
       default:
         return new Response(
           JSON.stringify({ error: `Tipo de email no reconocido: ${type}` }),
@@ -518,7 +607,7 @@ serve(async (req) => {
     console.log(`📧 Enviando [${type}] a:`, recipients);
 
     const info = await transporter.sendMail({
-      from: `Garana SIG <${GMAIL_USER}>`,
+      from: `SIG Garana <${GMAIL_USER}>`,
       to:   recipients.join(", "),
       subject,
       html,

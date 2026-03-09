@@ -1,137 +1,157 @@
 // src/hooks/useUserPermissions.js
-// Hook COMPLETO para gestionar permisos de un usuario específico
-// ✅ Incluye: asignación, revocación, consulta de permisos
+// ✅ Usa funciones SECURITY DEFINER: assign_perms / revoke_perms
+// ✅ Carga permisos con query directa (más simple y confiable)
+// ✅ Expone permissionCodes para comparar
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
-/**
- * Hook para gestionar permisos de un usuario específico
- * @param {string} userId - ID del usuario
- */
 export function useUserPermissions(userId) {
-  const [permissions, setPermissions] = useState([]);
+  const [permissions,     setPermissions]     = useState([]);
   const [permissionCodes, setPermissionCodes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [loading,         setLoading]         = useState(true);
+  const [error,           setError]           = useState(null);
 
-  useEffect(() => {
-    if (userId) {
-      loadPermissions();
-    } else {
+  // ── Cargar permisos del usuario ────────────────────────────
+  const loadPermissions = useCallback(async () => {
+    if (!userId) {
       setPermissions([]);
       setPermissionCodes([]);
       setLoading(false);
+      return;
     }
-  }, [userId]);
 
-  /**
-   * Carga los permisos del usuario desde la BD
-   */
-  const loadPermissions = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const { data, error: permError } = await supabase
-        .rpc('get_user_permissions_detailed', {
-          p_user_id: userId
-        });
+      // Query directa: user_permission JOIN permission
+      const { data, error: qErr } = await supabase
+        .from('user_permission')
+        .select(`
+          id,
+          is_active,
+          granted_at,
+          permission:permission_id (
+            id,
+            code,
+            name,
+            module:module_id (
+              id,
+              code,
+              name,
+              display_order
+            )
+          )
+        `)
+        .eq('user_id', userId)
+        .eq('is_active', true);
 
-      if (permError) throw permError;
+      if (qErr) throw qErr;
 
-      setPermissions(data || []);
-      
-      const codes = (data || [])
-        .filter(p => p.is_active)
-        .map(p => p.permission_code);
+      const perms = data || [];
+      setPermissions(perms);
+
+      const codes = perms
+        .filter(p => p.is_active && p.permission?.code)
+        .map(p => p.permission.code);
       setPermissionCodes(codes);
 
-      console.log('✅ Permisos cargados para usuario:', userId, '→', codes.length, 'permisos');
-
+      console.log(`✅ Permisos cargados para ${userId}: ${codes.length}`);
     } catch (err) {
-      console.error('❌ Error loading user permissions:', err);
+      console.error('❌ Error cargando permisos:', err);
       setError(err.message);
+      setPermissions([]);
+      setPermissionCodes([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
-  /**
-   * Asigna permisos a un usuario
-   * @param {string[]} codes - Códigos de permisos a asignar
-   * @param {string} notes - Notas opcionales
-   */
-  const assignPermissions = async (codes, notes = null) => {
+  useEffect(() => {
+    loadPermissions();
+  }, [loadPermissions]);
+
+  // ── Asignar permisos — actualización OPTIMISTA (sin reset del modal) ──
+  const assignPermissions = async (codes) => {
+    if (!codes?.length) return { success: true };
     try {
-      console.log('➕ Asignando permisos:', codes);
+      // 1. Actualizar estado local inmediatamente (sin loading)
+      setPermissionCodes(prev => [...new Set([...prev, ...codes])]);
 
-      const { data, error } = await supabase
-        .rpc('assign_permissions_to_user', {
-          p_user_id: userId,
-          p_permission_codes: codes,
-          p_notes: notes
-        });
+      // 2. Persistir en BD
+      const { data, error: rpcErr } = await supabase
+        .rpc('assign_perms', { p_user_id: userId, p_permission_codes: codes });
 
-      if (error) throw error;
+      if (rpcErr) throw rpcErr;
+      if (data && !data.success) throw new Error(data.error || 'Error asignando permisos');
 
-      await loadPermissions();
-
-      console.log('✅ Permisos asignados correctamente');
-      return { success: true, data };
+      return { success: true };
     } catch (err) {
-      console.error('❌ Error assigning permissions:', err);
+      console.error('❌ Error asignando permisos:', err);
+      // Revertir optimistic update
+      setPermissionCodes(prev => prev.filter(c => !codes.includes(c)));
       return { success: false, error: err.message };
     }
   };
 
-  /**
-   * Revoca permisos de un usuario
-   * @param {string[]} codes - Códigos de permisos a revocar
-   * @param {string} notes - Notas opcionales
-   */
-  const revokePermissions = async (codes, notes = null) => {
+  // ── Revocar permisos — actualización OPTIMISTA (sin reset del modal) ──
+  const revokePermissions = async (codes) => {
+    if (!codes?.length) return { success: true };
     try {
-      console.log('➖ Revocando permisos:', codes);
+      // 1. Actualizar estado local inmediatamente (sin loading)
+      setPermissionCodes(prev => prev.filter(c => !codes.includes(c)));
 
-      const { data, error } = await supabase
-        .rpc('revoke_permissions_from_user', {
-          p_user_id: userId,
-          p_permission_codes: codes,
-          p_notes: notes
-        });
+      // 2. Persistir en BD
+      const { data, error: rpcErr } = await supabase
+        .rpc('revoke_perms', { p_user_id: userId, p_permission_codes: codes });
 
-      if (error) throw error;
+      if (rpcErr) throw rpcErr;
+      if (data && !data.success) throw new Error(data.error || 'Error revocando permisos');
 
-      await loadPermissions();
-
-      console.log('✅ Permisos revocados correctamente');
-      return { success: true, data };
+      return { success: true };
     } catch (err) {
-      console.error('❌ Error revoking permissions:', err);
+      console.error('❌ Error revocando permisos:', err);
+      // Revertir optimistic update
+      setPermissionCodes(prev => [...new Set([...prev, ...codes])]);
       return { success: false, error: err.message };
     }
   };
 
-  /**
-   * Verifica si el usuario tiene un permiso específico
-   * @param {string} permissionCode - Código del permiso
-   */
+  // ── Verificar permiso individual ────────────────────────────
   const hasPermission = (permissionCode) => {
     return permissionCodes.includes(permissionCode);
   };
 
+  // ── Asignar TODOS los permisos :view (para usuarios nuevos) ─
+  const assignDefaultViewPermissions = async () => {
+    try {
+      const { data: viewPerms, error: qErr } = await supabase
+        .from('permission')
+        .select('code')
+        .like('code', '%:view');
+
+      if (qErr) throw qErr;
+
+      const codes = (viewPerms || []).map(p => p.code);
+      if (codes.length === 0) return { success: true };
+
+      return await assignPermissions(codes);
+    } catch (err) {
+      console.error('❌ Error asignando permisos por defecto:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
   return {
-    // Estados
     permissions,
     permissionCodes,
     loading,
     error,
-    
-    // Funciones
     assignPermissions,
     revokePermissions,
+    assignDefaultViewPermissions,
     hasPermission,
-    refresh: loadPermissions
+    refresh: loadPermissions,
   };
 }

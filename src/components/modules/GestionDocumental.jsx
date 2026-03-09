@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 
 export default function GestionDocumental() {
-  const { permissions } = useAuth();
+  const { hasPermission, isAdmin, isGerencia } = useAuth();
   const [activeView, setActiveView] = useState('dashboard');
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [lastCreatedDocument, setLastCreatedDocument] = useState(null);
@@ -69,10 +69,15 @@ export default function GestionDocumental() {
     }
   };
 
-  const canView = permissions?.includes('gestion_documental:view') || 
-                  permissions?.includes('*:*:*');
-  const canCreate = permissions?.includes('gestion_documental:create') || 
-                    permissions?.includes('*:*:*');
+  // ── Permisos del módulo principal ───────────────────────────────
+  const canView   = isAdmin || isGerencia || hasPermission('gestion_documental:view');
+  const canCreate = isAdmin || isGerencia || hasPermission('gestion_documental:create');
+
+  // ── Permisos por submódulo ───────────────────────────────────────
+  const canViewFormatos     = isAdmin || isGerencia || hasPermission('gestion_documental:formatos:view');
+  const canViewListado      = isAdmin || isGerencia || hasPermission('gestion_documental:documentos:view');
+  const canViewAreas        = isAdmin || isGerencia || hasPermission('gestion_documental:procesos:view');
+  const canViewProcedimientos = isAdmin || isGerencia || hasPermission('gestion_documental:procedimientos:view');
 
   if (!canView) {
     return (
@@ -90,6 +95,15 @@ export default function GestionDocumental() {
   }
 
   const handleCardClick = (view) => {
+    // Verificar permiso antes de navegar al submódulo
+    const permisosPorVista = {
+      formatos:       canViewFormatos,
+      listado:        canViewListado,
+      areas:          canViewAreas,
+      procedimientos: canViewProcedimientos,
+      create:         canCreate,
+    };
+    if (permisosPorVista[view] === false) return; // bloqueado
     setActiveView(view);
   };
 
@@ -249,49 +263,57 @@ export default function GestionDocumental() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <FuturisticCard
-                title="Formatos"
-                description="Plantillas y formatos del sistema organizados"
-                icon={ClipboardList}
-                color="#6dbd96"
-                gradient="linear-gradient(135deg, #6dbd96 0%, #2e5244 100%)"
-                badge="FO - GU - RE"
-                onClick={() => handleCardClick('formatos')}
-                delay={0}
-              />
+              {canViewFormatos && (
+                <FuturisticCard
+                  title="Formatos"
+                  description="Plantillas y formatos del sistema organizados"
+                  icon={ClipboardList}
+                  color="#6dbd96"
+                  gradient="linear-gradient(135deg, #6dbd96 0%, #2e5244 100%)"
+                  badge="FO - GU - RE"
+                  onClick={() => handleCardClick('formatos')}
+                  delay={0}
+                />
+              )}
 
-              <FuturisticCard
-                title="Listado Maestro"
-                description="Control total de documentos del sistema"
-                icon={FileStack}
-                color="#2e5244"
-                gradient="linear-gradient(135deg, #2e5244 0%, #6dbd96 100%)"
-                badge="Todos los documentos"
-                onClick={() => handleCardClick('listado')}
-                delay={0.1}
-              />
+              {canViewListado && (
+                <FuturisticCard
+                  title="Listado Maestro"
+                  description="Control total de documentos del sistema"
+                  icon={FileStack}
+                  color="#2e5244"
+                  gradient="linear-gradient(135deg, #2e5244 0%, #6dbd96 100%)"
+                  badge="Todos los documentos"
+                  onClick={() => handleCardClick('listado')}
+                  delay={0.1}
+                />
+              )}
 
-              <FuturisticCard
-                title="Por Área"
-                description="Navegación por procesos y departamentos"
-                icon={Building2}
-                color="#6f7b2c"
-                gradient="linear-gradient(135deg, #6f7b2c 0%, #6dbd96 100%)"
-                badge="7 Procesos activos"
-                onClick={() => handleCardClick('areas')}
-                delay={0.2}
-              />
+              {canViewAreas && (
+                <FuturisticCard
+                  title="Por Área"
+                  description="Navegación por procesos y departamentos"
+                  icon={Building2}
+                  color="#6f7b2c"
+                  gradient="linear-gradient(135deg, #6f7b2c 0%, #6dbd96 100%)"
+                  badge="7 Procesos activos"
+                  onClick={() => handleCardClick('areas')}
+                  delay={0.2}
+                />
+              )}
 
-              <FuturisticCard
-                title="Procedimientos"
-                description="Procedimientos operativos organizados"
-                icon={BookOpen}
-                color="#d97706"
-                gradient="linear-gradient(135deg, #d97706 0%, #f59e0b 100%)"
-                badge="Tipo PR"
-                onClick={() => handleCardClick('procedimientos')}
-                delay={0.3}
-              />
+              {canViewProcedimientos && (
+                <FuturisticCard
+                  title="Procedimientos"
+                  description="Procedimientos operativos organizados"
+                  icon={BookOpen}
+                  color="#d97706"
+                  gradient="linear-gradient(135deg, #d97706 0%, #f59e0b 100%)"
+                  badge="Tipo PR"
+                  onClick={() => handleCardClick('procedimientos')}
+                  delay={0.3}
+                />
+              )}
 
               {canCreate && (
                 <motion.div
