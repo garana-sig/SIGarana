@@ -11,7 +11,7 @@ import nodemailer from "npm:nodemailer@6.9.7";
 const LOGO_URL =
   "https://wnsnymxabmxswnpcpvoj.supabase.co/storage/v1/object/public/templates/garana1.png";
 
-const APP_URL = "https://garana-sig.vercel.app";
+const APP_URL = "https://garanasig.vercel.app/";
 
 // ── Tipos ─────────────────────────────────────────────────────────────
 interface EmailRequest {
