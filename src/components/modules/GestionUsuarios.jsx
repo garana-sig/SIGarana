@@ -1,7 +1,6 @@
 // src/app/modules/GestionUsuarios.jsx
-// ✅ FIX 1: soft_delete_user RPC (SECURITY DEFINER) — resuelve RLS
-// ✅ FIX 2: auto-asigna permisos :view al crear usuario
-// ✅ FIX 3: assign_perms / revoke_perms con SECURITY DEFINER
+// ✅ FIX 1: hard_delete_user RPC (SECURITY DEFINER) — borrado total sin trazabilidad
+// ✅ FIX 2: assign_perms / revoke_perms con SECURITY DEFINER
 
 import { useState, useRef } from 'react';
 import ModuleHero from '@/components/ModuleHero';
@@ -132,18 +131,18 @@ export default function GestionUsuarios() {
     setShowDeactivate(false);
   };
 
-  // ── ✅ FIX: Soft Delete seguro usando RPC SECURITY DEFINER ──────
+  // ── Hard Delete — borra el usuario completamente ──────────────
   const handleSoftDelete = async (user) => {
     setDeleting(true);
     try {
-      // Paso 1: RPC SECURITY DEFINER — limpia FKs (indicator + improvement_action), permisos y soft-deletes
+      // Paso 1: RPC — nullifica FKs, borra permisos y elimina profile
       const { data: result, error: rpcErr } = await supabase
-        .rpc('soft_delete_user', { p_user_id: user.id });
+        .rpc('hard_delete_user', { p_user_id: user.id });
 
       if (rpcErr) throw rpcErr;
       if (result && !result.success) throw new Error(result.error || 'Error al eliminar');
 
-      // Paso 2: Liberar email de auth.users (best-effort, no bloquea si falla)
+      // Paso 2: Eliminar de auth.users via Edge Function
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch(
@@ -159,12 +158,12 @@ export default function GestionUsuarios() {
           }
         );
         if (!res.ok) {
-          addToast(`${user.full_name} eliminado. El email puede tardar en liberarse.`, 'warning');
+          addToast(`${user.full_name} eliminado. El email quedará libre en unos minutos.`, 'warning');
         } else {
           addToast(`${user.full_name} eliminado correctamente`);
         }
       } catch {
-        addToast(`${user.full_name} eliminado. El email puede tardar en liberarse.`, 'warning');
+        addToast(`${user.full_name} eliminado. El email quedará libre en unos minutos.`, 'warning');
       }
 
       refresh();
@@ -385,7 +384,7 @@ export default function GestionUsuarios() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// MODAL CREAR USUARIO — ✅ Auto-asigna permisos :view al crear
+// MODAL CREAR USUARIO
 // ══════════════════════════════════════════════════════════════════
 function CreateUserModal({ open, onClose, departments, currentUser, onSuccess, onError }) {
   const [form,    setForm]    = useState({ email: '', full_name: '', role: 'usuario', department_id: '', phone: '' });
@@ -434,24 +433,7 @@ function CreateUserModal({ open, onClose, departments, currentUser, onSuccess, o
 
       const newUserId = result.userId;
 
-      // Paso 2: ✅ Auto-asignar todos los permisos :view
-      setStep('permissions');
-      try {
-        const { data: viewPerms } = await supabase
-          .from('permission').select('code').like('code', '%:view');
-
-        if (viewPerms?.length) {
-          await supabase.rpc('assign_perms', {
-            p_user_id:          newUserId,
-            p_permission_codes: viewPerms.map(p => p.code),
-          });
-          console.log(`✅ ${viewPerms.length} permisos :view asignados a ${form.full_name}`);
-        }
-      } catch (permErr) {
-        console.warn('⚠️ Permisos por defecto fallaron (no crítico):', permErr.message);
-      }
-
-      // Paso 3: Subir avatar si hay
+      // Paso 2: Subir avatar si hay
       if (avatar && newUserId) {
         setStep('avatar');
         const ext  = avatar.name.split('.').pop();
@@ -480,7 +462,7 @@ function CreateUserModal({ open, onClose, departments, currentUser, onSuccess, o
     onClose();
   };
 
-  const stepLabel = { creating: 'Creando usuario...', permissions: 'Asignando permisos...', avatar: 'Subiendo foto...' };
+  const stepLabel = { creating: 'Creando usuario...', avatar: 'Subiendo foto...' };
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -503,11 +485,11 @@ function CreateUserModal({ open, onClose, departments, currentUser, onSuccess, o
 
           <div>
             <label className="text-xs font-semibold text-gray-600 mb-1 block">Nombre completo *</label>
-            <Input placeholder="Ej. Jhon Doe" value={form.full_name} onChange={e => setForm(p => ({ ...p, full_name: e.target.value }))} className="rounded-xl" />
+            <Input placeholder="Ana María Ospina" value={form.full_name} onChange={e => setForm(p => ({ ...p, full_name: e.target.value }))} className="rounded-xl" />
           </div>
           <div>
             <label className="text-xs font-semibold text-gray-600 mb-1 block">Correo electrónico *</label>
-            <Input placeholder="jhondoe@garana.com" type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} className="rounded-xl" />
+            <Input placeholder="ana@garana.com" type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} className="rounded-xl" />
           </div>
 
           <div className="grid grid-cols-2 gap-3">

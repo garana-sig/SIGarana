@@ -1,8 +1,8 @@
 // src/context/AuthContext.jsx
 // ✅ VERSIÓN COMPLETA CON FIX DE SESIONES
-// ✅ Permisos :view automáticos
 // ✅ Sin reloads automáticos
 // ✅ Loading no se queda stuck
+// ✅ must_change_password integrado
 
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -80,7 +80,7 @@ export const AuthProvider = ({ children }) => {
       const { data: profileData, error: profileError } = await queryWithTimeout(
         supabase
           .from('profile')
-          .select('id, email, full_name, username, role, department_id, is_active, avatar_url, phone')
+          .select('id, email, full_name, username, role, department_id, is_active, avatar_url, phone, must_change_password')
           .eq('id', authUser.id)
           .single(),
         10000
@@ -239,6 +239,23 @@ export const AuthProvider = ({ children }) => {
 
   const isAdmin = profile?.role === 'admin';
   const isGerencia = profile?.role === 'gerencia';
+  const mustChangePassword = profile?.must_change_password === true;
+
+  // Refresca el profile desde BD (usado por Layout tras cambio de contraseña)
+  const refreshProfile = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('profile')
+      .select('id, email, full_name, username, role, department_id, is_active, avatar_url, phone, must_change_password')
+      .eq('id', user.id)
+      .single();
+    if (data) setProfile(data);
+  };
+
+  const clearMustChangePassword = async () => {
+    await supabase.from('profile').update({ must_change_password: false }).eq('id', user?.id);
+    setProfile(prev => ({ ...prev, must_change_password: false }));
+  };
 
   const hasPermission = (permissionCode) => {
     if (isAdmin || isGerencia) return true;
@@ -371,6 +388,9 @@ export const AuthProvider = ({ children }) => {
     logout,
     isAdmin,
     isGerencia,
+    mustChangePassword,
+    clearMustChangePassword,
+    refreshProfile,
     hasPermission,
     hasAnyPermission,
   };
