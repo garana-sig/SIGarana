@@ -194,10 +194,10 @@ export default function Home({ onModuleChange }) {
       >
         <div className="grid grid-cols-2 md:grid-cols-4 gap-0">
           {[
-            { num: '19', label: 'Años en el mercado', suffix: '' },
-            { num: '50', label: 'Colaboradoras', suffix: '+' },
+            { num: '20', label: 'Años en el mercado', suffix: '' },
+            { num: '60 ', label: 'Colaboradores', suffix: '+' },
             { num: '10K', label: 'Unidades / mes', suffix: '' },
-            { num: '20', label: 'Dptos Colombia', suffix: '+' },
+            { num: '80', label: 'Clientes Mayoristas', suffix: '+' },
           ].map((s, i) => (
             <div
               key={i}

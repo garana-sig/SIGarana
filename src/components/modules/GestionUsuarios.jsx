@@ -1,11 +1,11 @@
 // src/app/modules/GestionUsuarios.jsx
 // ✅ FIX 1: hard_delete_user RPC (SECURITY DEFINER) — borrado total sin trazabilidad
 // ✅ FIX 2: assign_perms / revoke_perms con SECURITY DEFINER
+// ✅ v2.0: Usuarios asignados a PROCESO (no departamento) — Marzo 2026
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import ModuleHero from '@/components/ModuleHero';
 import { useUsers } from '@/hooks/useUsers';
-import { useDepartments } from '@/hooks/useDepartments';
 import { useAuth } from '@/context/AuthContext';
 import { UserPermissionsManager } from '../users/UserPermissionsManager';
 import { supabase } from '@/lib/supabase';
@@ -17,7 +17,7 @@ import {
 import {
   Users, UserPlus, Search, Shield, ShieldCheck,
   CheckCircle2, XCircle, Edit2, Key, ChevronDown, ChevronUp,
-  Camera, Loader2, AlertTriangle, Building2, Mail,
+  Camera, Loader2, AlertTriangle, GitBranch, Mail,
   UserCheck, UserX, Lock, Trash2,
 } from 'lucide-react';
 
@@ -28,6 +28,26 @@ const ROLES = {
   gerencia: { label: 'Gerencia',      color: '#0369a1', bg: '#e0f2fe', icon: Shield },
   usuario:  { label: 'Usuario',       color: '#2e5244', bg: '#f0fdf4', icon: Users },
 };
+
+// ── Hook de procesos (reutiliza tabla process de gestión documental) ──
+function useProcesses() {
+  const [processes, setProcesses] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase
+      .from('process')
+      .select('id, code, name')
+      .eq('is_active', true)
+      .order('name')
+      .then(({ data }) => {
+        setProcesses(data || []);
+        setLoading(false);
+      });
+  }, []);
+
+  return { processes, loading };
+}
 
 // ── Toast ──────────────────────────────────────────────────────────
 function Toast({ toasts }) {
@@ -86,13 +106,14 @@ function Detail({ label, value }) {
 // COMPONENTE PRINCIPAL
 // ══════════════════════════════════════════════════════════════════
 export default function GestionUsuarios() {
-  const { profile: currentUser } = useAuth();
-  const { departments }          = useDepartments();
+  const { profile: currentUser }     = useAuth();
+  const { processes }                = useProcesses();  // ← CAMBIO: era useDepartments
 
-  const [search,       setSearch]       = useState('');
-  const [filterRole,   setFilterRole]   = useState('all');
-  const [filterStatus, setFilterStatus] = useState('active');
-  const [deleting,     setDeleting]     = useState(false);
+  const [search,        setSearch]        = useState('');
+  const [filterRole,    setFilterRole]    = useState('all');
+  const [filterStatus,  setFilterStatus]  = useState('active');
+  const [filterProcess, setFilterProcess] = useState('all');  // ← NUEVO filtro
+  const [deleting,      setDeleting]      = useState(false);
 
   const { users, loading, error, refresh } = useUsers({
     searchTerm:      search,
@@ -135,14 +156,12 @@ export default function GestionUsuarios() {
   const handleSoftDelete = async (user) => {
     setDeleting(true);
     try {
-      // Paso 1: RPC — nullifica FKs, borra permisos y elimina profile
       const { data: result, error: rpcErr } = await supabase
         .rpc('hard_delete_user', { p_user_id: user.id });
 
       if (rpcErr) throw rpcErr;
       if (result && !result.success) throw new Error(result.error || 'Error al eliminar');
 
-      // Paso 2: Eliminar de auth.users via Edge Function
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch(
@@ -175,9 +194,12 @@ export default function GestionUsuarios() {
     }
   };
 
+  // ── Filtro local por estado + proceso ─────────────────────────
   const displayed = users.filter(u => {
     if (filterStatus === 'active'   && !u.is_active) return false;
     if (filterStatus === 'inactive' &&  u.is_active) return false;
+    // ← NUEVO: filtro por proceso
+    if (filterProcess !== 'all' && u.process_id !== filterProcess) return false;
     return true;
   });
 
@@ -197,6 +219,7 @@ export default function GestionUsuarios() {
 
       <div className="space-y-6 p-6">
 
+        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard label="Total usuarios"  value={total}    icon={Users}       color={C.green}  borderColor={C.mint} />
           <StatCard label="Activos"         value={activos}  icon={UserCheck}   color="#16a34a"  borderColor="#bbf7d0" />
@@ -204,6 +227,7 @@ export default function GestionUsuarios() {
           <StatCard label="Gerencia"        value={gerentes} icon={Shield}      color="#0369a1"  borderColor="#bae6fd" />
         </div>
 
+        {/* Filtros */}
         <div className="flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -214,6 +238,13 @@ export default function GestionUsuarios() {
             <option value="admin">Administrador</option>
             <option value="gerencia">Gerencia</option>
             <option value="usuario">Usuario</option>
+          </select>
+          {/* ← NUEVO: filtro por proceso */}
+          <select value={filterProcess} onChange={e => setFilterProcess(e.target.value)} className="px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none" style={{ color: C.green }}>
+            <option value="all">Todos los procesos</option>
+            {processes.map(p => (
+              <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+            ))}
           </select>
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none" style={{ color: C.green }}>
             <option value="active">Solo activos</option>
@@ -228,6 +259,7 @@ export default function GestionUsuarios() {
           )}
         </div>
 
+        {/* Lista de usuarios */}
         {loading ? (
           <div className="flex justify-center py-16"><Loader2 className="h-8 w-8 animate-spin" style={{ color: C.mint }} /></div>
         ) : error ? (
@@ -240,7 +272,8 @@ export default function GestionUsuarios() {
               const role      = ROLES[user.role] || ROLES.usuario;
               const RoleIcon  = role.icon;
               const isExpanded = expandedUser === user.id;
-              const dept      = departments.find(d => d.id === user.department_id);
+              // ✅ FIX: usar process_name del objeto user (lo trae la RPC directamente)
+              const proc = user.process_name ? { name: user.process_name, code: user.process_code } : null;
               return (
                 <div key={user.id} className="user-card rounded-xl border-2 bg-white transition-all"
                   style={{ animationDelay: `${i * 35}ms`, borderColor: user.is_active ? C.sand : '#f3f4f6', opacity: user.is_active ? 1 : 0.6 }}
@@ -261,7 +294,17 @@ export default function GestionUsuarios() {
                       </div>
                       <div className="flex items-center gap-4 mt-1 flex-wrap">
                         <span className="flex items-center gap-1 text-xs text-gray-500"><Mail className="h-3 w-3" /> {user.email}</span>
-                        {dept && <span className="flex items-center gap-1 text-xs text-gray-400"><Building2 className="h-3 w-3" /> {dept.name}</span>}
+                        {/* ← CAMBIO: muestra proceso en lugar de departamento */}
+                        {proc && (
+                          <span className="flex items-center gap-1 text-xs text-gray-400">
+                            <GitBranch className="h-3 w-3" /> {proc.name}
+                          </span>
+                        )}
+                        {!proc && (
+                          <span className="flex items-center gap-1 text-xs text-gray-300 italic">
+                            <GitBranch className="h-3 w-3" /> Sin proceso asignado
+                          </span>
+                        )}
                       </div>
                     </div>
                     {canManage && (
@@ -284,10 +327,11 @@ export default function GestionUsuarios() {
                   </div>
                   {isExpanded && (
                     <div className="px-4 pb-4 pt-3 border-t grid grid-cols-2 md:grid-cols-4 gap-3" style={{ borderColor: C.sand }}>
-                      <Detail label="Usuario"      value={user.username} />
-                      <Detail label="Teléfono"     value={user.phone} />
-                      <Detail label="Departamento" value={dept?.name} />
-                      <Detail label="Creado"       value={user.created_at ? new Date(user.created_at).toLocaleDateString('es-CO') : null} />
+                      <Detail label="Usuario"  value={user.username} />
+                      <Detail label="Teléfono" value={user.phone} />
+                      {/* ← CAMBIO: Proceso en lugar de Departamento */}
+                      <Detail label="Proceso"  value={proc ? `${proc.code} — ${proc.name}` : null} />
+                      <Detail label="Creado"   value={user.created_at ? new Date(user.created_at).toLocaleDateString('es-CO') : null} />
                     </div>
                   )}
                 </div>
@@ -298,37 +342,33 @@ export default function GestionUsuarios() {
       </div>
 
       {/* MODALES */}
-      <CreateUserModal open={showCreate} onClose={() => setShowCreate(false)} departments={departments} currentUser={currentUser}
+      <CreateUserModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        processes={processes}          // ← CAMBIO: pasa processes, no departments
+        currentUser={currentUser}
         onSuccess={msg => { addToast(msg); refresh(); setShowCreate(false); }}
         onError={msg => addToast(msg, 'error')}
       />
 
       {showEdit && selectedUser && (
-        <EditUserModal user={selectedUser} departments={departments} isAdmin={isAdmin}
-          onClose={() => setShowEdit(false)}
-          onSuccess={msg => { addToast(msg); refresh(); setShowEdit(false); }}
+        <EditUserModal
+          user={selectedUser}
+          processes={processes}         // ← CAMBIO: pasa processes, no departments
+          isAdmin={isAdmin}
+          onClose={() => { setShowEdit(false); setSelectedUser(null); }}
+          onSuccess={msg => { addToast(msg); refresh(); setShowEdit(false); setSelectedUser(null); }}
           onError={msg => addToast(msg, 'error')}
         />
       )}
 
       {showPermissions && selectedUser && (
-        <Dialog open onOpenChange={() => setShowPermissions(false)}>
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2" style={{ color: C.green }}>
-                <Key className="h-5 w-5" style={{ color: '#7c3aed' }} />
-                Permisos — {selectedUser.full_name}
-              </DialogTitle>
-              <DialogDescription>{selectedUser.email} · {ROLES[selectedUser.role]?.label}</DialogDescription>
-            </DialogHeader>
-            <UserPermissionsManager
-              userId={selectedUser.id}
-              userName={selectedUser.full_name}
-              userRole={selectedUser.role}
-              onSuccess={() => addToast('Permiso actualizado')}
-            />
-          </DialogContent>
-        </Dialog>
+        <UserPermissionsManager
+          userId={selectedUser.id}
+          userName={selectedUser.full_name}
+          userRole={selectedUser.role}
+          onSuccess={() => { addToast('Permisos actualizados'); setShowPermissions(false); setSelectedUser(null); }}
+        />
       )}
 
       {showDeactivate && selectedUser && (
@@ -384,10 +424,10 @@ export default function GestionUsuarios() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// MODAL CREAR USUARIO
+// MODAL CREAR USUARIO — v2: usa process_id
 // ══════════════════════════════════════════════════════════════════
-function CreateUserModal({ open, onClose, departments, currentUser, onSuccess, onError }) {
-  const [form,    setForm]    = useState({ email: '', full_name: '', role: 'usuario', department_id: '', phone: '' });
+function CreateUserModal({ open, onClose, processes, currentUser, onSuccess, onError }) {
+  const [form,    setForm]    = useState({ email: '', full_name: '', role: 'usuario', process_id: '', phone: '' }); // ← CAMBIO
   const [saving,  setSaving]  = useState(false);
   const [step,    setStep]    = useState('');
   const [avatar,  setAvatar]  = useState(null);
@@ -406,10 +446,10 @@ function CreateUserModal({ open, onClose, departments, currentUser, onSuccess, o
     if (!form.email || !form.full_name || !form.role) { onError('Nombre, email y rol son obligatorios'); return; }
     setSaving(true);
     try {
-      const dept = departments.find(d => d.id === form.department_id);
+      // ← CAMBIO: busca proceso en lugar de departamento
+      const proc = processes.find(p => p.id === form.process_id);
       const { data: { session } } = await supabase.auth.getSession();
 
-      // Paso 1: Crear usuario vía Edge Function
       setStep('creating');
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
@@ -417,13 +457,13 @@ function CreateUserModal({ open, onClose, departments, currentUser, onSuccess, o
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}`, 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
           body: JSON.stringify({
-            email:           form.email.trim().toLowerCase(),
-            full_name:       form.full_name.trim(),
-            role:            form.role,
-            department_id:   form.department_id || null,
-            department_name: dept?.name || null,
-            phone:           form.phone || null,
-            created_by_name: currentUser?.full_name || 'Administrador',
+            email:            form.email.trim().toLowerCase(),
+            full_name:        form.full_name.trim(),
+            role:             form.role,
+            process_id:       form.process_id || null,    // ← CAMBIO: process_id
+            process_name:     proc?.name || null,          // ← CAMBIO: process_name
+            phone:            form.phone || null,
+            created_by_name:  currentUser?.full_name || 'Administrador',
           }),
         }
       );
@@ -433,7 +473,15 @@ function CreateUserModal({ open, onClose, departments, currentUser, onSuccess, o
 
       const newUserId = result.userId;
 
-      // Paso 2: Subir avatar si hay
+      // Si hay proceso, actualizar process_id en profile (por si la Edge Function no lo hace)
+      if (form.process_id && newUserId) {
+        await supabase
+          .from('profile')
+          .update({ process_id: form.process_id })
+          .eq('id', newUserId);
+      }
+
+      // Subir avatar
       if (avatar && newUserId) {
         setStep('avatar');
         const ext  = avatar.name.split('.').pop();
@@ -457,7 +505,7 @@ function CreateUserModal({ open, onClose, departments, currentUser, onSuccess, o
 
   const handleClose = () => {
     if (saving) return;
-    setForm({ email: '', full_name: '', role: 'usuario', department_id: '', phone: '' });
+    setForm({ email: '', full_name: '', role: 'usuario', process_id: '', phone: '' }); // ← CAMBIO
     setAvatar(null); setPreview(null); setStep('');
     onClose();
   };
@@ -475,6 +523,7 @@ function CreateUserModal({ open, onClose, departments, currentUser, onSuccess, o
         </DialogHeader>
 
         <div className="space-y-4 py-1">
+          {/* Avatar */}
           <div className="flex flex-col items-center gap-2">
             <div className="h-20 w-20 rounded-full flex items-center justify-center overflow-hidden cursor-pointer border-2 border-dashed hover:border-solid transition-all" style={{ borderColor: C.mint, backgroundColor: '#f0f7f4' }} onClick={() => fileRef.current?.click()}>
               {preview ? <img src={preview} className="w-full h-full object-cover" alt="preview" /> : <Camera className="h-7 w-7" style={{ color: C.mint }} />}
@@ -502,10 +551,11 @@ function CreateUserModal({ open, onClose, departments, currentUser, onSuccess, o
               </select>
             </div>
             <div>
-              <label className="text-xs font-semibold text-gray-600 mb-1 block">Departamento</label>
-              <select value={form.department_id} onChange={e => setForm(p => ({ ...p, department_id: e.target.value }))} className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none">
-                <option value="">Sin departamento</option>
-                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              {/* ← CAMBIO: Proceso en lugar de Departamento */}
+              <label className="text-xs font-semibold text-gray-600 mb-1 block">Proceso</label>
+              <select value={form.process_id} onChange={e => setForm(p => ({ ...p, process_id: e.target.value }))} className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none">
+                <option value="">Sin proceso</option>
+                {processes.map(pr => <option key={pr.id} value={pr.id}>{pr.code} — {pr.name}</option>)}
               </select>
             </div>
           </div>
@@ -533,10 +583,11 @@ function CreateUserModal({ open, onClose, departments, currentUser, onSuccess, o
 }
 
 // ══════════════════════════════════════════════════════════════════
-// MODAL EDITAR USUARIO
+// MODAL EDITAR USUARIO — v2: usa process_id
 // ══════════════════════════════════════════════════════════════════
-function EditUserModal({ user, departments, isAdmin, onClose, onSuccess, onError }) {
-  const [form,    setForm]    = useState({ full_name: user.full_name || '', role: user.role || 'usuario', department_id: user.department_id || '', phone: user.phone || '' });
+function EditUserModal({ user, processes, isAdmin, onClose, onSuccess, onError }) {
+  // ← CAMBIO: process_id en lugar de department_id
+  const [form,    setForm]    = useState({ full_name: user.full_name || '', role: user.role || 'usuario', process_id: user.process_id || '', phone: user.phone || '' });
   const [saving,  setSaving]  = useState(false);
   const [avatar,  setAvatar]  = useState(null);
   const [preview, setPreview] = useState(user.avatar_url || null);
@@ -562,8 +613,16 @@ function EditUserModal({ user, departments, isAdmin, onClose, onSuccess, onError
           avatar_url = publicUrl;
         }
       }
+      // ← CAMBIO: guarda process_id, ya no department_id
       const { error } = await supabase.from('profile')
-        .update({ full_name: form.full_name, role: isAdmin ? form.role : user.role, department_id: form.department_id || null, phone: form.phone || null, avatar_url, updated_at: new Date().toISOString() })
+        .update({
+          full_name:  form.full_name,
+          role:       isAdmin ? form.role : user.role,
+          process_id: form.process_id || null,  // ← CAMBIO
+          phone:      form.phone || null,
+          avatar_url,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', user.id);
       if (error) throw error;
       onSuccess(`Perfil de ${form.full_name} actualizado`);
@@ -585,6 +644,7 @@ function EditUserModal({ user, departments, isAdmin, onClose, onSuccess, onError
         </DialogHeader>
 
         <div className="space-y-4 py-1">
+          {/* Avatar */}
           <div className="flex flex-col items-center gap-2">
             <div className="h-20 w-20 rounded-full overflow-hidden cursor-pointer relative" style={{ border: `3px solid ${C.mint}` }} onClick={() => fileRef.current?.click()}>
               {preview ? <img src={preview} className="w-full h-full object-cover" alt="avatar" /> : <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: '#f0f7f4' }}><Camera className="h-7 w-7" style={{ color: C.mint }} /></div>}
@@ -610,11 +670,12 @@ function EditUserModal({ user, departments, isAdmin, onClose, onSuccess, onError
             </div>
           )}
 
+          {/* ← CAMBIO: Proceso en lugar de Departamento */}
           <div>
-            <label className="text-xs font-semibold text-gray-600 mb-1 block">Departamento</label>
-            <select value={form.department_id} onChange={e => setForm(p => ({ ...p, department_id: e.target.value }))} className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none">
-              <option value="">Sin departamento</option>
-              {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            <label className="text-xs font-semibold text-gray-600 mb-1 block">Proceso</label>
+            <select value={form.process_id} onChange={e => setForm(p => ({ ...p, process_id: e.target.value }))} className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none">
+              <option value="">Sin proceso</option>
+              {processes.map(pr => <option key={pr.id} value={pr.id}>{pr.code} — {pr.name}</option>)}
             </select>
           </div>
 

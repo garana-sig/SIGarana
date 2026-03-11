@@ -1,58 +1,78 @@
-// src/hooks/useUsers.js
+// src/hooks/useUsers.js — v3.0 DEFINITIVO
+// Consulta directa a profile + process (sin RPC)
+// Razón: la RPC get_users_list puede tener firma desactualizada en BD.
+// Esta versión funciona independientemente del estado de las funciones en Supabase.
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 
-/**
- * Hook para gestionar usuarios con filtros y búsqueda
- */
 export function useUsers(filters = {}) {
-  const [users, setUsers] = useState([]);
+  const [users,   setUsers]   = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error,   setError]   = useState(null);
 
   const {
     includeInactive = false,
-    departmentId = null,
-    role = null,
-    searchTerm = ''
+    processId       = null,
+    role            = null,
+    searchTerm      = '',
   } = filters;
 
   useEffect(() => {
     loadUsers();
-  }, [includeInactive, departmentId, role, searchTerm]);
+  }, [includeInactive, processId, role, searchTerm]);
 
   const loadUsers = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      let data;
+      // ── Consulta directa: profile JOIN process (sin RPC) ──────────────────
+      let query = supabase
+        .from('profile')
+        .select(`
+          id,
+          email,
+          full_name,
+          username,
+          role,
+          phone,
+          avatar_url,
+          is_active,
+          process_id,
+          department_id,
+          created_at,
+          updated_at,
+          process:process_id (
+            name,
+            code
+          )
+        `)
+        .order('full_name');
 
+      // Filtros
+      if (!includeInactive)              query = query.eq('is_active', true);
+      if (role)                          query = query.eq('role', role);
+      if (processId)                     query = query.eq('process_id', processId);
       if (searchTerm && searchTerm.trim().length > 0) {
-        const { data: searchData, error: searchError } = await supabase
-          .rpc('search_users', {
-            p_search_term: searchTerm.trim(),
-            p_department_id: departmentId,
-            p_role: role,
-            p_include_inactive: includeInactive,
-            p_limit: 50
-          });
-
-        if (searchError) throw searchError;
-        data = searchData;
-      } else {
-        const { data: listData, error: listError } = await supabase
-          .rpc('get_users_list', {
-            p_include_inactive: includeInactive,
-            p_department_id: departmentId,
-            p_role: role
-          });
-
-        if (listError) throw listError;
-        data = listData;
+        query = query.or(
+          `full_name.ilike.%${searchTerm.trim()}%,email.ilike.%${searchTerm.trim()}%`
+        );
       }
 
-      setUsers(data || []);
+      const { data, error: qErr } = await query;
+      if (qErr) throw qErr;
+
+      // Aplanar el objeto process anidado al mismo nivel
+      // para que el componente use user.process_name igual que antes
+      const flat = (data || []).map(u => ({
+        ...u,
+        process_name: u.process?.name || null,
+        process_code: u.process?.code || null,
+        process: undefined,   // limpiar objeto anidado
+      }));
+
+      setUsers(flat);
     } catch (err) {
       console.error('❌ Error loading users:', err);
       setError(err.message);
@@ -61,10 +81,5 @@ export function useUsers(filters = {}) {
     }
   };
 
-  return {
-    users,
-    loading,
-    error,
-    refresh: loadUsers
-  };
+  return { users, loading, error, refresh: loadUsers };
 }

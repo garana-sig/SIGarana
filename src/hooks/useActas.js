@@ -1,9 +1,13 @@
 // src/hooks/useActas.js
-// ✅ Hook para gestionar actas de reunión con Supabase
+// ✅ v2.0 — Con soporte de evidencias fotográficas (photos JSONB)
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+
+// Bucket de Storage para fotos de actas
+const PHOTOS_BUCKET = 'documents';
+const PHOTOS_FOLDER = 'actas';
 
 export function useActas() {
   const { user } = useAuth();
@@ -12,7 +16,7 @@ export function useActas() {
   const [error, setError] = useState(null);
 
   // ============================================================================
-  // FETCH ACTAS (listado con contadores)
+  // FETCH ACTAS
   // ============================================================================
   const fetchActas = async () => {
     try {
@@ -30,7 +34,6 @@ export function useActas() {
 
       if (fetchError) throw fetchError;
 
-      // Transformar los contadores
       const actasTransformed = data.map(acta => ({
         ...acta,
         attendees_count: acta.attendees_count?.[0]?.count || 0,
@@ -49,13 +52,12 @@ export function useActas() {
   };
 
   // ============================================================================
-  // FETCH ACTA BY ID (con asistentes y compromisos completos)
+  // FETCH ACTA BY ID (con asistentes, compromisos y fotos)
   // ============================================================================
   const fetchActaById = async (id) => {
     try {
       console.log('📋 Cargando acta completa:', id);
 
-      // 1. Cargar acta principal
       const { data: acta, error: actaError } = await supabase
         .from('acta')
         .select('*')
@@ -64,7 +66,6 @@ export function useActas() {
 
       if (actaError) throw actaError;
 
-      // 2. Cargar asistentes
       const { data: attendees, error: attendeesError } = await supabase
         .from('acta_attendee')
         .select('*')
@@ -73,7 +74,6 @@ export function useActas() {
 
       if (attendeesError) throw attendeesError;
 
-      // 3. Cargar compromisos
       const { data: commitments, error: commitmentsError } = await supabase
         .from('acta_commitment')
         .select('*')
@@ -82,13 +82,17 @@ export function useActas() {
 
       if (commitmentsError) throw commitmentsError;
 
+      // Cargar URLs firmadas para fotos (si existen)
+      const photosWithUrls = await loadPhotoUrls(acta.photos || []);
+
       const actaCompleta = {
         ...acta,
         attendees: attendees || [],
-        commitments: commitments || []
+        commitments: commitments || [],
+        photos: photosWithUrls
       };
 
-      console.log('✅ Acta completa cargada:', actaCompleta);
+      console.log('✅ Acta completa cargada:', actaCompleta.consecutive);
       return actaCompleta;
     } catch (err) {
       console.error('Error fetching acta by id:', err);
@@ -97,68 +101,150 @@ export function useActas() {
   };
 
   // ============================================================================
+  // CARGAR URLs FIRMADAS PARA FOTOS
+  // ============================================================================
+  const loadPhotoUrls = async (photos) => {
+    if (!photos || photos.length === 0) return [];
+
+    const photosWithUrls = await Promise.all(
+      photos.map(async (photo) => {
+        try {
+          const { data, error } = await supabase.storage
+            .from(PHOTOS_BUCKET)
+            .createSignedUrl(photo.path, 3600); // URL válida 1 hora
+
+          if (error) {
+            console.warn('⚠️ No se pudo obtener URL para:', photo.path);
+            return { ...photo, url: null };
+          }
+
+          return { ...photo, url: data.signedUrl };
+        } catch {
+          return { ...photo, url: null };
+        }
+      })
+    );
+
+    return photosWithUrls;
+  };
+
+  // ============================================================================
+  // SUBIR FOTOS A STORAGE
+  // ============================================================================
+  const uploadPhotos = async (actaId, photoFiles) => {
+    if (!photoFiles || photoFiles.length === 0) return [];
+
+    const uploadedPhotos = [];
+
+    for (const file of photoFiles) {
+      try {
+        const timestamp = Date.now();
+        const ext = file.name.split('.').pop().toLowerCase();
+        const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const path = `${PHOTOS_FOLDER}/${actaId}/${timestamp}-${safeName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from(PHOTOS_BUCKET)
+          .upload(path, file, { cacheControl: '3600', upsert: false });
+
+        if (uploadError) {
+          console.error('❌ Error subiendo foto:', file.name, uploadError);
+          continue;
+        }
+
+        uploadedPhotos.push({
+          path,
+          name: file.name,
+          size: file.size,
+          type: file.type
+        });
+
+        console.log('✅ Foto subida:', path);
+      } catch (err) {
+        console.error('❌ Error procesando foto:', file.name, err);
+      }
+    }
+
+    return uploadedPhotos;
+  };
+
+  // ============================================================================
+  // ELIMINAR FOTO DE STORAGE
+  // ============================================================================
+  const deletePhoto = async (photoPath) => {
+    try {
+      const { error } = await supabase.storage
+        .from(PHOTOS_BUCKET)
+        .remove([photoPath]);
+
+      if (error) throw error;
+      console.log('✅ Foto eliminada:', photoPath);
+      return true;
+    } catch (err) {
+      console.error('❌ Error eliminando foto:', photoPath, err);
+      return false;
+    }
+  };
+
+  // ============================================================================
   // CREATE ACTA
   // ============================================================================
   const createActa = async (actaData) => {
     try {
-      console.log('📝 Creando nueva acta...', actaData);
+      console.log('📝 Creando nueva acta...');
 
-      // ✅ IMPORTANTE: Agregar created_by y quitar consecutive (se genera auto)
-      const actaToInsert = {
+      // Extraer fotos pendientes (File[]) del resto de datos
+      const { attendees, commitments, consecutive, newPhotoFiles, ...actaFields } = {
         ...actaData,
-        created_by: user.id, // ✅ Registro de quién crea el acta
-        approved_by: actaData.approved_by || null, // ✅ Convertir "" a null
-        // El status se maneja automáticamente por el trigger según approved_by
+        created_by: user.id,
+        approved_by: actaData.approved_by || null,
       };
 
-      // Extraer arrays y consecutive (no van en el INSERT principal)
-      const { attendees, commitments, consecutive, ...actaFields } = actaToInsert;
-
-      // 1️⃣ Crear acta principal
+      // 1️⃣ Crear acta sin fotos primero (para obtener el ID)
       const { data: newActa, error: actaError } = await supabase
         .from('acta')
-        .insert([actaFields])
+        .insert([{ ...actaFields, photos: [] }])
         .select()
         .single();
 
       if (actaError) throw actaError;
-
       console.log('✅ Acta creada:', newActa.consecutive);
 
-      // 2️⃣ Insertar asistentes
-      if (attendees && attendees.length > 0) {
-        const attendeesData = attendees.map(a => ({
-          ...a,
-          acta_id: newActa.id
-        }));
+      // 2️⃣ Subir fotos si hay
+      let photosData = [];
+      if (newPhotoFiles && newPhotoFiles.length > 0) {
+        photosData = await uploadPhotos(newActa.id, newPhotoFiles);
+        // Actualizar acta con las fotos
+        if (photosData.length > 0) {
+          await supabase
+            .from('acta')
+            .update({ photos: photosData })
+            .eq('id', newActa.id);
+        }
+      }
 
+      // 3️⃣ Insertar asistentes
+      if (attendees && attendees.length > 0) {
         const { error: attendeesError } = await supabase
           .from('acta_attendee')
-          .insert(attendeesData);
+          .insert(attendees.map(a => ({ ...a, acta_id: newActa.id })));
 
         if (attendeesError) throw attendeesError;
         console.log(`✅ ${attendees.length} asistentes agregados`);
       }
 
-      // 3️⃣ Insertar compromisos
+      // 4️⃣ Insertar compromisos
       if (commitments && commitments.length > 0) {
-        const commitmentsData = commitments.map(c => ({
-          ...c,
-          acta_id: newActa.id
-        }));
-
         const { error: commitmentsError } = await supabase
           .from('acta_commitment')
-          .insert(commitmentsData);
+          .insert(commitments.map(c => ({ ...c, acta_id: newActa.id })));
 
         if (commitmentsError) throw commitmentsError;
         console.log(`✅ ${commitments.length} compromisos agregados`);
       }
 
-      // Recargar lista
       await fetchActas();
-
-      return newActa;
+      return { ...newActa, photos: photosData };
     } catch (err) {
       console.error('❌ Error creando acta:', err);
       throw err;
@@ -172,64 +258,64 @@ export function useActas() {
     try {
       console.log('📝 Actualizando acta:', id);
 
-      const { attendees, commitments, ...actaFields } = actaData;
+      const {
+        attendees,
+        commitments,
+        newPhotoFiles,    // Fotos nuevas (File[])
+        deletedPhotoPaths, // Rutas a eliminar (['actas/uuid/foto.jpg'])
+        photos,           // Fotos existentes ya guardadas (sin las eliminadas)
+        ...actaFields
+      } = actaData;
 
-      // ✅ Limpiar approved_by antes de actualizar
       if (actaFields.approved_by !== undefined) {
         actaFields.approved_by = actaFields.approved_by || null;
       }
 
-      // 1️⃣ Actualizar acta principal
+      // 1️⃣ Subir fotos nuevas
+      let updatedPhotos = photos || [];
+      if (newPhotoFiles && newPhotoFiles.length > 0) {
+        const uploaded = await uploadPhotos(id, newPhotoFiles);
+        updatedPhotos = [...updatedPhotos, ...uploaded];
+      }
+
+      // 2️⃣ Eliminar fotos removidas de Storage
+      if (deletedPhotoPaths && deletedPhotoPaths.length > 0) {
+        for (const path of deletedPhotoPaths) {
+          await deletePhoto(path);
+        }
+      }
+
+      // 3️⃣ Actualizar acta principal con fotos actualizadas
       const { error: actaError } = await supabase
         .from('acta')
-        .update(actaFields)
+        .update({ ...actaFields, photos: updatedPhotos })
         .eq('id', id);
 
       if (actaError) throw actaError;
 
-      // 2️⃣ Actualizar asistentes (delete + insert)
+      // 4️⃣ Actualizar asistentes (delete + insert)
       if (attendees !== undefined) {
-        // Eliminar asistentes existentes
         await supabase.from('acta_attendee').delete().eq('acta_id', id);
-
-        // Insertar nuevos
         if (attendees.length > 0) {
-          const attendeesData = attendees.map(a => ({
-            ...a,
-            acta_id: id
-          }));
-
-          const { error: attendeesError } = await supabase
+          const { error } = await supabase
             .from('acta_attendee')
-            .insert(attendeesData);
-
-          if (attendeesError) throw attendeesError;
+            .insert(attendees.map(a => ({ ...a, acta_id: id })));
+          if (error) throw error;
         }
       }
 
-      // 3️⃣ Actualizar compromisos (delete + insert)
+      // 5️⃣ Actualizar compromisos (delete + insert)
       if (commitments !== undefined) {
-        // Eliminar compromisos existentes
         await supabase.from('acta_commitment').delete().eq('acta_id', id);
-
-        // Insertar nuevos
         if (commitments.length > 0) {
-          const commitmentsData = commitments.map(c => ({
-            ...c,
-            acta_id: id
-          }));
-
-          const { error: commitmentsError } = await supabase
+          const { error } = await supabase
             .from('acta_commitment')
-            .insert(commitmentsData);
-
-          if (commitmentsError) throw commitmentsError;
+            .insert(commitments.map(c => ({ ...c, acta_id: id })));
+          if (error) throw error;
         }
       }
 
       console.log('✅ Acta actualizada');
-
-      // Recargar lista
       await fetchActas();
     } catch (err) {
       console.error('❌ Error actualizando acta:', err);
@@ -252,8 +338,6 @@ export function useActas() {
       if (error) throw error;
 
       console.log('✅ Acta archivada');
-
-      // Recargar lista
       await fetchActas();
     } catch (err) {
       console.error('❌ Error archivando acta:', err);
@@ -261,7 +345,6 @@ export function useActas() {
     }
   };
 
-  // Cargar actas al montar
   useEffect(() => {
     fetchActas();
   }, []);
@@ -275,5 +358,8 @@ export function useActas() {
     createActa,
     updateActa,
     deleteActa,
+    uploadPhotos,
+    deletePhoto,
+    loadPhotoUrls,
   };
 }

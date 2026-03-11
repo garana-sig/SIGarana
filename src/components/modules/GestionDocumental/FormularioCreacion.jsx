@@ -561,7 +561,7 @@ export default function FormularioCreacion({
 
             <div>
               <Label htmlFor="process_id">
-                Proceso / Departamento <span className="text-red-500">*</span>
+                Proceso <span className="text-red-500">*</span>
               </Label>
               <select
                 id="process_id"

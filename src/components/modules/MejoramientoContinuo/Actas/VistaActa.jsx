@@ -28,7 +28,9 @@ import {
   CheckSquare,
   Loader2,
   Archive,
-  Clock
+  Clock,
+  ImageIcon,
+  ZoomIn
 } from 'lucide-react';
 import { useActas } from '@/hooks/useActas';
 import { supabase } from '@/lib/supabase';
@@ -39,7 +41,8 @@ export default function VistaActa({ actaId, isOpen, onClose, onDeleted }) {
   const [loading, setLoading] = useState(false);
   const [usuarios, setUsuarios] = useState({});
   const [downloading, setDownloading] = useState(false);
-  const [archiving, setArchiving] = useState(false);
+  const [archiving,  setArchiving]  = useState(false);
+  const [lightbox,   setLightbox]   = useState(null); // { url, caption }
 
   useEffect(() => {
     if (isOpen && actaId) {
@@ -116,21 +119,28 @@ export default function VistaActa({ actaId, isOpen, onClose, onDeleted }) {
       
       // Preparar datos COMPLETOS para la plantilla
       const templateData = {
-        consecutive: acta.consecutive,
-        title: acta.title || '',
-        meeting_date: acta.meeting_date,
-        location: acta.location,
-        objective: acta.objective,
-        agenda: acta.agenda,
-        development: acta.development,
-        attendees: acta.attendees || [],
+        consecutive:       acta.consecutive,
+        title:             acta.title || '',
+        meeting_date:      acta.meeting_date,
+        location:          acta.location,
+        objective:         acta.objective,
+        agenda:            acta.agenda,
+        development:       acta.development,
+        attendees:         acta.attendees || [],
         commitments: (acta.commitments || []).map(c => ({
-          activity: c.activity,
+          activity:         c.activity,
           responsible_name: usuarios[c.responsible_id] || 'Sin asignar',
-          due_date: c.due_date
+          due_date:         c.due_date
         })),
-        created_by_name: usuarios[acta.created_by] || 'Sin asignar',
-        approved_by_name: usuarios[acta.approved_by] || '',
+        created_by_name:   usuarios[acta.created_by]  || 'Sin asignar',
+        approved_by_name:  usuarios[acta.approved_by] || '',
+        // ── Fotos de evidencia ──────────────────────────────────────
+        photos: (acta.photos || []).map((p, i) => ({
+          url:     p.url,
+          caption: p.caption || `Foto ${i + 1}`,
+        })),
+        has_photos:   (acta.photos || []).length > 0,
+        photos_count: (acta.photos || []).length,
       };
       
       // Llamar a la Edge Function de Supabase
@@ -216,6 +226,7 @@ export default function VistaActa({ actaId, isOpen, onClose, onDeleted }) {
   };
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-5xl max-h-[90vh] p-0 overflow-hidden flex flex-col">
         
@@ -523,6 +534,42 @@ export default function VistaActa({ actaId, isOpen, onClose, onDeleted }) {
                   )}
                 </div>
 
+                {/* ── EVIDENCIAS FOTOGRÁFICAS ── */}
+                {acta.photos && acta.photos.length > 0 && (
+                  <div className="mt-10">
+                    <div className="flex items-center gap-2 mb-4 pb-2 border-b-2" style={{ borderColor: '#2e5244' }}>
+                      <ImageIcon className="h-4 w-4" style={{ color: '#2e5244' }} />
+                      <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: '#2e5244' }}>
+                        Evidencias Fotográficas ({acta.photos.length})
+                      </h3>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      {acta.photos.map((photo, index) => (
+                        <div
+                          key={index}
+                          className="relative group rounded-lg overflow-hidden border cursor-pointer"
+                          style={{ borderColor: '#dedecc' }}
+                          onClick={() => setLightbox({ url: photo.url, caption: photo.caption })}
+                        >
+                          <img
+                            src={photo.url}
+                            alt={photo.caption || `Foto ${index + 1}`}
+                            className="w-full h-36 object-cover"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <ZoomIn className="h-6 w-6 text-white" />
+                          </div>
+                          {photo.caption && (
+                            <div className="bg-gray-50 px-2 py-1.5 border-t" style={{ borderColor: '#dedecc' }}>
+                              <p className="text-xs text-gray-600 text-center">{photo.caption}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* FOOTER DEL DOCUMENTO */}
                 <div className="border-t-2 pt-6 mt-12" style={{ borderColor: '#e5e7eb' }}>
                   <div className="grid grid-cols-2 gap-8 text-sm">
@@ -595,5 +642,36 @@ export default function VistaActa({ actaId, isOpen, onClose, onDeleted }) {
         )}
       </DialogContent>
     </Dialog>
+
+    {/* ── LIGHTBOX ── */}
+    {lightbox && (
+      <div
+        className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4"
+        onClick={() => setLightbox(null)}
+      >
+        <button
+          onClick={() => setLightbox(null)}
+          className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full bg-black/40"
+        >
+          <X className="h-6 w-6" />
+        </button>
+        <div
+          className="max-w-4xl max-h-[85vh] flex flex-col items-center gap-3"
+          onClick={e => e.stopPropagation()}
+        >
+          <img
+            src={lightbox.url}
+            alt={lightbox.caption || 'Evidencia fotográfica'}
+            className="max-w-full max-h-[75vh] object-contain rounded-lg shadow-2xl"
+          />
+          {lightbox.caption && (
+            <p className="text-white/80 text-sm text-center bg-black/50 px-4 py-2 rounded-full">
+              {lightbox.caption}
+            </p>
+          )}
+        </div>
+      </div>
+    )}
+    </>
   );
 }

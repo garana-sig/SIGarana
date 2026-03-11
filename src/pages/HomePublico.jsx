@@ -48,7 +48,7 @@ const VALORES = [
 ];
 
 const CIFRAS = [
-  { num: '19',   suffix: ' años', label: 'en el mercado nacional de trajes de baño' },
+  { num: '20',   suffix: ' años', label: 'en el mercado nacional de trajes de baño' },
   { num: '+50',  suffix: '',      label: 'mujeres cabeza de hogar en nuestra planta' },
   { num: '3',    suffix:  '',        label: 'países de exportación: Ecuador, Perú y EE.UU.' },
   { num: '100%', suffix: '',      label: 'energía solar en nuestra planta de producción' },
@@ -176,7 +176,7 @@ export default function HomePublico() {
                 <span style={s.sigDot1} /><span style={s.sigDot2} /><span style={s.sigDot3} />
                 <span style={s.sigTitle}> SIGarana</span>
               </div>
-              <img src="/SIG.png" alt="Sistema de Gestión Integral" style={s.sigImg} />
+              <img src="/SIG.png" alt="Sistema Integrado de Gestión " style={s.sigImg} />
             </div>
           </div>
         </div>

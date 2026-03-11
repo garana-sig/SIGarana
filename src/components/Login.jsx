@@ -148,7 +148,7 @@ export default function Login() {
             }}
           >
             {[
-              { value: '19+', label: 'años' },
+              { value: '20', label: 'años' },
               { value: '80+', label: 'empleados' },
               { value: '3',   label: 'países' },
             ].map(({ value, label }) => (
