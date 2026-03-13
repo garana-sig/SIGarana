@@ -1,7 +1,8 @@
 // src/pages/HomePublico.jsx
 // Home público Garana Art — rediseño completo
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { supabase } from '@/lib/supabase';
 
 const C = {
   green:  '#2e5244',
@@ -57,6 +58,69 @@ const CIFRAS = [
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function HomePublico() {
+  // ── Modal de acceso a encuestas ────────────────────────────────────────
+  const [claveModal, setClaveModal] = useState(null); // 'satisfaccion' | 'clima' | null
+  const [claveInput, setClaveInput] = useState('');
+  const [claveError, setClaveError] = useState('');
+  const [claveLoading, setClaveLoading] = useState(false);
+  const claveRef = useRef(null);
+
+  const abrirEncuesta = (tipo) => {
+    setClaveModal(tipo);
+    setClaveInput('');
+    setClaveError('');
+    setTimeout(() => claveRef.current?.focus(), 80);
+  };
+
+  const cerrarModal = () => {
+    setClaveModal(null);
+    setClaveInput('');
+    setClaveError('');
+  };
+
+  const validarClave = async () => {
+    if (!claveInput.trim()) { setClaveError('Ingresa el código de acceso.'); return; }
+    setClaveLoading(true);
+    setClaveError('');
+    try {
+      const typeCode = claveModal === 'satisfaccion' ? 'customer_satisfaction' : 'workplace_climate';
+      // Buscar el survey_type
+      const { data: typeData, error: typeErr } = await supabase
+        .from('survey_type').select('id').eq('code', typeCode).single();
+      if (typeErr || !typeData) throw new Error('Encuesta no disponible.');
+
+      // Buscar período activo con esa clave
+      const { data: period, error: periodErr } = await supabase
+        .from('survey_period')
+        .select('id, access_code')
+        .eq('survey_type_id', typeData.id)
+        .eq('is_active', true)
+        .single();
+
+      if (periodErr || !period) {
+        setClaveError('No hay una encuesta activa en este momento.');
+        return;
+      }
+      if (!period.access_code) {
+        setClaveError('Esta encuesta no tiene código configurado. Contacta al administrador.');
+        return;
+      }
+      if (period.access_code.trim().toLowerCase() !== claveInput.trim().toLowerCase()) {
+        setClaveError('Código incorrecto. Verifica e intenta de nuevo.');
+        return;
+      }
+
+      // Clave correcta → navegar con el period_id
+      const ruta = claveModal === 'satisfaccion'
+        ? `/encuesta/satisfaccion-cliente?pid=${period.id}`
+        : `/encuesta/clima-laboral?pid=${period.id}`;
+      window.location.href = ruta;
+    } catch (err) {
+      setClaveError(err.message || 'Error al validar. Intenta de nuevo.');
+    } finally {
+      setClaveLoading(false);
+    }
+  };
   const [scrolled, setScrolled]       = useState(false);
   const [menuOpen, setMenuOpen]       = useState(false);
   const [activeSection, setActiveSection] = useState('inicio');
@@ -332,9 +396,9 @@ export default function HomePublico() {
                 <span style={s.encuestaBadge}>📋 I Semestre 2026</span>
                 <span style={s.encuestaBadge}>⏱ 5 min</span>
               </div>
-              <a href="/encuesta/satisfaccion-cliente" style={s.encuestaBtn}>
+              <button onClick={() => abrirEncuesta('satisfaccion')} style={s.encuestaBtn}>
                 Diligenciar encuesta →
-              </a>
+              </button>
             </div>
 
             {/* Clima Laboral */}
@@ -352,9 +416,9 @@ export default function HomePublico() {
                 <span style={s.encuestaBadge}>⏱ 8 min</span>
                 <span style={{ ...s.encuestaBadge, backgroundColor: 'rgba(255,220,100,0.15)', color: '#ffd97d' }}>🔒 Confidencial</span>
               </div>
-              <a href="/encuesta/clima-laboral" style={{ ...s.encuestaBtn, backgroundColor: C.olive }}>
+              <button onClick={() => abrirEncuesta('clima')} style={{ ...s.encuestaBtn, backgroundColor: C.olive }}>
                 Diligenciar encuesta →
-              </a>
+              </button>
             </div>
           </div>
         </div>
@@ -412,7 +476,87 @@ export default function HomePublico() {
     <span>Sistema Integrado de Gestión </span>
   </div>
 </footer>
+
+      {/* ── Modal de clave de acceso ─────────────────────────────────── */}
+      {claveModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          backgroundColor: 'rgba(0,0,0,0.65)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 24,
+        }} onClick={cerrarModal}>
+          <div style={{
+            backgroundColor: '#fff', borderRadius: 16, padding: '36px 32px',
+            maxWidth: 420, width: '100%', boxShadow: '0 24px 80px rgba(0,0,0,0.3)',
+          }} onClick={e => e.stopPropagation()}>
+
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <div style={{
+                width: 56, height: 56, borderRadius: '50%', margin: '0 auto 16px',
+                backgroundColor: claveModal === 'satisfaccion' ? `${C.mint}20` : `${C.olive}20`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28,
+              }}>
+                {claveModal === 'satisfaccion' ? '⭐' : '🌱'}
+              </div>
+              <h3 style={{ color: C.green, fontSize: 20, fontWeight: 700, margin: '0 0 6px' }}>
+                {claveModal === 'satisfaccion' ? 'Satisfacción del Cliente' : 'Clima Laboral'}
+              </h3>
+              <p style={{ color: '#6B7280', fontSize: 14, margin: 0 }}>
+                Ingresa el código de acceso para continuar
+              </p>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.green, marginBottom: 6 }}>
+                Código de acceso
+              </label>
+              <input
+                ref={claveRef}
+                type="text"
+                value={claveInput}
+                onChange={e => { setClaveInput(e.target.value); setClaveError(''); }}
+                onKeyDown={e => e.key === 'Enter' && !claveLoading && validarClave()}
+                placeholder="Ej: GARANA2026"
+                style={{
+                  width: '100%', padding: '10px 14px', fontSize: 16,
+                  border: `2px solid ${claveError ? '#ef4444' : '#e5e7eb'}`,
+                  borderRadius: 8, outline: 'none', boxSizing: 'border-box',
+                  letterSpacing: 2, textAlign: 'center', fontWeight: 600,
+                }}
+              />
+              {claveError && (
+                <p style={{ color: '#ef4444', fontSize: 13, margin: '6px 0 0', textAlign: 'center' }}>
+                  ⚠ {claveError}
+                </p>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={cerrarModal} style={{
+                flex: 1, padding: '10px 0', borderRadius: 8, border: '2px solid #e5e7eb',
+                backgroundColor: '#fff', color: '#6B7280', fontWeight: 600, fontSize: 14,
+                cursor: 'pointer',
+              }}>
+                Cancelar
+              </button>
+              <button
+                onClick={validarClave}
+                disabled={claveLoading || !claveInput.trim()}
+                style={{
+                  flex: 2, padding: '10px 0', borderRadius: 8, border: 'none',
+                  backgroundColor: claveLoading ? '#9ca3af' : (claveModal === 'satisfaccion' ? C.mint : C.olive),
+                  color: '#fff', fontWeight: 700, fontSize: 14,
+                  cursor: claveLoading || !claveInput.trim() ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {claveLoading ? 'Verificando...' : 'Ingresar →'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+
   );
 }
 

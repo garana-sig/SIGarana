@@ -40,16 +40,25 @@ export default function EncuestaSatisfaccionCliente() {
   const [errors, setErrors]   = useState({});
 
   useEffect(() => {
-    const load = async () => {
-      try {
+    const params = new URLSearchParams(window.location.search);
+    const pid = params.get('pid');
+    if (!pid) { setStep('error'); setLoadingData(false); return; }
+    load(pid);
+  }, []);
+
+  const load = async (pid) => {
+    try {
+        // Verificar que el período existe, está activo y corresponde al tipo correcto
         const { data: typeData, error: typeError } = await supabase
           .from('survey_type').select('id').eq('code', SURVEY_TYPE_CODE).single();
         if (typeError || !typeData) throw new Error('Tipo no encontrado');
 
         const { data: periodData, error: periodError } = await supabase
           .from('survey_period').select('id, name')
-          .eq('survey_type_id', typeData.id).eq('is_active', true).single();
-        if (periodError || !periodData) throw new Error('Sin período activo');
+          .eq('id', pid)
+          .eq('survey_type_id', typeData.id)
+          .eq('is_active', true).single();
+        if (periodError || !periodData) throw new Error('Período no válido o encuesta inactiva');
 
         const { data: questionsData, error: questionsError } = await supabase
           .from('survey_question')
@@ -65,9 +74,7 @@ export default function EncuestaSatisfaccionCliente() {
       } finally {
         setLoadingData(false);
       }
-    };
-    load();
-  }, []);
+  };
 
   const clearErr = (key) => setErrors(e => ({ ...e, [key]: null }));
 
