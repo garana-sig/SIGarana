@@ -192,7 +192,7 @@ export default function EncuestaSatisfaccionCliente() {
           <img src="/garana1.png" alt="Garana Art" style={styles.logo} />
           <div>
             <h1 style={styles.brandName}>Garana Art</h1>
-            <p style={styles.brandSub}>Sistema de Gestión Integral</p>
+            <p style={styles.brandSub}>Sistema Integrado de Gestión </p>
           </div>
         </div>
         <div style={styles.headerDivider} />
@@ -201,8 +201,10 @@ export default function EncuestaSatisfaccionCliente() {
           Período: <strong>{period?.name}</strong>
         </p>
         <p style={styles.surveyDescription}>
-          Tu opinión nos ayuda a mejorar. Por favor califica cada aspecto del 1 al 5,
+          Tu opinión nos ayuda a mejorar. 
+          <p style={styles.surveyDescription}>Por favor califica cada aspecto del 1 al 5,
           donde <strong>1 = Muy insatisfecho</strong> y <strong>5 = Altamente satisfecho</strong>.
+        </p>
         </p>
       </div>
 
@@ -378,7 +380,7 @@ const styles = {
     minHeight: '100vh',
     // Fondo base + imagen muy transparente encima
     backgroundColor: '#dedecc',
-    backgroundImage: 'url(/imgfondo.webp)',
+    backgroundImage: 'url(/clientes.jpg)',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundAttachment: 'fixed',

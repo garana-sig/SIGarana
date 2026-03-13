@@ -128,10 +128,10 @@ export default function Home({ onModuleChange }) {
         <div
           className="absolute inset-0"
           style={{
-            backgroundImage: 'url(/imgfondo.webp)',
+            backgroundImage: 'url(/nosotros.png)',
             backgroundSize: 'cover',
             backgroundPosition: 'center',
-            opacity: 0.08,
+            opacity: 0.18,
           }}
         />
         {/* Decoración onda SVG inferior */}
@@ -237,7 +237,7 @@ export default function Home({ onModuleChange }) {
             }}
           >
             <img
-              src="/SIG.png"
+              src="/Estructura_de_proceso.jpg"
               alt="Sistema Integrado de Gestión - Garana Art"
               style={{
                 maxWidth: '100%',
@@ -249,94 +249,65 @@ export default function Home({ onModuleChange }) {
         </section>
 
         {/* ─── MISIÓN & VISIÓN ──────────────────────────── */}
-        <section>
-          <div className="flex items-center gap-2 mb-4">
+       
+       <section>
+         <div className="flex items-center gap-2 mb-4">
             <div className="w-1 h-5 rounded-full" style={{ background: C.mint }} />
             <h2 style={{ color: C.dark, fontSize: 15, fontWeight: 700, margin: 0, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
               Plataforma estratégica
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Misión */}
-            <div
-              className="rounded-xl p-5 relative overflow-hidden"
-              style={{ background: 'white', border: `1px solid ${C.sand}` }}
-            >
-              <div
-                className="absolute top-0 left-0 w-1 h-full rounded-l-xl"
-                style={{ background: C.mint }}
-              />
-              <div className="pl-3">
-                <div className="flex items-center gap-2 mb-3">
-                  <span style={{ fontSize: 18 }}>🎯</span>
-                  <h3 style={{ color: C.green, fontSize: 13, fontWeight: 700, margin: 0, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                    Misión
-                  </h3>
-                </div>
-                <p style={{ color: '#4b5563', fontSize: 13, lineHeight: 1.7, margin: 0 }}>
-                  Confeccionar y comercializar trajes de baño cómodos e innovadores en una empresa consolidada, versátil, competente y con capacidad de adaptación, enfocada en la <strong style={{ color: C.green }}>satisfacción de sus clientes</strong>, el bienestar y la seguridad de sus colaboradores, apoyados en la mejora continua de procesos y la competencia laboral.
-                </p>
-              </div>
-            </div>
-
-            {/* Visión */}
-            <div
-              className="rounded-xl p-5 relative overflow-hidden"
-              style={{ background: 'white', border: `1px solid ${C.sand}` }}
-            >
-              <div
-                className="absolute top-0 left-0 w-1 h-full rounded-l-xl"
-                style={{ background: C.olive }}
-              />
-              <div className="pl-3">
-                <div className="flex items-center gap-2 mb-3">
-                  <span style={{ fontSize: 18 }}>👁️</span>
-                  <h3 style={{ color: C.olive, fontSize: 13, fontWeight: 700, margin: 0, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                    Visión
-                  </h3>
-                </div>
-                <p style={{ color: '#4b5563', fontSize: 13, lineHeight: 1.7, margin: 0 }}>
-                  INDECON tendrá una rentabilidad sostenible, mediante el posicionamiento de su marca <strong style={{ color: C.olive }}>"Garana Art"</strong>, y mayor participación en el mercado nacional e internacional, con un ambiente extraordinario de trabajo, un equipo humano altamente motivado y una <strong style={{ color: C.olive }}>cultura de excelencia operativa</strong>.
-                </p>
-              </div>
-            </div>
+          <div
+            className="rounded-2xl overflow-hidden flex items-center justify-center p-6"
+            style={{
+              background: 'white',
+              border: `1px solid ${C.sand}`,
+              boxShadow: '0 2px 12px rgba(46,82,68,0.06)',
+            }}
+          >
+            <img
+              src="/mision_vision.jpg"
+              alt="Mision Vision - Garana Art"
+              style={{
+                maxWidth: '100%',
+                height: 'auto',
+                display: 'block',
+              }}
+            />
           </div>
         </section>
+     
 
         {/* ─── VALORES ──────────────────────────────────── */}
-        <section>
-          <div className="flex items-center gap-2 mb-4">
+       <section>
+         <div className="flex items-center gap-2 mb-4">
             <div className="w-1 h-5 rounded-full" style={{ background: C.mint }} />
             <h2 style={{ color: C.dark, fontSize: 15, fontWeight: 700, margin: 0, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-              Nuestros valores
+             Nuestros valores
             </h2>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            {VALORES.map((v, i) => (
-              <div
-                key={i}
-                className="rounded-xl p-4 text-center"
-                style={{
-                  background: 'white',
-                  border: `1px solid ${C.sand}`,
-                  transition: 'transform 0.2s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-3px)'}
-                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-              >
-                <div style={{ fontSize: 24, marginBottom: 8 }}>{v.icon}</div>
-                <p style={{ color: C.green, fontWeight: 700, fontSize: 13, margin: '0 0 4px' }}>
-                  {v.label}
-                </p>
-                <p style={{ color: '#94a3b8', fontSize: 11, lineHeight: 1.4, margin: 0 }}>
-                  {v.desc}
-                </p>
-              </div>
-            ))}
+          <div
+            className="rounded-2xl overflow-hidden flex items-center justify-center p-6"
+            style={{
+              background: 'white',
+              border: `1px solid ${C.sand}`,
+              boxShadow: '0 2px 12px rgba(46,82,68,0.06)',
+            }}
+          >
+            <img
+              src="/valores.jpg"
+              alt="Valores- Garana Art"
+              style={{
+                maxWidth: '100%',
+                height: 'auto',
+                display: 'block',
+              }}
+            />
           </div>
         </section>
+     
 
         {/* ─── IMPACTO SOCIAL / AMBIENTAL / CERTS ─────── */}
         <section>

@@ -21,9 +21,15 @@ interface EmailRequest {
     | "approved"
     | "rejected"
     // Acciones de Mejora
-    | "accion_mejora_creacion"
+    | "accion_mejora_m1"
+    | "accion_mejora_m2"
+    | "accion_mejora_m3_verificacion"
     | "accion_mejora_cierre_definitivo"
     | "accion_mejora_seguimiento_pendiente"
+    // aliases legacy (no usar en código nuevo)
+    | "accion_mejora_creacion"
+    | "accion_mejora_identificacion"
+    | "accion_mejora_plan"
     // Indicadores CMI
     | "indicador_creacion"
     | "indicador_edicion"
@@ -241,6 +247,150 @@ const getAccionSeguimientoTemplate = (data: EmailRequest): string => {
       <div class="reason-box">${d.closure_reason || "—"}</div>
       <div style="text-align:center;margin-top:28px;">
         <a href="${APP_URL}/mejoramiento-continuo" class="btn">Ver Acción de Mejora</a>
+      </div>
+    </div>`);
+};
+
+
+// ── M1: Identificación ────────────────────────────────────────────────────
+const getAccionM1Template = (data: EmailRequest): string => {
+  const d = data.data!;
+
+  // Construir lista de orígenes activos
+  const origenMap: Record<string, string> = {
+    origin_audit:          "Auditoría interna",
+    origin_satisfaction:   "Satisfacción del cliente",
+    origin_qrs:            "QRS",
+    origin_autocontrol:    "Autocontrol / Gestión del cambio",
+    origin_risk_analysis:  "Análisis de riesgos",
+    origin_nonconforming:  "Producto no conforme",
+  };
+  const origenes = Object.entries(origenMap)
+    .filter(([key]) => d[key])
+    .map(([, label]) => `<li style="margin-bottom:4px;">✔ ${label}</li>`)
+    .join("");
+
+  return getBaseTemplate("Acción de Mejora Asignada — Identificación", `
+    <div class="content">
+      <div class="title">🎯 Acción de Mejora — Identificación</div>
+      <div class="message">
+        Estimados <strong>colaboradores del proceso</strong>,<br><br>
+        Se ha identificado y registrado una nueva acción de mejora que requiere
+        su atención y participación para darle solución oportuna.
+      </div>
+
+      <div class="info-box">
+        <div class="info-row"><div class="info-label">Consecutivo:</div><div class="info-value"><strong>${d.consecutive}</strong></div></div>
+        <div class="info-row"><div class="info-label">Registrado por:</div><div class="info-value">${d.created_by_name || "—"}</div></div>
+      </div>
+
+      ${origenes ? `
+        <div class="divider"></div>
+        <p style="font-size:13px;font-weight:700;color:#2e5244;margin-bottom:8px;">📌 Origen del hallazgo:</p>
+        <ul style="list-style:none;padding:0;margin:0 0 16px 0;font-size:14px;color:#444;">
+          ${origenes}
+        </ul>` : ""}
+
+      <div class="divider"></div>
+      <p style="font-size:13px;font-weight:700;color:#2e5244;margin-bottom:8px;">📋 Descripción del hallazgo:</p>
+      <div class="reason-box">${d.finding || "—"}</div>
+
+      <div class="alert-warning" style="margin-top:20px;">
+        <strong>⚠️ Acción requerida:</strong> Por favor revisa este hallazgo y
+        contribuye con tu equipo a definir e implementar la solución correspondiente.
+      </div>
+
+      <div style="text-align:center;margin-top:28px;">
+        <a href="${APP_URL}/mejoramiento-continuo" class="btn">Ver Acción de Mejora</a>
+      </div>
+    </div>`);
+};
+
+// ── M2: Análisis y Plan de Acción ─────────────────────────────────────────
+const getAccionM2Template = (data: EmailRequest): string => {
+  const d = data.data!;
+
+  const tipos: string[] = [];
+  if (d.action_correction) tipos.push("Corrección");
+  if (d.action_corrective) tipos.push("Acción Correctiva");
+  if (d.action_preventive) tipos.push("Acción Preventiva");
+  const tipoStr = tipos.length ? tipos.join(" · ") : "—";
+
+  return getBaseTemplate("Acción de Mejora — Plan de Acción (M2)", `
+    <div class="content">
+      <div class="title">📋 Plan de Acción Definido — M2</div>
+      <div class="message">
+        Se ha completado el análisis y plan de acción para la siguiente acción de mejora.
+        Por favor toma nota de los compromisos y fechas asignadas.
+      </div>
+
+      <div class="info-box">
+        <div class="info-row"><div class="info-label">Consecutivo:</div><div class="info-value"><strong>${d.consecutive}</strong></div></div>
+        <div class="info-row"><div class="info-label">Tipo de acción:</div><div class="info-value"><strong>${tipoStr}</strong></div></div>
+        <div class="info-row"><div class="info-label">Responsable:</div><div class="info-value"><strong>${d.responsible_name || "—"}</strong></div></div>
+        <div class="info-row"><div class="info-label">Fecha límite:</div><div class="info-value"><strong>${d.proposed_date || "—"}</strong></div></div>
+        <div class="info-row"><div class="info-label">Elaborado por:</div><div class="info-value">${d.created_by_name || "—"}</div></div>
+      </div>
+
+      ${d.causes ? `
+        <div class="divider"></div>
+        <p style="font-size:13px;font-weight:700;color:#2e5244;margin-bottom:8px;">🔍 Análisis de causas:</p>
+        <div class="reason-box">${d.causes}</div>` : ""}
+
+      ${d.action_description ? `
+        <div class="divider"></div>
+        <p style="font-size:13px;font-weight:700;color:#2e5244;margin-bottom:8px;">⚙️ Acciones a implementar:</p>
+        <div class="reason-box">${d.action_description}</div>` : ""}
+
+      ${d.expected_results ? `
+        <p style="font-size:13px;font-weight:700;color:#2e5244;margin:16px 0 8px;">🎯 Logros esperados:</p>
+        <div class="reason-box">${d.expected_results}</div>` : ""}
+
+      ${d.resources_budget ? `
+        <p style="font-size:13px;font-weight:700;color:#2e5244;margin:16px 0 8px;">💼 Recursos / Presupuesto:</p>
+        <div class="reason-box">${d.resources_budget}</div>` : ""}
+
+      <div style="text-align:center;margin-top:28px;">
+        <a href="${APP_URL}/mejoramiento-continuo" class="btn">Ver Plan de Acción</a>
+      </div>
+    </div>`);
+};
+
+// ── M3: Verificación ──────────────────────────────────────────────────────
+const getAccionM3Template = (data: EmailRequest): string => {
+  const d = data.data!;
+  return getBaseTemplate("Acción de Mejora — Verificación (M3)", `
+    <div class="content">
+      <div class="title">✅ Verificación Completada — M3</div>
+      <div class="message">
+        Se ha registrado la verificación de la siguiente acción de mejora.
+        A continuación los resultados de la evaluación de eficacia.
+      </div>
+
+      <div class="info-box">
+        <div class="info-row"><div class="info-label">Consecutivo:</div><div class="info-value"><strong>${d.consecutive}</strong></div></div>
+        <div class="info-row"><div class="info-label">Responsable:</div><div class="info-value">${d.responsible_name || "—"}</div></div>
+        <div class="info-row"><div class="info-label">Fecha verificación:</div><div class="info-value"><strong>${d.verification_date || "—"}</strong></div></div>
+        ${d.efficacy_date ? `<div class="info-row"><div class="info-label">Fecha eficacia:</div><div class="info-value"><strong>${d.efficacy_date}</strong></div></div>` : ""}
+        <div class="info-row"><div class="info-label">Verificado por:</div><div class="info-value">${d.auditor_name || "—"}</div></div>
+      </div>
+
+      ${d.verification_criteria ? `
+        <div class="divider"></div>
+        <p style="font-size:13px;font-weight:700;color:#1D4ED8;margin-bottom:8px;">📐 Criterios de verificación:</p>
+        <div class="reason-box" style="border-left-color:#1D4ED8;">${d.verification_criteria}</div>` : ""}
+
+      <div class="divider"></div>
+      <p style="font-size:13px;font-weight:700;color:#2e5244;margin-bottom:8px;">📋 Hallazgo de verificación:</p>
+      <div class="reason-box">${d.verification_finding || "—"}</div>
+
+      <div class="alert-info" style="margin-top:20px;">
+        <strong>ℹ️ Próximo paso:</strong> Con base en esta verificación se determinará
+        el cierre definitivo (SI) o la extensión del plan (NO) de la acción de mejora.
+      </div>
+
+      <div style="text-align:center;margin-top:28px;">
+        <a href="${APP_URL}/mejoramiento-continuo" class="btn">Ver Verificación</a>
       </div>
     </div>`);
 };
@@ -555,7 +705,23 @@ serve(async (req) => {
         break;
 
       // ── Acciones de Mejora ──────────────────────────────────────────
+      // ── Acciones de Mejora — momentos específicos ──────────────────
+      case "accion_mejora_m1":
+        subject = `🎯 Acción de Mejora — Identificación: ${data!.consecutive}`;
+        html    = getAccionM1Template({ type, to, data });
+        break;
+      case "accion_mejora_m2":
+        subject = `📋 Plan de Acción definido — Acción de Mejora: ${data!.consecutive}`;
+        html    = getAccionM2Template({ type, to, data });
+        break;
+      case "accion_mejora_m3_verificacion":
+        subject = `✅ Verificación completada — Acción de Mejora: ${data!.consecutive}`;
+        html    = getAccionM3Template({ type, to, data });
+        break;
+      // aliases legacy
       case "accion_mejora_creacion":
+      case "accion_mejora_identificacion":
+      case "accion_mejora_plan":
         subject = `🎯 Nueva Acción de Mejora asignada: ${data!.consecutive}`;
         html    = getAccionCreacionTemplate({ type, to, data });
         break;

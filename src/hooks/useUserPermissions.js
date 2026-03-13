@@ -1,7 +1,7 @@
 // src/hooks/useUserPermissions.js
-// ✅ Usa funciones SECURITY DEFINER: assign_perms / revoke_perms
-// ✅ Carga permisos con query directa (más simple y confiable)
-// ✅ Expone permissionCodes para comparar
+// ✅ Sin optimistic update — siempre refleja el estado real de BD
+// ✅ Refresh automático tras assign/revoke
+// ✅ Expone `saving` para mostrar spinner en el botón que se está guardando
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -10,10 +10,12 @@ export function useUserPermissions(userId) {
   const [permissions,     setPermissions]     = useState([]);
   const [permissionCodes, setPermissionCodes] = useState([]);
   const [loading,         setLoading]         = useState(true);
+  const [saving,          setSaving]          = useState(false);
   const [error,           setError]           = useState(null);
 
-  // ── Cargar permisos del usuario ────────────────────────────
-  const loadPermissions = useCallback(async () => {
+  // ── Cargar permisos del usuario desde BD ─────────────────────────
+  // silent=true → no muestra spinner (usado tras assign/revoke para no desmontar el panel)
+  const loadPermissions = useCallback(async (silent = false) => {
     if (!userId) {
       setPermissions([]);
       setPermissionCodes([]);
@@ -22,10 +24,9 @@ export function useUserPermissions(userId) {
     }
 
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
 
-      // Query directa: user_permission JOIN permission
       const { data, error: qErr } = await supabase
         .from('user_permission')
         .select(`
@@ -61,8 +62,6 @@ export function useUserPermissions(userId) {
     } catch (err) {
       console.error('❌ Error cargando permisos:', err);
       setError(err.message);
-      setPermissions([]);
-      setPermissionCodes([]);
     } finally {
       setLoading(false);
     }
@@ -72,73 +71,67 @@ export function useUserPermissions(userId) {
     loadPermissions();
   }, [loadPermissions]);
 
-  // ── Asignar permisos — actualización OPTIMISTA (sin reset del modal) ──
+  // ── Asignar — persiste en BD, luego recarga para confirmar ────────
   const assignPermissions = async (codes) => {
     if (!codes?.length) return { success: true };
+    setSaving(true);
     try {
-      // 1. Actualizar estado local inmediatamente (sin loading)
-      setPermissionCodes(prev => [...new Set([...prev, ...codes])]);
-
-      // 2. Persistir en BD
-      const { data, error: rpcErr } = await supabase
-        .rpc('assign_perms', { p_user_id: userId, p_permission_codes: codes });
+      const { data: rpcData, error: rpcErr } = await supabase
+        .rpc('assign_perms', {
+          p_user_id:          userId,
+          p_permission_codes: codes,
+        });
 
       if (rpcErr) throw rpcErr;
-      if (data && !data.success) throw new Error(data.error || 'Error asignando permisos');
+      if (rpcData?.success === false) throw new Error(rpcData.error || 'Error al asignar permisos');
 
+      await loadPermissions(true); // silent=true → no desmonta el panel
       return { success: true };
     } catch (err) {
       console.error('❌ Error asignando permisos:', err);
-      // Revertir optimistic update
-      setPermissionCodes(prev => prev.filter(c => !codes.includes(c)));
+      setError(err.message);
       return { success: false, error: err.message };
+    } finally {
+      setSaving(false);
     }
   };
 
-  // ── Revocar permisos — actualización OPTIMISTA (sin reset del modal) ──
+  // ── Revocar — persiste en BD, luego recarga para confirmar ────────
   const revokePermissions = async (codes) => {
     if (!codes?.length) return { success: true };
+    setSaving(true);
     try {
-      // 1. Actualizar estado local inmediatamente (sin loading)
-      setPermissionCodes(prev => prev.filter(c => !codes.includes(c)));
-
-      // 2. Persistir en BD
-      const { data, error: rpcErr } = await supabase
-        .rpc('revoke_perms', { p_user_id: userId, p_permission_codes: codes });
+      const { data: rpcData, error: rpcErr } = await supabase
+        .rpc('revoke_perms', {
+          p_user_id:          userId,
+          p_permission_codes: codes,
+        });
 
       if (rpcErr) throw rpcErr;
-      if (data && !data.success) throw new Error(data.error || 'Error revocando permisos');
+      if (rpcData?.success === false) throw new Error(rpcData.error || 'Error al revocar permisos');
 
+      await loadPermissions(true); // silent=true → no desmonta el panel
       return { success: true };
     } catch (err) {
       console.error('❌ Error revocando permisos:', err);
-      // Revertir optimistic update
-      setPermissionCodes(prev => [...new Set([...prev, ...codes])]);
+      setError(err.message);
       return { success: false, error: err.message };
+    } finally {
+      setSaving(false);
     }
   };
 
-  // ── Verificar permiso individual ────────────────────────────
-  const hasPermission = (permissionCode) => {
-    return permissionCodes.includes(permissionCode);
-  };
+  const hasPermission = (permissionCode) => permissionCodes.includes(permissionCode);
 
-  // ── Asignar TODOS los permisos :view (para usuarios nuevos) ─
   const assignDefaultViewPermissions = async () => {
     try {
       const { data: viewPerms, error: qErr } = await supabase
-        .from('permission')
-        .select('code')
-        .like('code', '%:view');
-
+        .from('permission').select('code').like('code', '%:view');
       if (qErr) throw qErr;
-
       const codes = (viewPerms || []).map(p => p.code);
-      if (codes.length === 0) return { success: true };
-
+      if (!codes.length) return { success: true };
       return await assignPermissions(codes);
     } catch (err) {
-      console.error('❌ Error asignando permisos por defecto:', err);
       return { success: false, error: err.message };
     }
   };
@@ -147,6 +140,7 @@ export function useUserPermissions(userId) {
     permissions,
     permissionCodes,
     loading,
+    saving,   // true mientras el RPC está en vuelo
     error,
     assignPermissions,
     revokePermissions,

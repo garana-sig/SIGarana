@@ -37,6 +37,32 @@ const getProcessUsers = async (processId) => {
   return data || [];
 };
 
+// Usuarios con permiso auditorias:acciones_mejora:audit
+const getAuditoresAcciones = async () => {
+  const { data: perms } = await supabase
+    .from('user_permission')
+    .select('user_id, permission:permission_id(code)')
+    .eq('is_active', true);
+  if (!perms?.length) return [];
+  const auditorIds = perms
+    .filter(p => p.permission?.code === 'auditorias:acciones_mejora:audit')
+    .map(p => p.user_id);
+  if (!auditorIds.length) return [];
+  const { data } = await supabase.from('profile').select('email, full_name')
+    .in('id', auditorIds).eq('is_active', true);
+  return data || [];
+};
+
+// Une varios arrays de { email } eliminando duplicados
+const mergeRecipients = (...arrays) => {
+  const seen = new Set();
+  return arrays.flat().filter(u => {
+    if (!u?.email || seen.has(u.email)) return false;
+    seen.add(u.email);
+    return true;
+  });
+};
+
 // ── Hook principal ────────────────────────────────────────────────────────────
 export function useAccionesMejora() {
   const { user, profile } = useAuth();
@@ -91,24 +117,25 @@ export function useAccionesMejora() {
       if (e) throw e;
 
       const emailData = {
-        consecutive:     data.consecutive || '—',
-        finding:         formData.finding_description || '—',
-        created_by_name: profile?.full_name || '—',
+        consecutive:          data.consecutive || '—',
+        finding:              formData.finding_description || '—',
+        created_by_name:      profile?.full_name || '—',
+        // Orígenes del hallazgo
+        origin_audit:         !!formData.origin_audit,
+        origin_satisfaction:  !!formData.origin_satisfaction,
+        origin_qrs:           !!formData.origin_qrs,
+        origin_autocontrol:   !!formData.origin_autocontrol,
+        origin_risk_analysis: !!formData.origin_risk_analysis,
+        origin_nonconforming: !!formData.origin_nonconforming,
       };
 
-      // Email a todos los del proceso
-      const processUsers = await getProcessUsers(formData.process_id);
-      for (const u of processUsers) {
-        await sendEmail(u.email, 'accion_mejora_identificacion', emailData);
-      }
-      // Email a gerencia si no está ya en el proceso
-      const gerencia = await getGerenciaEmails();
-      const processEmails = new Set(processUsers.map(u => u.email));
-      for (const g of gerencia) {
-        if (!processEmails.has(g.email)) {
-          await sendEmail(g.email, 'accion_mejora_identificacion', emailData);
-        }
-      }
+      // Email → proceso + admin/gerencia (sin duplicados)
+      const [processUsers, gerencia] = await Promise.all([
+        getProcessUsers(formData.process_id),
+        getGerenciaEmails(),
+      ]);
+      for (const u of mergeRecipients(processUsers, gerencia))
+        await sendEmail(u.email, 'accion_mejora_m1', emailData);
 
       await fetchAcciones();
       return { success: true, data };
@@ -129,24 +156,40 @@ export function useAccionesMejora() {
         .eq('id', id);
       if (e) throw e;
 
-      // Email al responsable
-      if (formData.responsible_id) {
-        const { data: resp } = await supabase.from('profile')
-          .select('email, full_name').eq('id', formData.responsible_id).single();
-        if (resp?.email) {
-          const accion = acciones.find(a => a.id === id);
-          await sendEmail(resp.email, 'accion_mejora_plan', {
-            consecutive:        accion?.consecutive || '—',
-            finding:            accion?.finding_description || '—',
-            responsible_name:   resp.full_name,
-            action_description: formData.action_description || '—',
-            proposed_date:      formData.proposed_date
-              ? new Date(formData.proposed_date + 'T00:00:00')
-                  .toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit', year:'numeric' })
-              : 'Sin fecha',
-          });
-        }
+      // Email → proceso + admin/gerencia + auditores (sin duplicados)
+      const accion2 = acciones.find(a => a.id === id);
+      // Resolver nombre del responsable si se asignó en este momento
+      let responsableName2 = accion2?.responsible_name || '—';
+      if (formData.responsible_id && formData.responsible_id !== accion2?.responsible_id) {
+        const { data: rp } = await supabase.from('profile')
+          .select('full_name').eq('id', formData.responsible_id).single();
+        if (rp?.full_name) responsableName2 = rp.full_name;
       }
+      const emailData2 = {
+        consecutive:        accion2?.consecutive || '—',
+        responsible_name:   responsableName2,
+        created_by_name:    profile?.full_name || '—',
+        // Tipo de acción
+        action_correction:  !!formData.action_correction,
+        action_corrective:  !!formData.action_corrective,
+        action_preventive:  !!formData.action_preventive,
+        // Análisis
+        causes:             formData.causes || '',
+        action_description: formData.action_description || '',
+        expected_results:   formData.expected_results || '',
+        resources_budget:   formData.resources_budget || '',
+        proposed_date:      formData.proposed_date
+          ? new Date(formData.proposed_date + 'T00:00:00')
+              .toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit', year:'numeric' })
+          : 'Sin fecha',
+      };
+      const [proc2, ger2, aud2] = await Promise.all([
+        getProcessUsers(accion2?.process_id),
+        getGerenciaEmails(),
+        getAuditoresAcciones(),
+      ]);
+      for (const u of mergeRecipients(proc2, ger2, aud2))
+        await sendEmail(u.email, 'accion_mejora_m2', emailData2);
 
       await fetchAcciones();
       return { success: true };
@@ -165,6 +208,32 @@ export function useAccionesMejora() {
         .update({ ...formData, auditor_id: user.id })
         .eq('id', id);
       if (e) throw e;
+
+      // Email → proceso + admin/gerencia + auditores (sin duplicados)
+      const accion3 = acciones.find(a => a.id === id);
+      const emailData3 = {
+        consecutive:            accion3?.consecutive || '—',
+        responsible_name:       accion3?.responsible_name || '—',
+        auditor_name:           profile?.full_name || '—',
+        verification_criteria:  formData.verification_criteria || '',
+        verification_finding:   formData.verification_finding || '',
+        verification_date:      formData.verification_date
+          ? new Date(formData.verification_date + 'T00:00:00')
+              .toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit', year:'numeric' })
+          : '—',
+        efficacy_date:          formData.efficacy_date
+          ? new Date(formData.efficacy_date + 'T00:00:00')
+              .toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit', year:'numeric' })
+          : '',
+      };
+      const [proc3, ger3, aud3] = await Promise.all([
+        getProcessUsers(accion3?.process_id),
+        getGerenciaEmails(),
+        getAuditoresAcciones(),
+      ]);
+      for (const u of mergeRecipients(proc3, ger3, aud3))
+        await sendEmail(u.email, 'accion_mejora_m3_verificacion', emailData3);
+
       await fetchAcciones();
       return { success: true };
     } catch (err) {
@@ -225,12 +294,13 @@ export function useAccionesMejora() {
           : 'Sin fecha',
       };
 
-      if (accion?.responsible_email)
-        await sendEmail(accion.responsible_email, emailType, emailData);
-      const gerencia = await getGerenciaEmails();
-      for (const g of gerencia)
-        if (g.email !== accion?.responsible_email)
-          await sendEmail(g.email, emailType, emailData);
+      // Email → proceso + admin/gerencia (sin duplicados)
+      const [procC, gerC] = await Promise.all([
+        getProcessUsers(accion?.process_id),
+        getGerenciaEmails(),
+      ]);
+      for (const u of mergeRecipients(procC, gerC))
+        await sendEmail(u.email, emailType, emailData);
 
       await fetchAcciones();
       return { success: true };

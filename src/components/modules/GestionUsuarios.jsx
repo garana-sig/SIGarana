@@ -362,14 +362,13 @@ export default function GestionUsuarios() {
         />
       )}
 
-      {showPermissions && selectedUser && (
-        <UserPermissionsManager
-          userId={selectedUser.id}
-          userName={selectedUser.full_name}
-          userRole={selectedUser.role}
-          onSuccess={() => { addToast('Permisos actualizados'); setShowPermissions(false); setSelectedUser(null); }}
-        />
-      )}
+      <UserPermissionsManager
+        open={showPermissions && !!selectedUser}
+        onClose={() => { setShowPermissions(false); setSelectedUser(null); }}
+        userId={selectedUser?.id}
+        userName={selectedUser?.full_name}
+        userRole={selectedUser?.role}
+      />
 
       {showDeactivate && selectedUser && (
         <Dialog open onOpenChange={() => setShowDeactivate(false)}>

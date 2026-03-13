@@ -69,15 +69,13 @@ export default function GestionDocumental() {
     }
   };
 
-  // ── Permisos del módulo principal ───────────────────────────────
-  const canView   = isAdmin || isGerencia || hasPermission('gestion_documental:view');
-  const canCreate = isAdmin || isGerencia || hasPermission('gestion_documental:create');
-
-  // ── Permisos por submódulo ───────────────────────────────────────
-  const canViewFormatos     = isAdmin || isGerencia || hasPermission('gestion_documental:formatos:view');
-  const canViewListado      = isAdmin || isGerencia || hasPermission('gestion_documental:documentos:view');
-  const canViewAreas        = isAdmin || isGerencia || hasPermission('gestion_documental:procesos:view');
-  const canViewProcedimientos = isAdmin || isGerencia || hasPermission('gestion_documental:procedimientos:view');
+  // ── Permisos ─────────────────────────────────────────────────────
+  const canView         = isAdmin || isGerencia || hasPermission('gestion_documental:view');
+  const canCreate       = isAdmin || isGerencia || hasPermission('gestion_documental:formatos:create');
+  const canViewListado  = isAdmin || isGerencia || hasPermission('gestion_documental:listado_maestro:view');
+  const canViewAreas    = isAdmin || isGerencia || hasPermission('gestion_documental:areas:view');
+  const canViewFormatos = isAdmin || isGerencia || hasPermission('gestion_documental:formatos:view');
+  const canViewProcs    = isAdmin || isGerencia || hasPermission('gestion_documental:procedimientos:view');
 
   if (!canView) {
     return (
@@ -95,15 +93,6 @@ export default function GestionDocumental() {
   }
 
   const handleCardClick = (view) => {
-    // Verificar permiso antes de navegar al submódulo
-    const permisosPorVista = {
-      formatos:       canViewFormatos,
-      listado:        canViewListado,
-      areas:          canViewAreas,
-      procedimientos: canViewProcedimientos,
-      create:         canCreate,
-    };
-    if (permisosPorVista[view] === false) return; // bloqueado
     setActiveView(view);
   };
 
@@ -263,18 +252,16 @@ export default function GestionDocumental() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {canViewFormatos && (
-                <FuturisticCard
-                  title="Formatos"
-                  description="Plantillas y formatos del sistema organizados"
-                  icon={ClipboardList}
-                  color="#6dbd96"
-                  gradient="linear-gradient(135deg, #6dbd96 0%, #2e5244 100%)"
-                  badge="FO - GU - RE"
-                  onClick={() => handleCardClick('formatos')}
-                  delay={0}
-                />
-              )}
+              <FuturisticCard
+                title="Formatos"
+                description="Plantillas y formatos del sistema organizados"
+                icon={ClipboardList}
+                color="#6dbd96"
+                gradient="linear-gradient(135deg, #6dbd96 0%, #2e5244 100%)"
+                badge="FO - GU - RE"
+                onClick={() => handleCardClick('formatos')}
+                delay={0}
+              />
 
               {canViewListado && (
                 <FuturisticCard
@@ -302,18 +289,16 @@ export default function GestionDocumental() {
                 />
               )}
 
-              {canViewProcedimientos && (
-                <FuturisticCard
-                  title="Procedimientos"
-                  description="Procedimientos operativos organizados"
-                  icon={BookOpen}
-                  color="#d97706"
-                  gradient="linear-gradient(135deg, #d97706 0%, #f59e0b 100%)"
-                  badge="Tipo PR"
-                  onClick={() => handleCardClick('procedimientos')}
-                  delay={0.3}
-                />
-              )}
+              <FuturisticCard
+                title="Procedimientos"
+                description="Procedimientos operativos organizados"
+                icon={BookOpen}
+                color="#d97706"
+                gradient="linear-gradient(135deg, #d97706 0%, #f59e0b 100%)"
+                badge="Tipo PR"
+                onClick={() => handleCardClick('procedimientos')}
+                delay={0.3}
+              />
 
               {canCreate && (
                 <motion.div

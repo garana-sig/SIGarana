@@ -23,7 +23,7 @@ export default function ModuleHero({ title, subtitle, icon: Icon, color }) {
       {/* Fondo imagen sutil */}
       <div style={{
         position: 'absolute', inset: 0,
-        backgroundImage: 'url(/imgfondo.webp)', backgroundSize: 'cover', backgroundPosition: 'center',
+        backgroundImage: 'url(/nosotros.png)', backgroundSize: 'cover', backgroundPosition: 'center',
         opacity: 0.07,
       }} />
       {/* Destello */}

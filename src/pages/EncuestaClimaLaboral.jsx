@@ -199,8 +199,8 @@ export default function EncuestaClimaLaboral() {
           {/* LOGO real en lugar de la G */}
           <img src="/garana1.png" alt="Garana Art" style={styles.logo} />
           <div>
-            <h1 style={styles.brandName}>Garana Art</h1>
-            <p style={styles.brandSub}>Sistema de Gestión Integral</p>
+            <h1 style={styles.brandName}>Garana art</h1>
+            <p style={styles.brandSub}>Sistema Integrado de Gestión </p>
           </div>
         </div>
         <div style={styles.headerDivider} />
@@ -369,8 +369,8 @@ function ScaleQuestion({ index, question, value, error, accentColor = '#6dbd96',
 const styles = {
   pageWrapper: {
     minHeight: '100vh',
-    backgroundColor: '#dedecc',
-    backgroundImage: 'url(/imgfondo.webp)',
+    backgroundColor: 'rgba(222, 222, 204, 1)', // opacidad aquí
+    backgroundImage: 'url(/colaboradores.jpg)',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundAttachment: 'fixed',
@@ -399,7 +399,7 @@ const styles = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     gap: 16, marginBottom: 20,
   },
-  logo: { height: 88, objectFit: 'contain' },
+  logo: { height: 150, objectFit: 'contain' },
   brandName: {
     color: '#2e5244', fontSize: 22, fontWeight: 800,
     margin: 0, fontFamily: 'Georgia, serif',

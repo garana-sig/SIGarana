@@ -245,7 +245,8 @@ export default function Layout({ children, currentModule, onModuleChange }) {
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
           ${sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'}
         `}
-        style={{ backgroundColor: C.green }}
+       style={{ backgroundColor: C.green }}
+  
       >
         <div className="flex flex-col h-full">
           {/* Logo */}

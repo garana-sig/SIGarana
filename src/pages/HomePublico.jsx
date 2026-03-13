@@ -176,7 +176,7 @@ export default function HomePublico() {
                 <span style={s.sigDot1} /><span style={s.sigDot2} /><span style={s.sigDot3} />
                 <span style={s.sigTitle}> SIGarana</span>
               </div>
-              <img src="/SIG.png" alt="Sistema Integrado de Gestión " style={s.sigImg} />
+              <img src="/Estructura_de_proceso.jpg" alt="Sistema Integrado de Gestión " style={s.sigImg} />
             </div>
           </div>
         </div>
@@ -277,7 +277,7 @@ export default function HomePublico() {
 
           {/* Imagen de misión/visión (una sola imagen con ambas) */}
           <div style={s.mvImgWrap}>
-            <img src="/mision.jpg" alt="Misión y Visión Garana Art" style={s.mvImg} />
+            <img src="/mision_vision.jpg" alt="Misión y Visión Garana Art" style={s.mvImg} />
             <div style={s.mvImgOverlay} />
           </div>
         </div>
