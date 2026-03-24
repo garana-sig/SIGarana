@@ -96,10 +96,6 @@ const ACTION_NAMES = {
   create:  'Crear',
   edit:    'Editar',
   delete:  'Eliminar',
- 
-
-  
-
 };
 
 const ACTION_COLORS = {
