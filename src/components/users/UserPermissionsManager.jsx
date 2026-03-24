@@ -96,10 +96,10 @@ const ACTION_NAMES = {
   create:  'Crear',
   edit:    'Editar',
   delete:  'Eliminar',
-  approve: 'Aprobar',
-  manage:  'Administrar',
-  measure: 'Medir',
-  export:  'Exportar',
+ 
+
+  
+
 };
 
 const ACTION_COLORS = {

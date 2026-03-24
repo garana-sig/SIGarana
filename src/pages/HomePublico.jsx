@@ -374,7 +374,13 @@ export default function HomePublico() {
       ══════════════════════════════════════════════════════════════ */}
       <section id="encuestas" style={s.encuestasSection}>
         <div style={s.heroBgEncuestas} />
-        <div style={s.sectionInner} style={{ position: 'relative', zIndex: 1, maxWidth: 1100, margin: '0 auto', padding: '80px 24px' }}>
+        <div style={{ 
+    ...s.sectionInner,
+    position: 'relative',
+    zIndex: 1,
+    maxWidth: 1100,
+    margin: '0 auto',
+    padding: '80px 24px'}}>
           <div style={s.sectionLabel}>Participa</div>
           <h2 style={{ ...s.sectionTitle, color: '#fff' }}>Tus encuestas activas</h2>
           <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 16, lineHeight: 1.6, margin: '0 0 48px' }}>

@@ -186,11 +186,12 @@ export default function SatisfaccionClientesManager({ onBack }) {
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             style={{
-              padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-              borderBottom: activeTab === tab.id ? `2px solid ${C.green}` : '2px solid transparent',
               color: activeTab === tab.id ? C.green : '#888',
-              background: 'none', border: 'none',
-              borderBottom: activeTab === tab.id ? `2px solid ${C.green}` : '2px solid transparent',
+  background: 'none',
+  border: 'none',
+  borderBottom: activeTab === tab.id 
+    ? `2px solid ${C.green}` 
+    : '2px solid transparent',
             }}>
             {tab.label}
           </button>
