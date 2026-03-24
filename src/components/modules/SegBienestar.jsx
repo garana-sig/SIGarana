@@ -10,6 +10,8 @@ import { useAuth }     from '@/context/AuthContext';
 import { Button }      from '@/app/components/ui/button';
 import { Input }       from '@/app/components/ui/input';
 import ModuleHero      from '@/components/ModuleHero';
+import CapacitacionesTab from './SSTBienestar/Capacitaciones/CapacitacionesTab';
+import WorkPlanTab       from './SSTBienestar/PlanesTrabajo/WorkPlanTab';
 import {
   Shield, BookOpen, CheckSquare, AlertTriangle,
   ClipboardCheck, Users, Stethoscope, FileText,
@@ -37,7 +39,7 @@ const TABS = [
     label: 'Planes y Programas',
     icon:  BookOpen,
     color: C.primary,
-    badge: '5 programas',
+    badge: '7 programas',
   },
   {
     id:    'estandares',
@@ -121,21 +123,25 @@ const PROGRAMAS = [
       'Plan de trabajo anual COPASST',
     ],
   },
+  
+
+  
   {
-    id:     'bienestar',
-    label:  'Bienestar Social',
-    icon:   Heart,
-    color:  '#dc2626',
-    desc:   'Programa de actividades de bienestar para colaboradores. Eventos, pausas activas, salud mental, recreación.',
-    campos: [
-      'Plan anual de bienestar',
-      'Actividades ejecutadas',
-      'Presupuesto asignado / ejecutado',
-      'Participantes por actividad',
-      'Evaluación de impacto',
-    ],
+    id:     'sst',
+    label:  'SST',
+    icon:   HardHat,
+    color:  '#7e22ce',
+    desc:   'Plan de trabajo anual de Seguridad y Salud en el Trabajo. Actividades, responsables, cronograma y trazabilidad.',
+    campos: [],
   },
   {
+    id:     'promocion_prevencion',
+    label:  'Promoción y Prevención',
+    icon:   Stethoscope,
+    color:  '#0891b2',
+    desc:   'Plan anual del programa de promoción y prevención en salud para los colaboradores.',
+    campos: [],
+  },{
     id:     'gerencia',
     label:  'Plan de Gerencia',
     icon:   BarChart3,
@@ -170,14 +176,7 @@ function SectionHeader({ title, subtitle, color, icon: Icon }) {
           <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>{title}</h2>
           {subtitle && <p style={{ fontSize: 13, opacity: 0.85 }}>{subtitle}</p>}
         </div>
-        <div style={{ marginLeft: 'auto' }}>
-          <span style={{
-            background: 'rgba(255,255,255,0.2)', borderRadius: 8,
-            padding: '6px 14px', fontSize: 12, fontWeight: 600,
-          }}>
-            🚧 En desarrollo
-          </span>
-        </div>
+
       </div>
     </div>
   );
@@ -258,7 +257,7 @@ function PlanesTab({ canManage }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <SectionHeader
         title="Planes y Programas SST"
-        subtitle="Gestión de los 5 programas principales del sistema de seguridad y salud"
+        subtitle="Gestión de los 7 programas del sistema de seguridad y salud"
         icon={BookOpen}
         color={C.primary}
       />
@@ -288,15 +287,29 @@ function PlanesTab({ canManage }) {
       </div>
 
       {/* Detalle del programa seleccionado */}
-      {PROGRAMAS.filter(p => p.id === openProg).map(prog => (
-        <ComingSoon
-          key={prog.id}
-          title={prog.label}
-          desc={prog.desc}
-          fields={prog.campos}
-          accentColor={prog.color}
-        />
-      ))}
+      {openProg === 'capacitacion' ? (
+        <CapacitacionesTab />
+      ) : openProg === 'convivencia' ? (
+        <WorkPlanTab planType="convivencia" />
+      ) : openProg === 'copasst' ? (
+        <WorkPlanTab planType="copasst" />
+      ) : openProg === 'bienestar' ? (
+        <WorkPlanTab planType="bienestar" />
+      ) : openProg === 'sst' ? (
+        <WorkPlanTab planType="sst" />
+      ) : openProg === 'promocion_prevencion' ? (
+        <WorkPlanTab planType="promocion_prevencion" />
+      ) : (
+        PROGRAMAS.filter(p => p.id === openProg).map(prog => (
+          <ComingSoon
+            key={prog.id}
+            title={prog.label}
+            desc={prog.desc}
+            fields={prog.campos}
+            accentColor={prog.color}
+          />
+        ))
+      )}
     </div>
   );
 }

@@ -53,7 +53,7 @@ export const useDocumentActions = () => {
       const { data, error } = await supabase
         .from('profile')
         .select('email')
-        .eq('role', 'gerencia')
+        .in('role', ['admin', 'gerencia'])
         .eq('is_active', true);
 
       if (error) {
@@ -233,49 +233,42 @@ export const useDocumentActions = () => {
 
       console.log('📄 Documento encontrado:', document);
 
-      const isNewDocument = !document.parent_document_id;
-      const action = isNewDocument ? 'cambiar a borrador' : 'eliminar';
-      
-      console.log(`📋 Es documento ${isNewDocument ? 'NUEVO' : 'EDICIÓN'} → Acción: ${action}`);
-
-      const { data: notificationId, error: notificationError } = await supabase
+      // ── Notificación al creador ─────────────────────────────────────────
+      const { error: notificationError } = await supabase
         .rpc('create_approval_notification', {
           p_user_id: document.created_by,
           p_type: 'rejected',
           p_title: '❌ Documento Rechazado',
-          p_message: `Tu documento "${document.name}" (${document.code}) versión ${document.version} ha sido rechazado.\n\nMotivo: ${reason}${isNewDocument ? '\n\nPuedes corregirlo y volver a enviarlo desde "Borradores".' : ''}`,
+          p_message: `Tu documento "${document.name}" (${document.code}) versión ${document.version} ha sido rechazado y eliminado.\n\nMotivo: ${reason}`,
           p_document_id: documentId
         });
 
       if (notificationError) {
         console.warn('⚠️ Error creando notificación:', notificationError);
-      } else {
-        console.log('🔔 Notificación creada con ID:', notificationId);
       }
 
-      if (isNewDocument) {
-        const { error: updateError } = await supabase
-          .from('document')
-          .update({
-            status: 'draft',
-            change_reason: `RECHAZADO: ${reason}`,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', documentId);
+      // ── 1. Eliminar archivo de Storage ──────────────────────────────────
+      if (document.file_path) {
+        const { error: storageError } = await supabase.storage
+          .from('documents')
+          .remove([document.file_path]);
 
-        if (updateError) throw updateError;
-
-        console.log('📝 Documento cambiado a DRAFT');
-      } else {
-        const { error: deleteError } = await supabase
-          .from('document')
-          .delete()
-          .eq('id', documentId);
-
-        if (deleteError) throw deleteError;
-
-        console.log('🗑️ Edición eliminada');
+        if (storageError) {
+          console.warn('⚠️ Error eliminando archivo de Storage:', storageError.message);
+        } else {
+          console.log('🗑️ Archivo eliminado de Storage:', document.file_path);
+        }
       }
+
+      // ── 2. Hard delete de BD (siempre, nuevo o edición) ────────────────
+      const { error: deleteError } = await supabase
+        .from('document')
+        .delete()
+        .eq('id', documentId);
+
+      if (deleteError) throw deleteError;
+
+      console.log('🗑️ Documento eliminado de BD');
 
       // Enviar email al creador
       const { data: creatorProfile } = await supabase
@@ -296,7 +289,7 @@ export const useDocumentActions = () => {
         await sendEmail('rejected', creatorProfile.email, documentData, reason);
       }
 
-      return { success: true, data: document, action };
+      return { success: true, data: document };
 
     } catch (err) {
       console.error('❌ Error rechazando documento:', err);
