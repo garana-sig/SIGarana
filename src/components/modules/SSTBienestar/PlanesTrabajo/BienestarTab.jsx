@@ -51,7 +51,6 @@ function useActiveUsers() {
       .eq('is_active', true)
       .order('full_name')
       .then(({ data, error }) => {
-        if (error) console.error('Error cargando usuarios:', error);
         // Filtrar solo los que tienen email
         setUsers((data || []).filter(u => u.email));
       });
@@ -244,15 +243,12 @@ function ItemModal({ open, onClose, item, planId, activePlan, onSave, users }) {
         ? payload.responsible_user_ids
         : payload.responsible_user_id ? [payload.responsible_user_id] : [];
 
-      console.log('📧 DEBUG emailIds:', emailIds);
-      console.log('📧 DEBUG users cargados:', users.length, users.map(u => ({ id: u.id, email: u.email, name: u.full_name })));
 
       if (emailIds.length > 0) {
         const emails = emailIds
           .map(id => users.find(u => u.id === id)?.email)
           .filter(Boolean);
 
-        console.log('📧 DEBUG emails encontrados:', emails);
 
         const nombres = emailIds
           .map(id => users.find(u => u.id === id)?.full_name)
@@ -283,14 +279,9 @@ function ItemModal({ open, onClose, item, planId, activePlan, onSave, users }) {
               },
             },
           });
-          if (emailErr) console.error('❌ Error enviando correo SST:', emailErr);
-          else console.log('✅ Correo SST enviado a:', emails, 'resp:', emailResp);
         } else {
-          console.warn('⚠️ No se encontraron emails para los IDs:', emailIds);
-          console.warn('⚠️ Verifica que profile.email esté cargado en useActiveUsers');
         }
       } else {
-        console.log('ℹ️ Sin responsables asignados — no se envía correo');
       }
 
       onClose();
