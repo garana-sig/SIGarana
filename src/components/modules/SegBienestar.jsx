@@ -19,6 +19,7 @@ import {
   Building2, Heart, Truck, BarChart3, Lock,
   RefreshCw, ArrowRight, Construction, HardHat,
 } from 'lucide-react';
+import BienestarTab from './SSTBienestar/PlanesTrabajo/BienestarTab';
 
 // ─── Paleta Garana ───────────────────────────────────────────────────────────
 const C = {
@@ -141,7 +142,23 @@ const PROGRAMAS = [
     color:  '#0891b2',
     desc:   'Plan anual del programa de promoción y prevención en salud para los colaboradores.',
     campos: [],
-  },{
+  },
+  {
+    id:     'bienestar',
+    label:  'Bienestar Social',
+    icon:   Heart,
+    color:  '#dc2626',
+    desc:   'Programa de actividades de bienestar para colaboradores. Eventos, pausas activas, salud mental, recreación.',
+    campos: [
+      'Plan anual de bienestar',
+      'Actividades ejecutadas',
+      'Presupuesto asignado / ejecutado',
+      'Participantes por actividad',
+      'Evaluación de impacto',
+    ],
+  },
+  
+  {
     id:     'gerencia',
     label:  'Plan de Gerencia',
     icon:   BarChart3,
@@ -294,7 +311,7 @@ function PlanesTab({ canManage }) {
       ) : openProg === 'copasst' ? (
         <WorkPlanTab planType="copasst" />
       ) : openProg === 'bienestar' ? (
-        <WorkPlanTab planType="bienestar" />
+        <BienestarTab />
       ) : openProg === 'sst' ? (
         <WorkPlanTab planType="sst" />
       ) : openProg === 'promocion_prevencion' ? (

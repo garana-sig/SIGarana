@@ -37,7 +37,11 @@ interface EmailRequest {
     | "indicador_vencimiento"
     | "indicador_recordatorio"
     // Usuarios ← NUEVO
-    | "user_bienvenida";
+    | "user_bienvenida"
+    // SST — Planes de Trabajo
+    | "sst_recordatorio_actividad"
+    | "sst_actividad_vencida"
+    | "sst_asignacion_actividad";
   to: string | string[];
   document?: {
     id: string;
@@ -628,6 +632,88 @@ const getUserBienvenidaTemplate = (data: EmailRequest): string => {
 
 
 // ══════════════════════════════════════════════════════════════════════
+// TEMPLATES — SST PLANES DE TRABAJO
+// ══════════════════════════════════════════════════════════════════════
+const getSSTRecordatorioTemplate = (data: EmailRequest): string => {
+  const d = data.data!;
+  return getBaseTemplate("Recordatorio de Actividad SST", `
+    <div class="content">
+      <div class="title">🔔 Recordatorio — Actividad Pendiente</div>
+      <div class="message">
+        Tienes una actividad programada para este mes que aún no ha sido marcada como ejecutada.
+        Quedan <strong>${d.days_left} día(s)</strong> para finalizar <strong>${d.month_name}</strong>.
+      </div>
+      <div class="info-box-warning">
+        <div class="info-row"><div class="info-label">Plan:</div><div class="info-value"><strong>${d.plan_label} ${d.plan_year}</strong></div></div>
+        <div class="info-row"><div class="info-label">Actividad:</div><div class="info-value">${d.activity}</div></div>
+        <div class="info-row"><div class="info-label">Mes programado:</div><div class="info-value">${d.month_name}</div></div>
+        <div class="info-row"><div class="info-label">Responsable:</div><div class="info-value">${d.responsible}</div></div>
+      </div>
+      <div class="alert-warning">
+        ⏰ Por favor ejecuta la actividad y márcala como completada antes de finalizar el mes.
+      </div>
+      <div style="text-align:center;margin-top:28px;">
+        <a href="${APP_URL}/sst-bienestar" class="btn">Ir al Plan de Trabajo</a>
+      </div>
+    </div>`);
+};
+
+const getSSTVencidaTemplate = (data: EmailRequest): string => {
+  const d = data.data!;
+  return getBaseTemplate("Actividad SST Vencida", `
+    <div class="content">
+      <div class="title">🔴 Actividad No Ejecutada</div>
+      <div class="message">
+        Una actividad del plan de trabajo programada para <strong>${d.month_name}</strong>
+        no fue marcada como ejecutada. Por favor registra la evidencia o reporta el incumplimiento.
+      </div>
+      <div class="info-box">
+        <div class="info-row"><div class="info-label">Plan:</div><div class="info-value"><strong>${d.plan_label} ${d.plan_year}</strong></div></div>
+        <div class="info-row"><div class="info-label">Actividad:</div><div class="info-value">${d.activity}</div></div>
+        <div class="info-row"><div class="info-label">Mes vencido:</div><div class="info-value">${d.month_name}</div></div>
+        <div class="info-row"><div class="info-label">Responsable:</div><div class="info-value">${d.responsible}</div></div>
+      </div>
+      <div class="alert-danger">
+        🚨 Esta actividad aparece marcada en <strong>rojo</strong> en el sistema hasta que sea registrada.
+      </div>
+      <div style="text-align:center;margin-top:28px;">
+        <a href="${APP_URL}/sst-bienestar" class="btn-red">Ver actividad en el sistema</a>
+      </div>
+    </div>`);
+};
+
+
+const getSSTAsignacionTemplate = (data: EmailRequest): string => {
+  const d = data.data!;
+  return getBaseTemplate("Actividad SST Asignada", `
+    <div class="content">
+      <div class="title">${d.is_edit ? "✏️ Actividad Actualizada" : "📋 Nueva Actividad Asignada"}</div>
+      <div class="message">
+        Hola <strong>${d.responsible_name || "equipo"}</strong>,<br><br>
+        ${d.is_edit
+          ? "Se ha actualizado una actividad del plan de trabajo en la que figuras como responsable."
+          : "Se te ha asignado una nueva actividad en el plan de trabajo. Por favor revisa los detalles y ten en cuenta las fechas programadas."}
+      </div>
+      <div class="info-box">
+        <div class="info-row"><div class="info-label">Plan:</div><div class="info-value"><strong>${d.plan_label} ${d.plan_year}</strong></div></div>
+        <div class="info-row"><div class="info-label">Actividad:</div><div class="info-value">${d.activity}</div></div>
+        ${d.resources ? `<div class="info-row"><div class="info-label">Recursos:</div><div class="info-value">${d.resources}</div></div>` : ""}
+        ${d.budget ? `<div class="info-row"><div class="info-label">Presupuesto:</div><div class="info-value"><strong>${d.budget}</strong></div></div>` : ""}
+      </div>
+      ${d.months_scheduled ? `
+      <div class="alert-info">
+        📅 <strong>Meses programados:</strong> ${d.months_scheduled}
+      </div>` : ""}
+      <div class="alert-warning">
+        ⏰ Recibirás un recordatorio automático los últimos <strong>5 días de cada mes</strong> programado si la actividad aún no ha sido marcada como ejecutada.
+      </div>
+      <div style="text-align:center;margin-top:28px;">
+        <a href="${APP_URL}/sst-bienestar" class="btn">Ver Plan de Trabajo</a>
+      </div>
+    </div>`);
+};
+
+// ══════════════════════════════════════════════════════════════════════
 // FUNCIÓN PRINCIPAL
 // ══════════════════════════════════════════════════════════════════════
 const CORS_HEADERS = {
@@ -657,14 +743,15 @@ serve(async (req) => {
     const isAccionType    = type.startsWith("accion_mejora");
     const isIndicadorType = type.startsWith("indicador");
     const isUserType      = type.startsWith("user_");
+    const isSSTType       = type.startsWith("sst_");
 
-    if (!isAccionType && !isIndicadorType && !isUserType && !document) {
+    if (!isAccionType && !isIndicadorType && !isUserType && !isSSTType && !document) {
       return new Response(
         JSON.stringify({ error: "Falta el campo document para tipos de documento" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
-    if ((isAccionType || isIndicadorType || isUserType) && !data) {
+    if ((isAccionType || isIndicadorType || isUserType || isSSTType) && !data) {
       return new Response(
         JSON.stringify({ error: "Falta el campo data" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
@@ -760,6 +847,22 @@ serve(async (req) => {
       case "user_bienvenida":
         subject = `👋 Bienvenido a SIG Garana  — Tus credenciales de acceso`;
         html    = getUserBienvenidaTemplate({ type, to, data });
+        break;
+
+      // ── SST Planes de Trabajo ────────────────────────────────────────
+      case "sst_recordatorio_actividad":
+        subject = `🔔 Recordatorio SST — ${data!.plan_label} ${data!.plan_year}: actividad pendiente`;
+        html    = getSSTRecordatorioTemplate({ type, to, data });
+        break;
+      case "sst_actividad_vencida":
+        subject = `🔴 Actividad SST vencida en ${data!.month_name}: ${data!.plan_label}`;
+        html    = getSSTVencidaTemplate({ type, to, data });
+        break;
+      case "sst_asignacion_actividad":
+        subject = data!.is_edit
+          ? `✏️ Actividad actualizada — ${data!.plan_label} ${data!.plan_year}`
+          : `📋 Nueva actividad asignada — ${data!.plan_label} ${data!.plan_year}`;
+        html    = getSSTAsignacionTemplate({ type, to, data });
         break;
 
       default:
