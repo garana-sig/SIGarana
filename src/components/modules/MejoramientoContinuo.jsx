@@ -20,6 +20,7 @@ import ClimaLaboralManager         from './MejoramientoContinuo/ClimaLaboral/Cli
 import SurveyConfigModal           from './MejoramientoContinuo/SurveyConfigModal';
 import ProductoNoConformeManager   from './MejoramientoContinuo/ProductoNoConforme/ProductoNoConformeManager';
 import QRSFManager                 from './MejoramientoContinuo/QRSF/QRSFManager';
+import RevisionDireccionManager    from './MejoramientoContinuo/RevisionDireccion/RevisionDireccionManager';
 
 const SUBMODULES = [
   {
@@ -88,13 +89,20 @@ const SUBMODULES = [
     gradient: 'linear-gradient(135deg, #2e5244 0%, #6dbd96 100%)',
     badge: 'RE-GC-03', enabled: true,
   },
-  { id: 'revision_direccion', name: 'Revisión por la Dirección', permission: 'auditorias:revision_direccion:view', description: 'Revisiones gerenciales periódicas', icon: ClipboardCheck, color: '#2e5244', enabled: false },
-  { id: 'informes', name: 'Informes', permission: 'auditorias:informes:view', description: 'Informes y reportes de gestión', icon: FileBarChart, color: '#6dbd96', enabled: false },
-  { id: 'requisitos_legales', name: 'Requisitos Legales', permission: 'auditorias:requisitos_legales:view', description: 'Matriz de requisitos normativos', icon: Scale, color: '#2e5244', enabled: false },
-  { id: 'auditorias', name: 'Auditorías', permission: 'auditorias:auditorias_internas:view', description: 'Plan, programa y hallazgos', icon: Search, color: '#6dbd96', enabled: false },
-  { id: 'evaluacion_auditores', name: 'Evaluación Auditores', permission: 'auditorias:evaluacion_auditores:view', description: 'Competencias de auditores', icon: Users, color: '#6f7b2c', enabled: false },
-  { id: 'reporte_incidentes', name: 'Reporte de Incidentes', permission: 'auditorias:reporte_incidentes:view', description: 'Incidentes y eventos', icon: AlertCircle, color: '#6dbd96', enabled: false },
-  { id: 'evaluacion_competencias', name: 'Evaluación Competencias', permission: 'auditorias:evaluacion_competencias:view', description: 'Competencias del personal', icon: Users, color: '#6dbd96', enabled: false },
+  {
+    id: 'revision_direccion', name: 'Revisión por la Dirección',
+    permission: 'auditorias:revision_direccion:view',
+    description: 'Informe ejecutivo consolidado del sistema de gestión',
+    icon: ClipboardCheck, color: '#2e5244',
+    gradient: 'linear-gradient(135deg, #2e5244 0%, #6dbd96 100%)',
+    badge: 'ISO 9001', enabled: true,
+  },
+  { id: 'informes',              name: 'Informes',                  permission: 'auditorias:informes:view',                description: 'Informes y reportes de gestión',         icon: FileBarChart,   color: '#6dbd96', enabled: false },
+  { id: 'requisitos_legales',    name: 'Requisitos Legales',        permission: 'auditorias:requisitos_legales:view',      description: 'Matriz de requisitos normativos',        icon: Scale,          color: '#2e5244', enabled: false },
+  { id: 'auditorias',            name: 'Auditorías',                permission: 'auditorias:auditorias_internas:view',     description: 'Plan, programa y hallazgos',             icon: Search,         color: '#6dbd96', enabled: false },
+  { id: 'evaluacion_auditores',  name: 'Evaluación Auditores',      permission: 'auditorias:evaluacion_auditores:view',    description: 'Competencias de auditores',              icon: Users,          color: '#6f7b2c', enabled: false },
+  { id: 'reporte_incidentes',    name: 'Reporte de Incidentes',     permission: 'auditorias:reporte_incidentes:view',      description: 'Incidentes y eventos',                   icon: AlertCircle,    color: '#6dbd96', enabled: false },
+  { id: 'evaluacion_competencias', name: 'Evaluación Competencias', permission: 'auditorias:evaluacion_competencias:view', description: 'Competencias del personal',              icon: Users,          color: '#6dbd96', enabled: false },
 ];
 
 // ── 🎨 Card Futurista ─────────────────────────────────────────────────────────
@@ -194,6 +202,8 @@ export default function MejoramientoContinuo() {
     return <ProductoNoConformeManager onBack={() => setActiveSubmodule(null)} />;
   if (activeSubmodule === 'qrsf')
     return <QRSFManager onBack={() => setActiveSubmodule(null)} />;
+  if (activeSubmodule === 'revision_direccion')
+    return <RevisionDireccionManager onBack={() => setActiveSubmodule(null)} />;
 
   const canAccess = (mod) => {
     if (!mod.enabled) return false;
