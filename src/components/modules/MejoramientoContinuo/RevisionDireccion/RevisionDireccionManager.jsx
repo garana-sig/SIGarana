@@ -996,13 +996,17 @@ export default function RevisionDireccionManager({ onBack }) {
               title="QRSF del Período" value={qrsfStats.total}
               sub={`${qrsfStats.closeRate}% tasa de cierre`}
               trend={qrsfStats.closeRate-70} />
-            <KpiTile icon={Shield}        color={T.danger} delay={0.16}
-              title="% Producto NC" value={fmtNum(pncStats.pctPNC)} unit="%"
-              sub={`Meta <2,5% · ${pncStats.totalUnidades} uds`}
-              trend={-(pncStats.pctPNC-2.5)} />
-            <KpiTile icon={Activity}      color={T.accent} delay={0.19}
-              title="PNC — Tratamientos" value={`${pncStats.pctTrat}%`}
-              sub={`${pncStats.totalUnidades} uds NC en el período`} />
+            {/* PNC — color semáforo: verde si está bajo meta, rojo si supera. Dirección: desc (menor es mejor) */}
+            <KpiTile
+              icon={Shield}
+              color={pncStats.pctPNC <= 2.5 ? T.good : pncStats.pctPNC <= 4 ? T.warning : T.danger}
+              delay={0.16}
+              title="% Producto No Conforme"
+              value={fmtNum(pncStats.pctPNC)}
+              unit="%"
+              sub={`Meta <2,5% · ${pncStats.totalUnidades} uds NC · ${pncStats.totalProd} prod`}
+              trend={-(pncStats.pctPNC - 2.5)}
+            />
           </div>
 
           {/* Fila 2 — Radial CMI + CMI por perspectiva */}
