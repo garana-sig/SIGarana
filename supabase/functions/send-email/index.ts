@@ -41,7 +41,9 @@ interface EmailRequest {
     // SST — Planes de Trabajo
     | "sst_recordatorio_actividad"
     | "sst_actividad_vencida"
-    | "sst_asignacion_actividad";
+    | "sst_asignacion_actividad"
+    // Auth
+    | "password_reset";
   to: string | string[];
   document?: {
     id: string;
@@ -714,6 +716,45 @@ const getSSTAsignacionTemplate = (data: EmailRequest): string => {
 };
 
 // ══════════════════════════════════════════════════════════════════════
+// TEMPLATE — RESET DE CONTRASEÑA
+// ══════════════════════════════════════════════════════════════════════
+const getPasswordResetTemplate = (data: EmailRequest): string => {
+  const d = data.data!;
+  return getBaseTemplate("Restablecer contraseña — Garana SIG", `
+    <div class="content">
+      <div class="title">🔐 Restablece tu contraseña</div>
+      <div class="message">
+        Recibimos una solicitud para restablecer la contraseña de la cuenta asociada
+        a <strong>${d.email}</strong>.<br><br>
+        Haz clic en el botón de abajo para crear una nueva contraseña.
+        Este enlace es válido por <strong>1 hora</strong>.
+      </div>
+      <div class="alert-warning">
+        ⚠️ Si no solicitaste este cambio, ignora este correo. Tu contraseña actual
+        permanecerá sin cambios.
+      </div>
+      <div class="info-box">
+        <div class="info-row">
+          <div class="info-label">Cuenta:</div>
+          <div class="info-value">${d.email}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Válido por:</div>
+          <div class="info-value"><strong>1 hora</strong></div>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:28px;">
+        <a href="${APP_URL}reset-password" class="btn">🔑 Crear nueva contraseña</a>
+      </div>
+      <div class="divider"></div>
+      <p style="font-size:12px;color:#888;text-align:center;line-height:1.6;">
+        Por seguridad, este enlace solo puede usarse una vez.<br>
+        Si tienes problemas, contacta al administrador del sistema.
+      </p>
+    </div>`);
+};
+
+// ══════════════════════════════════════════════════════════════════════
 // FUNCIÓN PRINCIPAL
 // ══════════════════════════════════════════════════════════════════════
 const CORS_HEADERS = {
@@ -744,14 +785,15 @@ serve(async (req) => {
     const isIndicadorType = type.startsWith("indicador");
     const isUserType      = type.startsWith("user_");
     const isSSTType       = type.startsWith("sst_");
+    const isAuthType      = type.startsWith("password_");
 
-    if (!isAccionType && !isIndicadorType && !isUserType && !isSSTType && !document) {
+    if (!isAccionType && !isIndicadorType && !isUserType && !isSSTType && !isAuthType && !document) {
       return new Response(
         JSON.stringify({ error: "Falta el campo document para tipos de documento" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
-    if ((isAccionType || isIndicadorType || isUserType || isSSTType) && !data) {
+    if ((isAccionType || isIndicadorType || isUserType || isSSTType || isAuthType) && !data) {
       return new Response(
         JSON.stringify({ error: "Falta el campo data" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
@@ -863,6 +905,12 @@ serve(async (req) => {
           ? `✏️ Actividad actualizada — ${data!.plan_label} ${data!.plan_year}`
           : `📋 Nueva actividad asignada — ${data!.plan_label} ${data!.plan_year}`;
         html    = getSSTAsignacionTemplate({ type, to, data });
+        break;
+
+      // ── Auth ────────────────────────────────────────────────────────
+      case "password_reset":
+        subject = `🔐 Restablece tu contraseña — Garana SIG`;
+        html    = getPasswordResetTemplate({ type, to, data });
         break;
 
       default:

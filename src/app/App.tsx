@@ -11,9 +11,10 @@ import SegBienestar from '@/components/modules/SegBienestar';
 import GestionUsuarios from '@/components/modules/GestionUsuarios';
 
 // ── Páginas públicas ──────────────────────────────────────────────────────────
-import HomePublico               from '@/pages/HomePublico';
-import EncuestaSatisfaccionCliente from '@/pages/EncuestaSatisfaccionCliente';
-import EncuestaClimaLaboral      from '@/pages/EncuestaClimaLaboral';
+import HomePublico               from '../pages/HomePublico';
+import EncuestaSatisfaccionCliente from '../pages/EncuestaSatisfaccionCliente';
+import EncuestaClimaLaboral      from '../pages/EncuestaClimaLaboral';
+import ResetPassword from '../pages/ResetPassword';
 
 // ─── Rutas 100% públicas (nunca requieren login) ───────────────────────────────
 // Lazy: no instanciar JSX hasta que se necesite (evita compartir estado entre rutas)
@@ -21,6 +22,7 @@ const PUBLIC_ROUTES: Record<string, () => JSX.Element> = {
   '/':                              () => <HomePublico />,
   '/encuesta/satisfaccion-cliente': () => <EncuestaSatisfaccionCliente />,
   '/encuesta/clima-laboral':        () => <EncuestaClimaLaboral />,
+  '/reset-password': () => <ResetPassword />,
 };
 
 // ─── Contenido autenticado ────────────────────────────────────────────────────
