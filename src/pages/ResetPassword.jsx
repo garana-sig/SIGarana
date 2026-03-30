@@ -71,22 +71,41 @@ export default function ResetPassword() {
 
   // Verificar que el token del hash es válido
   useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setValidToken(!!session);
-      setChecking(false);
-    };
+    const processToken = async () => {
+      // El link de Supabase trae el token en el hash de la URL
+      // Formato: /reset-password#access_token=xxx&type=recovery
+      const hash = window.location.hash;
 
-    // Supabase procesa el hash automáticamente con onAuthStateChange
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setValidToken(true);
+      if (hash && hash.includes('type=recovery')) {
+        // Hay token de recovery en el hash — dejar que supabase lo procese
+        // onAuthStateChange disparará PASSWORD_RECOVERY
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+          if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) {
+            setValidToken(true);
+            setChecking(false);
+          }
+        });
+
+        // Timeout: si en 5s no procesa, marcar como inválido
+        const timer = setTimeout(async () => {
+          const { data: { session } } = await supabase.auth.getSession();
+          setValidToken(!!session);
+          setChecking(false);
+        }, 5000);
+
+        return () => {
+          subscription.unsubscribe();
+          clearTimeout(timer);
+        };
+      } else {
+        // No hay token en el hash — verificar sesión existente
+        const { data: { session } } = await supabase.auth.getSession();
+        setValidToken(!!session);
         setChecking(false);
       }
-    });
+    };
 
-    checkSession();
-    return () => subscription.unsubscribe();
+    processToken();
   }, []);
 
   const handleSubmit = async (e) => {

@@ -38,27 +38,11 @@ function ForgotPasswordModal({ onClose }) {
     setLoading(true); setError('');
 
     try {
-      // Enviar link de reset via Supabase Auth
-      // Si el correo no existe, Supabase NO lanza error (por seguridad)
-      // pero nosotros mostramos siempre el mensaje de éxito
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(
         email.trim().toLowerCase(),
         { redirectTo: 'https://garanasig.vercel.app/reset-password' }
       );
-
       if (resetError) throw resetError;
-
-      // Intentar enviar correo personalizado (no bloquea si falla)
-      try {
-        await supabase.functions.invoke('send-email', {
-          body: {
-            type: 'password_reset',
-            to:   email.trim().toLowerCase(),
-            data: { email: email.trim().toLowerCase() },
-          },
-        });
-      } catch (_) { /* el correo de Supabase ya se envió */ }
-
       setSent(true);
     } catch (err) {
       setError('Ocurrió un error al enviar el correo. Intenta de nuevo.');
