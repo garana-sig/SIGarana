@@ -3,7 +3,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
-import { Lock, Mail, AlertCircle, Loader2, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Lock, Mail, AlertCircle, Loader2, ArrowLeft, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 const C = {
@@ -193,6 +193,7 @@ function ForgotPasswordModal({ onClose }) {
 export default function Login() {
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
+  const [showPwd,  setShowPwd]  = useState(false);
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
   const [showForgot, setShowForgot] = useState(false);
@@ -322,13 +323,22 @@ export default function Login() {
               <div className="relative">
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none"
                   style={{ color: C.mint }} />
-                <Input id="password" type="password" placeholder="••••••••"
+                <Input id="password" type={showPwd ? 'text' : 'password'} placeholder="••••••••"
                   value={password} onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 h-11 rounded-xl border-2 focus-visible:ring-0 transition-colors"
+                  className="pl-10 pr-10 h-11 rounded-xl border-2 focus-visible:ring-0 transition-colors"
                   style={{ borderColor: '#d4d4c8', backgroundColor: '#fff', fontFamily: 'system-ui, sans-serif' }}
                   onFocus={(e) => { e.target.style.borderColor = C.mint; }}
                   onBlur={(e)  => { e.target.style.borderColor = '#d4d4c8'; }}
                   required disabled={loading} autoComplete="current-password" />
+                <button type="button" onClick={() => setShowPwd(!showPwd)}
+                  style={{
+                    position: 'absolute', right: 12, top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: '#9ca3af', padding: 0, display: 'flex',
+                  }}>
+                  {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
 
