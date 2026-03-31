@@ -167,10 +167,41 @@ export function useEstandares() {
     });
   }, [items]);
 
+  // ── Crear ítem personalizado ──────────────────────────────────────────
+  const createCustomItem = useCallback(async (itemData) => {
+    setSaving(true);
+    try {
+      const { data, error: err } = await supabase
+        .from('standard_item')
+        .insert(itemData)
+        .select()
+        .single();
+      if (err) throw err;
+      setItems(prev => [...prev, data].sort((a,b) => a.numeral.localeCompare(b.numeral)));
+      await recalcScore(activeEval.id);
+    } catch (e) { throw e; }
+    finally { setSaving(false); }
+  }, [activeEval, recalcScore]);
+
+  // ── Eliminar ítem ─────────────────────────────────────────────────────
+  const deleteItem = useCallback(async (itemId) => {
+    setSaving(true);
+    try {
+      const { error: err } = await supabase
+        .from('standard_item')
+        .delete()
+        .eq('id', itemId);
+      if (err) throw err;
+      setItems(prev => prev.filter(it => it.id !== itemId));
+      await recalcScore(activeEval.id);
+    } catch (e) { console.error(e); }
+    finally { setSaving(false); }
+  }, [activeEval, recalcScore]);
+
   return {
     evaluations, activeEval, setActiveEval,
     items, loading, saving, error,
-    updateItem, createEvaluation,
+    updateItem, createEvaluation, createCustomItem, deleteItem,
     groupedByCiclo,
     totalScore: activeEval?.total_score || 0,
     refresh: fetchEvaluations,
