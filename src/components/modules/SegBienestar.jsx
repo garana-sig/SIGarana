@@ -12,6 +12,7 @@ import { Input }       from '@/app/components/ui/input';
 import ModuleHero      from '@/components/ModuleHero';
 import CapacitacionesTab from './SSTBienestar/Capacitaciones/CapacitacionesTab';
 import WorkPlanTab       from './SSTBienestar/PlanesTrabajo/WorkPlanTab';
+import EstandaresTab1 from './SSTBienestar/Estandares/EstandaresTab';
 import {
   Shield, BookOpen, CheckSquare, AlertTriangle,
   ClipboardCheck, Users, Stethoscope, FileText,
@@ -404,75 +405,9 @@ function EstandaresTab() {
         icon={CheckSquare}
         color={C.blue}
       />
+      <div><EstandaresTab1/></div>
 
-      {/* Alerta informativa */}
-      <div style={{
-        background: '#eff6ff', border: '1px solid #93c5fd', borderRadius: 12,
-        padding: '14px 18px', display: 'flex', gap: 12, alignItems: 'flex-start',
-      }}>
-        <CheckSquare size={18} color="#1d4ed8" style={{ flexShrink: 0, marginTop: 2 }} />
-        <div>
-          <p style={{ fontSize: 13, fontWeight: 700, color: '#1d4ed8', marginBottom: 4 }}>
-            60 estándares aplicables a INDECON S.A.S.
-          </p>
-          <p style={{ fontSize: 12, color: '#1e40af' }}>
-            Garana Art cuenta con menos de 50 trabajadores. La calificación máxima es 100%.
-            Una puntuación ≥ 86% equivale a "ACEPTABLE". El módulo permitirá registrar
-            evidencia documental de cumplimiento por cada estándar.
-          </p>
-        </div>
-      </div>
-
-      {/* Lista agrupada por tipo */}
-      {TIPOS.map(tipo => {
-        const tipoEsts = ESTANDARES.filter(e => e.tipo === tipo);
-        const color = TIPO_COLORS[tipo] || C.primary;
-        return (
-          <div key={tipo} style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-            <div style={{ padding: '10px 18px', background: color, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>{tipo}</p>
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>
-                {tipoEsts.length} estándares · {tipoEsts.reduce((s, e) => s + e.peso, 0).toFixed(1)} pts
-              </span>
-            </div>
-            {tipoEsts.map((est, i) => (
-              <div key={est.num} style={{
-                display: 'flex', alignItems: 'center', padding: '10px 18px',
-                borderTop: i > 0 ? '1px solid #f9fafb' : undefined, gap: 12,
-              }}>
-                <span style={{
-                  fontSize: 10, fontWeight: 700, color: color,
-                  background: `${color}12`, borderRadius: 6, padding: '2px 8px',
-                  flexShrink: 0, fontFamily: 'monospace',
-                }}>{est.num}</span>
-                <p style={{ fontSize: 12, color: '#374151', flex: 1 }}>{est.titulo}</p>
-                <span style={{ fontSize: 11, color: '#9ca3af', flexShrink: 0 }}>
-                  {est.peso > 0 ? `${est.peso} pts` : 'N/A'}
-                </span>
-                {/* Estado — próximamente será un select o toggle */}
-                <div style={{
-                  background: '#f3f4f6', borderRadius: 8, padding: '4px 12px',
-                  fontSize: 11, color: '#9ca3af', flexShrink: 0,
-                }}>
-                  ⚪ Sin evaluar
-                </div>
-              </div>
-            ))}
-          </div>
-        );
-      })}
-
-      {/* Nota de desarrollo */}
-      <div style={{
-        background: '#fff', borderRadius: 12, padding: '16px 20px',
-        border: `2px dashed ${C.blue}30`, textAlign: 'center', color: '#9ca3af',
-      }}>
-        <Construction size={20} style={{ marginBottom: 8, color: C.blue, opacity: 0.5 }} />
-        <p style={{ fontSize: 12 }}>
-          En la implementación final cada estándar tendrá: estado (Cumple / No Cumple / Parcial),
-          porcentaje, responsable, fecha de evaluación y campo para adjuntar evidencia documental.
-        </p>
-      </div>
+    
     </div>
   );
 }
