@@ -11,16 +11,17 @@ import {
   BarChart3, AlertCircle, Smile, Award, HelpCircle, Settings,
 } from 'lucide-react';
 
-import ActasManager                from './MejoramientoContinuo/Actas/ActasManager';
-import AccionesMejoraManager       from './MejoramientoContinuo/AccionesMejora/AccionesMejoraManager';
-import IndicadoresManager          from './MejoramientoContinuo/Indicadores/IndicadoresManager';
-import RiskMatrixManager           from './MejoramientoContinuo/RiskMatrix/RiskMatrixManager';
-import SatisfaccionClientesManager from './MejoramientoContinuo/SatisfaccionClientes/SatisfaccionClientesManager';
-import ClimaLaboralManager         from './MejoramientoContinuo/ClimaLaboral/ClimaLaboralManager';
-import SurveyConfigModal           from './MejoramientoContinuo/SurveyConfigModal';
-import ProductoNoConformeManager   from './MejoramientoContinuo/ProductoNoConforme/ProductoNoConformeManager';
-import QRSFManager                 from './MejoramientoContinuo/QRSF/QRSFManager';
-import RevisionDireccionManager    from './MejoramientoContinuo/RevisionDireccion/RevisionDireccionManager';
+import ActasManager                   from './MejoramientoContinuo/Actas/ActasManager';
+import AccionesMejoraManager          from './MejoramientoContinuo/AccionesMejora/AccionesMejoraManager';
+import IndicadoresManager             from './MejoramientoContinuo/Indicadores/IndicadoresManager';
+import RiskMatrixManager              from './MejoramientoContinuo/RiskMatrix/RiskMatrixManager';
+import SatisfaccionClientesManager    from './MejoramientoContinuo/SatisfaccionClientes/SatisfaccionClientesManager';
+import ClimaLaboralManager            from './MejoramientoContinuo/ClimaLaboral/ClimaLaboralManager';
+import SurveyConfigModal              from './MejoramientoContinuo/SurveyConfigModal';
+import ProductoNoConformeManager      from './MejoramientoContinuo/ProductoNoConforme/ProductoNoConformeManager';
+import QRSFManager                    from './MejoramientoContinuo/QRSF/QRSFManager';
+import RevisionDireccionManager       from './MejoramientoContinuo/RevisionDireccion/RevisionDireccionManager';
+import EvaluacionCompetenciasManager  from './MejoramientoContinuo/EvaluacionCompetencias/EvaluacionCompetenciasManager';
 
 const SUBMODULES = [
   {
@@ -97,16 +98,24 @@ const SUBMODULES = [
     gradient: 'linear-gradient(135deg, #2e5244 0%, #6dbd96 100%)',
     badge: 'ISO 9001', enabled: true,
   },
-  { id: 'informes',              name: 'Informes',                  permission: 'auditorias:informes:view',                description: 'Informes y reportes de gestión',         icon: FileBarChart,   color: '#6dbd96', enabled: false },
-  { id: 'requisitos_legales',    name: 'Requisitos Legales',        permission: 'auditorias:requisitos_legales:view',      description: 'Matriz de requisitos normativos',        icon: Scale,          color: '#2e5244', enabled: false },
-  { id: 'auditorias',            name: 'Auditorías',                permission: 'auditorias:auditorias_internas:view',     description: 'Plan, programa y hallazgos',             icon: Search,         color: '#6dbd96', enabled: false },
-  { id: 'evaluacion_auditores',  name: 'Evaluación Auditores',      permission: 'auditorias:evaluacion_auditores:view',    description: 'Competencias de auditores',              icon: Users,          color: '#6f7b2c', enabled: false },
-  { id: 'reporte_incidentes',    name: 'Reporte de Incidentes',     permission: 'auditorias:reporte_incidentes:view',      description: 'Incidentes y eventos',                   icon: AlertCircle,    color: '#6dbd96', enabled: false },
-  { id: 'evaluacion_competencias', name: 'Evaluación Competencias', permission: 'auditorias:evaluacion_competencias:view', description: 'Competencias del personal',              icon: Users,          color: '#6dbd96', enabled: false },
+  {
+    id: 'evaluacion_competencias', name: 'Evaluación Competencias',
+    permission: 'auditorias:evaluacion_competencias:view',
+    description: 'Evaluación de desempeño y competencias del personal',
+    icon: Users, color: '#6dbd96',
+    gradient: 'linear-gradient(135deg, #6dbd96 0%, #2e5244 100%)',
+    badge: 'Desempeño', enabled: true,
+  },
+  // ── Próximamente ──────────────────────────────────────────────────────────
+  { id: 'informes',             name: 'Informes',               permission: 'auditorias:informes:view',             description: 'Informes y reportes de gestión',    icon: FileBarChart,  color: '#6dbd96', enabled: false },
+  { id: 'requisitos_legales',   name: 'Requisitos Legales',     permission: 'auditorias:requisitos_legales:view',   description: 'Matriz de requisitos normativos',   icon: Scale,         color: '#2e5244', enabled: false },
+  { id: 'auditorias',           name: 'Auditorías',             permission: 'auditorias:auditorias_internas:view',  description: 'Plan, programa y hallazgos',        icon: Search,        color: '#6dbd96', enabled: false },
+  { id: 'evaluacion_auditores', name: 'Evaluación Auditores',   permission: 'auditorias:evaluacion_auditores:view', description: 'Competencias de auditores',         icon: Users,         color: '#6f7b2c', enabled: false },
+  { id: 'reporte_incidentes',   name: 'Reporte de Incidentes',  permission: 'auditorias:reporte_incidentes:view',   description: 'Incidentes y eventos',              icon: AlertCircle,   color: '#6dbd96', enabled: false },
 ];
 
 // ── 🎨 Card Futurista ─────────────────────────────────────────────────────────
-function FuturisticCard({ title, description, icon: Icon, color, gradient, badge, count, onClick, delay, hasConfig, onConfig }) {
+function FuturisticCard({ title, description, icon: Icon, color, gradient, badge, onClick, delay, hasConfig, onConfig }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -204,6 +213,8 @@ export default function MejoramientoContinuo() {
     return <QRSFManager onBack={() => setActiveSubmodule(null)} />;
   if (activeSubmodule === 'revision_direccion')
     return <RevisionDireccionManager onBack={() => setActiveSubmodule(null)} />;
+  if (activeSubmodule === 'evaluacion_competencias')
+    return <EvaluacionCompetenciasManager onBack={() => setActiveSubmodule(null)} />;
 
   const canAccess = (mod) => {
     if (!mod.enabled) return false;
@@ -239,7 +250,6 @@ export default function MejoramientoContinuo() {
               color={mod.color}
               gradient={mod.gradient}
               badge={mod.badge}
-              count={mod.count}
               delay={i * 0.08}
               hasConfig={mod.hasConfig}
               onConfig={() => setConfigModal({ surveyCode: mod.surveyCode, surveyName: mod.surveyName })}

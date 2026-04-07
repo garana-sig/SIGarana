@@ -1,12 +1,7 @@
 // src/components/users/UserPermissionsManager.jsx
-// ✅ v2026-03-13 — VERSIÓN DEFINITIVA
+// ✅ v2026-04-07 — evaluacion_competencias habilitado + fix auto-save evaluadores
 // ✅ Accordion controlado (no colapsa al asignar permisos)
 // ✅ loadPermissions silent=true (no desmonta el panel)
-// ✅ Soporta: cmi:view, auditorias:view, gestion_documental:view, sst_bienestar:view
-// ✅ Submódulos visibles: listado_maestro, areas, producto_no_conforme, qrsf, capacitaciones
-// ✅ Submódulos no implementados ocultos
-// ✅ Optimistic updates (sin flicker)
-
 
 import { useUserPermissions }      from '@/hooks/useUserPermissions';
 import React from 'react';
@@ -26,13 +21,13 @@ const HIDDEN_MODULES = ['clientes_ventas', 'inventario', 'configuracion'];
 // ── Submódulos ocultos — borrar de aquí cuando implementes cada uno ──
 const HIDDEN_SUBMODULES = new Set([
   // ── Mejoramiento Continuo — pendientes ──
-  'revision_direccion',
+  // 'revision_direccion', ← YA IMPLEMENTADO ✅
   'informes',
   'requisitos_legales',
   'auditorias_internas',
   'evaluacion_auditores',
   'reporte_incidentes',
-  'evaluacion_competencias',
+  // 'evaluacion_competencias', ← YA IMPLEMENTADO ✅
   // ── Planeación Estratégica — solo indicadores activo ──
   'perspectivas',
   'objetivos',
@@ -43,35 +38,49 @@ const HIDDEN_SUBMODULES = new Set([
   'instructivos',
   // ── Usuarios — permisos internos ──
   'gestion_usuarios',
-  // ── SST / Bienestar — submódulos pendientes ──
-  'bienestar_social',
-  'epps',
-  'examenes_medicos',
-  'sst',
+  // ── SST / Bienestar — solo NO implementados ──
+  'bienestar_social',   // pendiente
+  'epps',               // pendiente
+  'examenes_medicos',   // pendiente
+  // 'sst' ← implementado ✅
 ]);
 
 // ── Nombres legibles (códigos exactos de BD) ─────────────────────────
 const SUBMODULE_NAMES = {
   // Gestión Documental — activos
-  formatos:              'Formatos',
-  procedimientos:        'Procedimientos',
-  guias:                 'Guías',
-  listado_maestro:       'Listado Maestro',
-  areas:                 'Por Área',
+  formatos:                 'Formatos',
+  procedimientos:           'Procedimientos',
+  guias:                    'Guías',
+  listado_maestro:          'Listado Maestro',
+  areas:                    'Por Área',
   // Mejoramiento Continuo — activos
-  actas:                 'Actas de Reunión',
-  acciones_mejora:       'Acciones de Mejora',
-  riesgos:               'Matriz de Riesgos',
-  satisfaccion_clientes: 'Satisfacción Clientes',
-  clima_laboral:         'Clima Laboral',
-  producto_no_conforme:  'Producto No Conforme',
-  qrsf:                  'QRSF',
+  actas:                    'Actas de Reunión',
+  acciones_mejora:          'Acciones de Mejora',
+  riesgos:                  'Matriz de Riesgos',
+  satisfaccion_clientes:    'Satisfacción Clientes',
+  clima_laboral:            'Clima Laboral',
+  producto_no_conforme:     'Producto No Conforme',
+  qrsf:                     'QRSF',
+  evaluacion_competencias:  'Evaluación de Competencias',
+  revision_direccion:       'Revisión por la Dirección',
   // CMI / Planeación Estratégica — activo
-  indicadores:           'Indicadores CMI',
-  // SST / Bienestar — activos
-  capacitaciones:        'Capacitaciones',
+  indicadores:              'Indicadores CMI',
+  // SST / Bienestar — activos (implementados)
+  capacitaciones:           'Capacitaciones',
+  planes_programas:         'Planes y Programas',
+  estandares:               'Estándares Mínimos',
+  // SST — planes implementados (código exacto de BD confirmado)
+  bienestar:                'Plan de Bienestar',
+  convivencia:              'Comité de Convivencia',
+  copasst:                  'COPASST',
+  sst:                      'Plan SST',
+  promocion_prevencion:     'Promoción y Prevención',
+  // SST — pendientes (ocultos, nombrados para cuando se implementen)
+  bienestar_social:         'Bienestar Social',
+  epps:                     'EPPs',
+  examenes_medicos:         'Exámenes Médicos',
   // Usuarios
-  permisos:              'Permisos',
+  permisos:                 'Permisos',
 };
 
 const ACTION_NAMES = {
@@ -93,9 +102,9 @@ const ACTION_NAMES = {
   deactivate:        'Desactivar',
   register_findings: 'Registrar hallazgos',
   audit:             'Auditar',
-  create:  'Crear',
-  edit:    'Editar',
-  delete:  'Eliminar',
+  create:            'Crear',
+  edit:              'Editar',
+  delete:            'Eliminar',
 };
 
 const ACTION_COLORS = {
@@ -138,15 +147,14 @@ export function UserPermissionsManager({ open, onClose, userId, userName, userRo
   // Accordion controlado — persiste el estado abierto/cerrado entre refreshes
   const [openModules, setOpenModules] = React.useState([]);
 
-  // Toggle individual — panel queda ABIERTO ────────────────────────
-  // saving viene del hook (true mientras el RPC está en vuelo)
+  // Toggle individual — panel queda ABIERTO
   const handleToggle = async (code, currentlyHas) => {
-    if (savingCode) return; // evitar doble click mientras guarda
+    if (savingCode) return;
     if (currentlyHas) await revokePermissions([code]);
     else              await assignPermissions([code]);
   };
 
-  // Filtrar módulos y submódulos ocultos ───────────────────────────
+  // Filtrar módulos y submódulos ocultos
   const modules = Object.entries(permissionsByModule)
     .filter(([code]) => !HIDDEN_MODULES.includes(code))
     .map(([moduleCode, { module, permissions }]) => {
