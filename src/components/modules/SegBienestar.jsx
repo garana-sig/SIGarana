@@ -8,6 +8,7 @@ import CapacitacionesTab from './SSTBienestar/Capacitaciones/CapacitacionesTab';
 import WorkPlanTab       from './SSTBienestar/PlanesTrabajo/WorkPlanTab';
 import BienestarTab      from './SSTBienestar/PlanesTrabajo/BienestarTab';
 import EstandaresTab     from './SSTBienestar/Estandares/EstandaresTab';
+import MatrizPeligrosTab from './SSTBienestar/MatrizPeligros/MatrizPeligrosTab';
 
 import {
   Shield, BookOpen, CheckSquare, AlertTriangle,
@@ -161,21 +162,6 @@ function PlanesTab() {
 
 // ── Tabs pendientes ───────────────────────────────────────────────────
 
-
-function MatrizTab() {
-  return (
-    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-      <SectionHeader title="Matriz de Identificación de Peligros"
-        subtitle="GTC-45:2012 · Identificación de peligros, evaluación y valoración de riesgos para INDECON S.A.S."
-        icon={AlertTriangle} color={C.amber}/>
-      <ComingSoon title="Matriz de Peligros"
-        desc="La implementación completa incluirá todos los campos de la GTC-45: proceso, zona/área, actividad, peligro, efectos posibles, controles existentes, evaluación del riesgo y medidas de intervención propuestas."
-        fields={['Proceso / Área','Actividad','Tipo de peligro','Descripción del peligro','Efectos posibles','Controles actuales','Nivel de riesgo','Aceptabilidad','Medidas de intervención','Responsable','Fecha de revisión']}
-        accentColor={C.amber}/>
-    </div>
-  );
-}
-
 function InspeccionesTab() {
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
@@ -266,7 +252,7 @@ export default function SegBienestar() {
       {/* Contenido */}
       {activeTab === 'planes'        && <PlanesTab />}
       {activeTab === 'estandares'    && <EstandaresTab />}
-      {activeTab === 'matriz'        && <MatrizTab />}
+      {activeTab === 'matriz'        && <MatrizPeligrosTab />}
       {activeTab === 'inspecciones'  && <InspeccionesTab />}
       {activeTab === 'profesiograma' && <ProfesiogramaTab />}
     </div>
