@@ -499,7 +499,7 @@ export default function RevisionDireccionManager({ onBack }) {
 
         // Acciones de mejora del período
         supabase.from('improvement_action')
-          .select('id,title,status,due_date,created_at')
+          .select('id,finding_description,status,is_closed,proposed_date,created_at')
           .gte('created_at', range.start)
           .lte('created_at', range.end+'T23:59:59'),
 
@@ -612,10 +612,10 @@ export default function RevisionDireccionManager({ onBack }) {
   // ── Stats Acciones ────────────────────────────────────────────────────────
   const actStats = (() => {
     const nowD    = new Date();
-    const closed  = data.actions.filter(a=>a.status==='closed').length;
+    const closed  = data.actions.filter(a=>a.is_closed===true||a.status==='closed').length;
     const inProg  = data.actions.filter(a=>a.status==='in_progress').length;
     const open    = data.actions.filter(a=>a.status==='open').length;
-    const overdue = data.actions.filter(a=>a.status!=='closed'&&a.due_date&&new Date(a.due_date)<nowD).length;
+    const overdue = data.actions.filter(a=>!a.is_closed&&a.status!=='closed'&&a.proposed_date&&new Date(a.proposed_date)<nowD).length;
     const total   = data.actions.length;
     return { closed, inProg, open, overdue, total, pctClose:total>0?Math.round((closed/total)*100):0 };
   })();
@@ -722,7 +722,7 @@ export default function RevisionDireccionManager({ onBack }) {
       const d=new Date(a.created_at);
       const k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
       if(!byMes[k]) byMes[k]={abiertas:0,cerradas:0};
-      if(a.status==='closed') byMes[k].cerradas++; else byMes[k].abiertas++;
+      if(a.is_closed===true||a.status==='closed') byMes[k].cerradas++; else byMes[k].abiertas++;
     });
     return Object.keys(byMes).sort().map(k=>({ mes:MESES[parseInt(k.split('-')[1])-1], ...byMes[k] }));
   })();
