@@ -499,25 +499,69 @@ function FormularioEvaluacion({
 function PerfilEmpleado({
   empleado, evaluaciones, evalPorEmpleado, categorias,
   empleadosPermitidos, periodos, periodoActivo, evaluadosEnPeriodoActivo,
-  canEvaluar, onBack, onNuevaEval, loadDetalles, deleteEvaluacion, isAdminOrGerencia,
+  canEvaluar, onBack, onNuevaEval, loadDetalles, deleteEvaluacion, updateEvaluacion, isAdminOrGerencia,
 }) {
   const info    = evalPorEmpleado[empleado.id] || { count: 0, ultima: null };
   const evals   = evaluaciones.filter(e => e.empleado_id === empleado.id);
   const yaEval  = evaluadosEnPeriodoActivo.has(empleado.id);
-  const [detModal, setDetModal] = useState(null);
-  const [detalles, setDetalles] = useState([]);
-  const [loadingDet, setLoadingDet] = useState(false);
-  const [deleting, setDeleting] = useState(null);
+  const [detModal,    setDetModal]    = useState(null);
+  const [detalles,    setDetalles]    = useState([]);
+  const [loadingDet,  setLoadingDet]  = useState(false);
+  const [deleting,    setDeleting]    = useState(null);
+  const [modoEdicion, setModoEdicion] = useState(false);
+  const [editResp,    setEditResp]    = useState({});  // { preguntaId: valor }
+  const [editNotas,   setEditNotas]   = useState('');
+  const [editPeriodo, setEditPeriodo] = useState('');
+  const [savingEdit,  setSavingEdit]  = useState(false);
 
   async function verDetalle(ev) {
-    setLoadingDet(true); setDetModal(ev);
+    setLoadingDet(true);
+    setDetModal(ev);
+    setModoEdicion(false);
     try { const d = await loadDetalles(ev.id); setDetalles(d); }
     finally { setLoadingDet(false); }
   }
+
+  function activarEdicion() {
+    // Precargar respuestas actuales
+    const respInicial = {};
+    detalles.forEach(d => { respInicial[d.pregunta_id] = d.respuesta; });
+    setEditResp(respInicial);
+    setEditNotas(detModal.notas || '');
+    setEditPeriodo(detModal.periodo_id || '');
+    setModoEdicion(true);
+  }
+
+  async function guardarEdicion() {
+    setSavingEdit(true);
+    try {
+      const resultado = await updateEvaluacion({
+        evaluacionId: detModal.id,
+        periodoId:    editPeriodo || detModal.periodo_id,
+        notas:        editNotas,
+        respuestas:   editResp,
+      });
+      // Actualizar detModal con nuevos valores
+      setDetModal(prev => ({
+        ...prev,
+        puntaje_total:   resultado.puntajeTotal,
+        nivel_desempeno: resultado.nivelDesempeno,
+        notas:           editNotas,
+      }));
+      // Recargar detalles
+      const d = await loadDetalles(detModal.id);
+      setDetalles(d);
+      setModoEdicion(false);
+    } catch (e) {
+      alert('Error al guardar: ' + e.message);
+    } finally { setSavingEdit(false); }
+  }
+
   async function eliminar(id) {
     if (!window.confirm('¿Eliminar esta evaluación?')) return;
     setDeleting(id);
-    try { await deleteEvaluacion(id); } finally { setDeleting(null); }
+    try { await deleteEvaluacion(id); setDetModal(null); }
+    finally { setDeleting(null); }
   }
 
   return (
@@ -612,25 +656,157 @@ function PerfilEmpleado({
           )}
       </div>
 
-      {/* Modal detalle */}
+      {/* Modal detalle / edición */}
       {detModal && (
-        <Modal title={`Evaluación — ${new Date(detModal.fecha_evaluacion).toLocaleDateString('es-CO')}`}
-          onClose={() => setDetModal(null)} size="lg">
-          {loadingDet ? <div className="text-center py-8 text-gray-400">Cargando…</div> : (
+        <Modal
+          title={modoEdicion
+            ? `Editando — ${empleado.nombre_completo}`
+            : `Evaluación — ${new Date(detModal.fecha_evaluacion).toLocaleDateString('es-CO')}`}
+          onClose={() => { setDetModal(null); setModoEdicion(false); }}
+          size={modoEdicion ? 'xl' : 'lg'}>
+          {loadingDet ? (
+            <div className="text-center py-8 text-gray-400">Cargando…</div>
+          ) : modoEdicion ? (
+            /* ── MODO EDICIÓN: Matriz igual al formulario ── */
             <div className="space-y-4">
+              {/* Selector de período */}
+              <div className="flex items-center gap-3 p-3 rounded-xl"
+                style={{ background: '#f8faf8', border: `1px solid ${P.menta}30` }}>
+                <label className="text-xs font-semibold text-gray-600 shrink-0">Período:</label>
+                <select className="px-3 py-1.5 border rounded-md text-sm"
+                  style={{ borderColor: P.menta }}
+                  value={editPeriodo}
+                  onChange={e => setEditPeriodo(e.target.value)}>
+                  <option value="">— Sin período —</option>
+                  {periodos.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre}{p.is_active ? ' (activo)' : ''}
+                    </option>
+                  ))}
+                </select>
+                {/* Puntaje en tiempo real */}
+                <div className="flex-1 flex items-center gap-2 justify-end">
+                  {(() => {
+                    const pts  = Object.values(editResp).reduce((s,v)=>s+v,0);
+                    const niv  = calcularNivel(pts);
+                    return (
+                      <>
+                        <NivelBadge nivel={niv} />
+                        <span className="font-black text-lg font-mono" style={{ color: COLOR_NIVEL[niv] }}>{pts}</span>
+                        <span className="text-xs text-gray-400">/ {PUNTAJE_MAX}</span>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Matriz editable */}
+              <div className="rounded-xl border overflow-hidden" style={{ borderColor: P.verde + '30' }}>
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr style={{ background: P.verde }}>
+                      <th className="text-left px-3 py-2 text-xs font-semibold text-white w-28">Categoría</th>
+                      <th className="text-left px-3 py-2 text-xs font-semibold text-white">Pregunta</th>
+                      {OPCIONES_RESPUESTA.map(o => (
+                        <th key={o.value} className="text-center px-1 py-2 text-xs font-semibold w-16 text-white">
+                          <span className="block leading-tight">{o.short}</span>
+                          <span className="text-xs opacity-70">{o.value}</span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {categorias.map(cat => {
+                      const pregs = cat.preguntas.filter(p => p.is_active);
+                      if (!pregs.length) return null;
+                      return pregs.map((preg, idx) => {
+                        const selVal = editResp[preg.id];
+                        return (
+                          <tr key={preg.id} className="border-b"
+                            style={{ background: idx % 2 === 0 ? 'white' : '#fafaf8', borderColor: '#e5e7eb' }}>
+                            {idx === 0 ? (
+                              <td rowSpan={pregs.length} className="px-3 py-2 text-xs font-bold align-top border-r"
+                                style={{ color: P.verde, borderColor: P.verde + '20', background: P.verde + '08', paddingTop: 12 }}>
+                                {cat.nombre}
+                              </td>
+                            ) : null}
+                            <td className="px-3 py-2 border-r text-xs" style={{ borderColor: '#e5e7eb', color: P.dark }}>
+                              {preg.texto}
+                            </td>
+                            {OPCIONES_RESPUESTA.map(o => (
+                              <td key={o.value}
+                                className="text-center border-r cursor-pointer"
+                                style={{ borderColor: '#e5e7eb', background: selVal === o.value ? o.color + '18' : 'transparent' }}
+                                onClick={() => setEditResp(r => ({ ...r, [preg.id]: o.value }))}>
+                                <div className="flex items-center justify-center py-2 px-1">
+                                  {selVal === o.value ? (
+                                    <div className="w-5 h-5 rounded flex items-center justify-center text-white text-xs font-bold"
+                                      style={{ background: o.color }}>✓</div>
+                                  ) : (
+                                    <div className="w-5 h-5 rounded border-2" style={{ borderColor: '#d1d5db' }} />
+                                  )}
+                                </div>
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      });
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Notas */}
+              <div>
+                <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
+                  Aspectos a Mejorar / Aspectos Relevantes
+                </label>
+                <textarea className="w-full px-3 py-2 border rounded-md text-sm resize-none"
+                  style={{ borderColor: P.menta, minHeight: 70 }}
+                  value={editNotas}
+                  onChange={e => setEditNotas(e.target.value)}
+                  placeholder="MEJORAR: … / ASPECTO RELEVANTE: …" />
+              </div>
+
+              {/* Botones */}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setModoEdicion(false)} disabled={savingEdit}>
+                  Cancelar
+                </Button>
+                <Button onClick={guardarEdicion} disabled={savingEdit}
+                  style={{ background: P.verde, color: 'white' }}>
+                  <Save className="h-4 w-4 mr-2" />
+                  {savingEdit ? 'Guardando…' : 'Guardar Cambios'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            /* ── MODO VISUALIZACIÓN ── */
+            <div className="space-y-4">
+              {/* Header con puntaje + botón editar */}
               <div className="flex items-center gap-4 p-3 rounded-lg"
                 style={{ background: BG_NIVEL[detModal.nivel_desempeno] }}>
-                <div className="text-3xl font-bold" style={{ color: COLOR_NIVEL[detModal.nivel_desempeno], fontFamily: 'monospace' }}>
+                <div className="text-3xl font-bold font-mono"
+                  style={{ color: COLOR_NIVEL[detModal.nivel_desempeno] }}>
                   {detModal.puntaje_total}
                 </div>
-                <div>
+                <div className="flex-1">
                   <NivelBadge nivel={detModal.nivel_desempeno} />
                   <p className="text-xs text-gray-500 mt-1">
                     Evaluado por: {detModal.evaluador?.full_name} ·
                     Período: {detModal.periodo?.nombre || detModal.periodo || '—'}
                   </p>
                 </div>
+                {/* Botón editar — solo para quien evaluó o admin/gerencia */}
+                {(isAdminOrGerencia) && (
+                  <Button onClick={activarEdicion}
+                    style={{ background: P.menta, color: 'white' }} size="sm">
+                    <Edit3 className="h-3.5 w-3.5 mr-1" /> Editar
+                  </Button>
+                )}
               </div>
+
+              {/* Respuestas por categoría — igual que antes */}
               {categorias.map(cat => {
                 const dets = detalles.filter(d => d.pregunta?.categoria_id === cat.id);
                 if (!dets.length) return null;
@@ -653,6 +829,7 @@ function PerfilEmpleado({
                   </div>
                 );
               })}
+
               {detModal.notas && (
                 <div className="p-3 rounded-lg text-sm text-gray-700" style={{ background: '#f8faf8' }}>
                   <p className="text-xs font-semibold text-gray-500 mb-1">Notas</p>
@@ -1197,7 +1374,7 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
     configuracion, usuarios,
     loading, isAdminOrGerencia, canEvaluar,
     createEmpleado, updateEmpleado,
-    createEvaluacion, deleteEvaluacion,
+    createEvaluacion, deleteEvaluacion, updateEvaluacion,
     addEvaluador, removeEvaluador, loadDetalles,
     createPeriodo, activarPeriodo, togglePeriodo, deletePeriodo,
     createCategoria, toggleCategoria,
@@ -1288,6 +1465,7 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
         onNuevaEval={() => { setFormTarget(selEmpleado); setView('formulario'); }}
         loadDetalles={loadDetalles}
         deleteEvaluacion={deleteEvaluacion}
+        updateEvaluacion={updateEvaluacion}
         isAdminOrGerencia={isAdminOrGerencia}
       />
     );

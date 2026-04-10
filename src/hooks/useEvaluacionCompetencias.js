@@ -288,6 +288,45 @@ export function useEvaluacionCompetencias() {
     await loadEvaluaciones();
   }, [loadEvaluaciones]);
 
+  // Actualizar evaluación existente: borra detalles y los reinserta
+  const updateEvaluacion = useCallback(async ({ evaluacionId, periodoId, notas, respuestas }) => {
+    const valores        = Object.values(respuestas);
+    const puntajeTotal   = valores.reduce((s, v) => s + v, 0);
+    const nivelDesempeno = calcularNivel(puntajeTotal);
+    const periodoNombre  = periodos.find(p => p.id === periodoId)?.nombre || null;
+
+    // 1. Actualizar cabecera
+    const { error: e1 } = await supabase
+      .from('ec_evaluacion')
+      .update({
+        periodo_id:      periodoId || null,
+        periodo:         periodoNombre,
+        puntaje_total:   puntajeTotal,
+        nivel_desempeno: nivelDesempeno,
+        notas:           notas || null,
+      })
+      .eq('id', evaluacionId);
+    if (e1) throw e1;
+
+    // 2. Borrar detalles anteriores y reinsertarlos
+    const { error: e2 } = await supabase
+      .from('ec_evaluacion_detalle')
+      .delete()
+      .eq('evaluacion_id', evaluacionId);
+    if (e2) throw e2;
+
+    const detalles = Object.entries(respuestas).map(([preguntaId, respuesta]) => ({
+      evaluacion_id: evaluacionId,
+      pregunta_id:   preguntaId,
+      respuesta,
+    }));
+    const { error: e3 } = await supabase.from('ec_evaluacion_detalle').insert(detalles);
+    if (e3) throw e3;
+
+    await loadEvaluaciones();
+    return { puntajeTotal, nivelDesempeno };
+  }, [periodos, loadEvaluaciones]);
+
   const loadDetalles = useCallback(async (evaluacionId) => {
     const { data, error } = await supabase
       .from('ec_evaluacion_detalle')
@@ -426,7 +465,7 @@ export function useEvaluacionCompetencias() {
     loadEmpleados, createEmpleado, updateEmpleado,
     // evaluaciones
     loadEvaluaciones, loadDetalles,
-    createEvaluacion, deleteEvaluacion,
+    createEvaluacion, deleteEvaluacion, updateEvaluacion,
     // períodos
     loadPeriodos, createPeriodo, updatePeriodo,
     activarPeriodo, togglePeriodo, deletePeriodo,
