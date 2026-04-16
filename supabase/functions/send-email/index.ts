@@ -68,6 +68,10 @@ interface EmailRequest {
     fecha?: string;
     notas?: string;
     resumen_categorias?: { categoria: string; promedio: number; total: number }[];
+    tabla_completa?: {
+      categoria: string;
+      preguntas: { texto: string; respuesta: number }[];
+    }[];
   };
 }
 
@@ -327,17 +331,66 @@ const getEvaluacionTemplate = (req: EmailRequest): string => {
     "Debajo de las Expectativas":     "#d97706",
     "Muy debajo de las Expectativas": "#dc2626",
   };
+  const nivelShort: Record<number, { texto: string; color: string }> = {
+    1: { texto: "Muy debajo", color: "#dc2626" },
+    2: { texto: "Debajo",     color: "#d97706" },
+    3: { texto: "Alcanza",    color: "#6f7b2c" },
+    4: { texto: "Mejora",     color: "#6dbd96" },
+    5: { texto: "Sobres.",    color: "#2e5244" },
+  };
   const color = nivelColor[d.nivel || ""] || "#6dbd96";
 
-  const categoriasHtml = (d.resumen_categorias || []).map(c => `
-    <tr>
-      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#333">${c.categoria}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center">
-        <div style="display:inline-block;background:${color}20;color:${color};padding:2px 10px;border-radius:12px;font-size:13px;font-weight:700">
-          ${c.promedio}/5
-        </div>
-      </td>
-    </tr>`).join('');
+  // ── Tabla completa de preguntas ──────────────────────────────────────
+  const tablaHtml = (d.tabla_completa || []).map(cat => {
+    const filasHtml = cat.preguntas.map((p, idx) => {
+      const op = nivelShort[p.respuesta] || { texto: "—", color: "#888" };
+      const bg = idx % 2 === 0 ? "#ffffff" : "#f9fbf9";
+      const celdas = [1, 2, 3, 4, 5].map(v => {
+        const marcado = p.respuesta === v;
+        const c = nivelShort[v]?.color || "#888";
+        return `<td style="text-align:center;padding:5px 4px;border-right:1px solid #f0f0f0;background:${marcado ? c + "18" : "transparent"}">
+          ${marcado ? `<span style="display:inline-block;width:16px;height:16px;background:${c};border-radius:3px;color:white;font-size:11px;font-weight:bold;line-height:16px;text-align:center;">✓</span>` : ""}
+        </td>`;
+      }).join("");
+
+      return `<tr style="background:${bg};border-bottom:1px solid #e5e7eb;">
+        <td style="padding:6px 8px;font-size:11px;color:#333;line-height:1.4;">${p.texto}</td>
+        ${celdas}
+        <td style="padding:6px 8px;text-align:center;">
+          <span style="background:${op.color}20;color:${op.color};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:bold;">${op.texto}</span>
+        </td>
+      </tr>`;
+    }).join("");
+
+    return `
+      <tr style="background:#2e5244;">
+        <td colspan="7" style="padding:7px 10px;color:white;font-size:12px;font-weight:bold;">
+          ${cat.categoria}
+        </td>
+      </tr>
+      ${filasHtml}`;
+  }).join("");
+
+  const tablaSeccion = tablaHtml ? `
+    <div style="margin-top:24px;">
+      <p style="font-size:13px;font-weight:700;color:#2e5244;margin-bottom:10px;border-bottom:2px solid #6dbd96;padding-bottom:6px;">
+        Detalle de la Evaluación
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead>
+          <tr style="background:#1a3330;color:white;">
+            <th style="padding:7px 8px;text-align:left;">Pregunta</th>
+            <th style="padding:7px 4px;text-align:center;width:38px;font-size:10px;line-height:1.2;">Muy<br>debajo</th>
+            <th style="padding:7px 4px;text-align:center;width:38px;font-size:10px;line-height:1.2;">Debajo</th>
+            <th style="padding:7px 4px;text-align:center;width:38px;font-size:10px;line-height:1.2;">Alcanza</th>
+            <th style="padding:7px 4px;text-align:center;width:38px;font-size:10px;line-height:1.2;">Mejora</th>
+            <th style="padding:7px 4px;text-align:center;width:38px;font-size:10px;line-height:1.2;">Sobres.</th>
+            <th style="padding:7px 8px;text-align:center;width:60px;font-size:10px;">Nivel</th>
+          </tr>
+        </thead>
+        <tbody>${tablaHtml}</tbody>
+      </table>
+    </div>` : "";
 
   return getBaseTemplate("Resultados de Evaluación de Competencias", `
     <div class="content">
@@ -358,7 +411,7 @@ const getEvaluacionTemplate = (req: EmailRequest): string => {
         </div>
       </div>
 
-      <!-- Datos de la evaluación -->
+      <!-- Datos -->
       <div class="info-box">
         <div class="info-row"><div class="info-label">Empleado:</div><div class="info-value"><strong>${d.empleado_nombre}</strong></div></div>
         <div class="info-row"><div class="info-label">Cargo:</div><div class="info-value">${d.empleado_cargo}</div></div>
@@ -368,30 +421,18 @@ const getEvaluacionTemplate = (req: EmailRequest): string => {
         <div class="info-row"><div class="info-label">Evaluado por:</div><div class="info-value">${d.evaluador_nombre}</div></div>
       </div>
 
-      <!-- Resumen por categoría -->
-      ${(d.resumen_categorias || []).length > 0 ? `
-      <div class="divider"></div>
-      <p style="font-size:14px;font-weight:700;color:#2e5244;margin-bottom:12px">Resultados por Categoría</p>
-      <table style="width:100%;border-collapse:collapse;background:#f8f9fa;border-radius:8px;overflow:hidden">
-        <thead>
-          <tr style="background:#2e5244;color:white">
-            <th style="padding:10px 12px;text-align:left;font-size:13px">Categoría</th>
-            <th style="padding:10px 12px;text-align:center;font-size:13px">Promedio</th>
-          </tr>
-        </thead>
-        <tbody>${categoriasHtml}</tbody>
-      </table>` : ''}
+      <!-- Tabla completa de evaluación -->
+      ${tablaSeccion}
 
       <!-- Notas -->
       ${d.notas ? `
       <div class="divider"></div>
-      <p style="font-size:14px;font-weight:700;color:#2e5244;margin-bottom:8px">📝 Aspectos a Mejorar / Relevantes</p>
-      <div class="reason-box">${d.notas}</div>` : ''}
+      <p style="font-size:14px;font-weight:700;color:#2e5244;margin-bottom:8px;">📝 Aspectos a Mejorar / Relevantes</p>
+      <div class="reason-box">${d.notas}</div>` : ""}
 
       <div class="divider"></div>
-      <p style="font-size:13px;color:#666;text-align:center">
-        Este informe es confidencial. Si tienes preguntas sobre tu evaluación,
-        comunícate con el área de Gestión Humana.
+      <p style="font-size:12px;color:#888;text-align:center;font-style:italic;">
+        Este informe es confidencial. Comunícate con Gestión Humana si tienes preguntas.
       </p>
     </div>`);
 };

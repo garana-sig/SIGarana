@@ -622,29 +622,31 @@ function PerfilEmpleado({
         .from('profile').select('email, full_name').eq('id', empleado.user_id).single();
       if (!perfil?.email) throw new Error('Sin email registrado');
 
-      const resumenCategorias = categorias.map(cat => {
-        const catDets = dets.filter(d => d.pregunta?.categoria_id === cat.id);
-        const prom = catDets.length
-          ? Math.round(catDets.reduce((s, d) => s + d.respuesta, 0) / catDets.length * 10) / 10
-          : 0;
-        return { categoria: cat.nombre, promedio: prom };
-      });
+      const tablaCompleta = categorias.map(cat => ({
+        categoria: cat.nombre,
+        preguntas: dets
+          .filter(d => d.pregunta?.categoria_id === cat.id)
+          .map(d => ({
+            texto:     d.pregunta?.texto || '',
+            respuesta: d.respuesta,
+          })),
+      })).filter(c => c.preguntas.length > 0);
 
       const { error } = await supabase.functions.invoke('send-email', {
         body: {
           type: 'evaluacion_retroalimentacion',
           to:   perfil.email,
           data: {
-            empleado_nombre:    empleado.nombre_completo,
-            empleado_cargo:     empleado.cargo || '—',
-            empleado_depto:     empleado.departamento,
-            periodo:            ev.periodo?.nombre || ev.periodo || '—',
-            puntaje:            ev.puntaje_total,
-            nivel:              ev.nivel_desempeno,
-            evaluador_nombre:   ev.evaluador?.full_name || '—',
-            fecha:              new Date(ev.fecha_evaluacion).toLocaleDateString('es-CO'),
-            notas:              ev.notas || '',
-            resumen_categorias: resumenCategorias,
+            empleado_nombre:  empleado.nombre_completo,
+            empleado_cargo:   empleado.cargo || '—',
+            empleado_depto:   empleado.departamento,
+            periodo:          ev.periodo?.nombre || ev.periodo || '—',
+            puntaje:          ev.puntaje_total,
+            nivel:            ev.nivel_desempeno,
+            evaluador_nombre: ev.evaluador?.full_name || '—',
+            fecha:            new Date(ev.fecha_evaluacion).toLocaleDateString('es-CO'),
+            notas:            ev.notas || '',
+            tabla_completa:   tablaCompleta,
           },
         },
       });
@@ -697,26 +699,32 @@ function PerfilEmpleado({
         .from('profile').select('email, full_name').eq('id', empleado.user_id).single();
       if (!perfil?.email) throw new Error('El usuario vinculado no tiene email registrado');
 
-      const resumenCategorias = categorias.map(cat => {
-        const dets = detalles.filter(d => d.pregunta?.categoria_id === cat.id);
-        const prom = dets.length ? Math.round(dets.reduce((s,d)=>s+d.respuesta,0)/dets.length*10)/10 : 0;
-        return { categoria: cat.nombre, promedio: prom, total: dets.length };
-      });
+      // Construir tabla completa con preguntas y respuestas
+      const tablaCompleta = categorias.map(cat => ({
+        categoria: cat.nombre,
+        preguntas: detalles
+          .filter(d => d.pregunta?.categoria_id === cat.id)
+          .map(d => ({
+            texto:     d.pregunta?.texto || '',
+            respuesta: d.respuesta,
+          })),
+      })).filter(c => c.preguntas.length > 0);
+
       const { error } = await supabase.functions.invoke('send-email', {
         body: {
           type: 'evaluacion_retroalimentacion',
           to:   perfil.email,
           data: {
-            empleado_nombre:    empleado.nombre_completo,
-            empleado_cargo:     empleado.cargo || '\u2014',
-            empleado_depto:     empleado.departamento,
-            periodo:            detModal.periodo?.nombre || detModal.periodo || '\u2014',
-            puntaje:            detModal.puntaje_total,
-            nivel:              detModal.nivel_desempeno,
-            evaluador_nombre:   detModal.evaluador?.full_name || '\u2014',
-            fecha:              new Date(detModal.fecha_evaluacion).toLocaleDateString('es-CO'),
-            notas:              detModal.notas || '',
-            resumen_categorias: resumenCategorias,
+            empleado_nombre:  empleado.nombre_completo,
+            empleado_cargo:   empleado.cargo || '—',
+            empleado_depto:   empleado.departamento,
+            periodo:          detModal.periodo?.nombre || detModal.periodo || '—',
+            puntaje:          detModal.puntaje_total,
+            nivel:            detModal.nivel_desempeno,
+            evaluador_nombre: detModal.evaluador?.full_name || '—',
+            fecha:            new Date(detModal.fecha_evaluacion).toLocaleDateString('es-CO'),
+            notas:            detModal.notas || '',
+            tabla_completa:   tablaCompleta,
           },
         },
       });
