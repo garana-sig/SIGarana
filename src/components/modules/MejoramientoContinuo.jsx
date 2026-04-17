@@ -22,6 +22,7 @@ import ProductoNoConformeManager      from './MejoramientoContinuo/ProductoNoCon
 import QRSFManager                    from './MejoramientoContinuo/QRSF/QRSFManager';
 import RevisionDireccionManager       from './MejoramientoContinuo/RevisionDireccion/RevisionDireccionManager';
 import EvaluacionCompetenciasManager  from './MejoramientoContinuo/EvaluacionCompetencias/EvaluacionCompetenciasManager';
+import InformesManager                from './MejoramientoContinuo/Informes/InformesManager';
 
 const SUBMODULES = [
   {
@@ -106,12 +107,20 @@ const SUBMODULES = [
     gradient: 'linear-gradient(135deg, #6dbd96 0%, #2e5244 100%)',
     badge: 'Desempeño', enabled: true,
   },
+  // ── INFORMES — activado ───────────────────────────────────────────────────
+  {
+    id: 'informes', name: 'Informes',
+    permission: 'auditorias:informes:view',
+    description: 'Elaboración y seguimiento de informes de gestión por proceso',
+    icon: FileBarChart, color: '#6dbd96',
+    gradient: 'linear-gradient(135deg, #6dbd96 0%, #2e5244 100%)',
+    badge: 'Gestión', enabled: true,
+  },
   // ── Próximamente ──────────────────────────────────────────────────────────
-  { id: 'informes',             name: 'Informes',               permission: 'auditorias:informes:view',             description: 'Informes y reportes de gestión',    icon: FileBarChart,  color: '#6dbd96', enabled: false },
-  { id: 'requisitos_legales',   name: 'Requisitos Legales',     permission: 'auditorias:requisitos_legales:view',   description: 'Matriz de requisitos normativos',   icon: Scale,         color: '#2e5244', enabled: false },
-  { id: 'auditorias',           name: 'Auditorías',             permission: 'auditorias:auditorias_internas:view',  description: 'Plan, programa y hallazgos',        icon: Search,        color: '#6dbd96', enabled: false },
-  { id: 'evaluacion_auditores', name: 'Evaluación Auditores',   permission: 'auditorias:evaluacion_auditores:view', description: 'Competencias de auditores',         icon: Users,         color: '#6f7b2c', enabled: false },
-  { id: 'reporte_incidentes',   name: 'Reporte de Incidentes',  permission: 'auditorias:reporte_incidentes:view',   description: 'Incidentes y eventos',              icon: AlertCircle,   color: '#6dbd96', enabled: false },
+  { id: 'requisitos_legales',   name: 'Requisitos Legales',     permission: 'auditorias:requisitos_legales:view',   description: 'Matriz de requisitos normativos',   icon: Scale,        color: '#2e5244', enabled: false },
+  { id: 'auditorias',           name: 'Auditorías',             permission: 'auditorias:auditorias_internas:view',  description: 'Plan, programa y hallazgos',        icon: Search,       color: '#6dbd96', enabled: false },
+  { id: 'evaluacion_auditores', name: 'Evaluación Auditores',   permission: 'auditorias:evaluacion_auditores:view', description: 'Competencias de auditores',         icon: Users,        color: '#6f7b2c', enabled: false },
+  { id: 'reporte_incidentes',   name: 'Reporte de Incidentes',  permission: 'auditorias:reporte_incidentes:view',   description: 'Incidentes y eventos',              icon: AlertCircle,  color: '#6dbd96', enabled: false },
 ];
 
 // ── 🎨 Card Futurista ─────────────────────────────────────────────────────────
@@ -215,6 +224,8 @@ export default function MejoramientoContinuo() {
     return <RevisionDireccionManager onBack={() => setActiveSubmodule(null)} />;
   if (activeSubmodule === 'evaluacion_competencias')
     return <EvaluacionCompetenciasManager onBack={() => setActiveSubmodule(null)} />;
+  if (activeSubmodule === 'informes')
+    return <InformesManager onBack={() => setActiveSubmodule(null)} />;
 
   const canAccess = (mod) => {
     if (!mod.enabled) return false;

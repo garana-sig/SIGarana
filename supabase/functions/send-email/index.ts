@@ -1,13 +1,12 @@
 // supabase/functions/send-email/index.ts
 // ══════════════════════════════════════════════════════════════════════
-// Edge Function unificada: Documentos + Acciones de Mejora
+// Edge Function unificada: Documentos + Acciones de Mejora + Informes
 // Usa nodemailer + Gmail. Logo corporativo desde Supabase Storage.
 // ══════════════════════════════════════════════════════════════════════
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import nodemailer from "npm:nodemailer@6.9.7";
 
-// ── CORS — aplicar a TODAS las respuestas para evitar errores de browser ──
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -26,19 +25,19 @@ const APP_URL = "https://garana-sig.vercel.app";
 
 // ── Tipos ─────────────────────────────────────────────────────────────
 interface EmailRequest {
-  // Tipos documentos (existentes)
   type:
     | "pending"
     | "approved"
     | "rejected"
-    // Tipos acciones de mejora
     | "accion_mejora_creacion"
     | "accion_mejora_cierre_definitivo"
     | "accion_mejora_seguimiento_pendiente"
-    // Evaluación de Competencias
-    | "evaluacion_retroalimentacion";
+    | "evaluacion_retroalimentacion"
+    // ── Informes de Gestión ──────────────────────────────────────────
+    | "informe_enviado"
+    | "informe_revisado_ok"
+    | "informe_revision_solicitada";
   to: string | string[];
-  // Para documentos
   document?: {
     id: string;
     name: string;
@@ -47,11 +46,11 @@ interface EmailRequest {
     created_by_name: string;
   };
   rejection_reason?: string;
-  // Para acciones de mejora
   data?: {
-    consecutive: string;
-    finding: string;
-    responsible_name: string;
+    // Acciones de mejora
+    consecutive?: string;
+    finding?: string;
+    responsible_name?: string;
     closure_reason?: string;
     reviewed_by?: string;
     proposed_date?: string;
@@ -72,11 +71,18 @@ interface EmailRequest {
       categoria: string;
       preguntas: { texto: string; respuesta: number }[];
     }[];
+    // Informes de gestión
+    title?: string;
+    process_name?: string;
+    period?: string;
+    created_by?: string;
+    reviewer_name?: string;
+    review_notes?: string;
   };
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// TEMPLATE BASE — con logo real
+// TEMPLATE BASE
 // ══════════════════════════════════════════════════════════════════════
 const getBaseTemplate = (title: string, content: string): string => `
 <!DOCTYPE html>
@@ -101,6 +107,7 @@ const getBaseTemplate = (title: string, content: string): string => `
     .info-label { font-weight: 700; color: #2e5244; min-width: 140px; }
     .info-value { color: #333; }
     .reason-box { background-color: #f0f7f4; border-left: 4px solid #2e5244; padding: 16px 20px; margin: 20px 0; border-radius: 4px; font-size: 14px; color: #333; line-height: 1.6; }
+    .reason-box-warn { background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 16px 20px; margin: 20px 0; border-radius: 4px; font-size: 14px; color: #333; line-height: 1.6; }
     .btn { display: inline-block; background: linear-gradient(135deg, #6dbd96 0%, #2e5244 100%); color: white !important; padding: 13px 28px; text-decoration: none; border-radius: 6px; font-weight: 700; font-size: 14px; margin-top: 10px; }
     .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; }
     .badge-green  { background: #dcfce7; color: #166534; }
@@ -132,7 +139,7 @@ const getBaseTemplate = (title: string, content: string): string => `
 </html>`;
 
 // ══════════════════════════════════════════════════════════════════════
-// TEMPLATES — GESTIÓN DOCUMENTAL (sin cambios)
+// TEMPLATES — GESTIÓN DOCUMENTAL
 // ══════════════════════════════════════════════════════════════════════
 const getPendingTemplate = (data: EmailRequest): string => {
   const d = data.document!;
@@ -190,10 +197,8 @@ const getRejectedTemplate = (data: EmailRequest): string => {
 };
 
 // ══════════════════════════════════════════════════════════════════════
-// TEMPLATES — ACCIONES DE MEJORA (nuevos)
+// TEMPLATES — ACCIONES DE MEJORA
 // ══════════════════════════════════════════════════════════════════════
-
-// 1️⃣ Creación — se notifica al responsable y a gerencia
 const getAccionCreacionTemplate = (data: EmailRequest): string => {
   const d = data.data!;
   return getBaseTemplate("Nueva Acción de Mejora Asignada", `
@@ -204,23 +209,10 @@ const getAccionCreacionTemplate = (data: EmailRequest): string => {
         Por favor revisa los detalles y realiza el seguimiento correspondiente.
       </div>
       <div class="info-box">
-        <div class="info-row">
-          <div class="info-label">Consecutivo:</div>
-          <div class="info-value"><strong>${d.consecutive}</strong></div>
-        </div>
-        <div class="info-row">
-          <div class="info-label">Responsable:</div>
-          <div class="info-value">${d.responsible_name}</div>
-        </div>
-        <div class="info-row">
-          <div class="info-label">Creado por:</div>
-          <div class="info-value">${d.created_by_name || "—"}</div>
-        </div>
-        ${d.proposed_date ? `
-        <div class="info-row">
-          <div class="info-label">Fecha límite:</div>
-          <div class="info-value"><strong>${d.proposed_date}</strong></div>
-        </div>` : ""}
+        <div class="info-row"><div class="info-label">Consecutivo:</div><div class="info-value"><strong>${d.consecutive}</strong></div></div>
+        <div class="info-row"><div class="info-label">Responsable:</div><div class="info-value">${d.responsible_name}</div></div>
+        <div class="info-row"><div class="info-label">Creado por:</div><div class="info-value">${d.created_by_name || "—"}</div></div>
+        ${d.proposed_date ? `<div class="info-row"><div class="info-label">Fecha límite:</div><div class="info-value"><strong>${d.proposed_date}</strong></div></div>` : ""}
       </div>
       <div class="divider"></div>
       <p style="font-size:13px;font-weight:700;color:#2e5244;margin-bottom:8px;">📋 Hallazgo:</p>
@@ -231,35 +223,17 @@ const getAccionCreacionTemplate = (data: EmailRequest): string => {
     </div>`);
 };
 
-// 2️⃣ Cierre definitivo (SI) — acción archivada
 const getAccionCierreTemplate = (data: EmailRequest): string => {
   const d = data.data!;
   return getBaseTemplate("Acción de Mejora Cerrada", `
     <div class="content">
       <div class="title">✅ Acción de Mejora Cerrada Definitivamente</div>
-      <div class="message">
-        La siguiente acción de mejora ha sido <strong>cerrada con éxito</strong>
-        y archivada en el sistema.
-      </div>
+      <div class="message">La siguiente acción de mejora ha sido <strong>cerrada con éxito</strong> y archivada en el sistema.</div>
       <div class="info-box">
-        <div class="info-row">
-          <div class="info-label">Consecutivo:</div>
-          <div class="info-value"><strong>${d.consecutive}</strong></div>
-        </div>
-        <div class="info-row">
-          <div class="info-label">Responsable:</div>
-          <div class="info-value">${d.responsible_name}</div>
-        </div>
-        <div class="info-row">
-          <div class="info-label">Revisado por:</div>
-          <div class="info-value">${d.reviewed_by || "—"}</div>
-        </div>
-        <div class="info-row">
-          <div class="info-label">Estado:</div>
-          <div class="info-value">
-            <span class="badge badge-green">✅ Cierre definitivo</span>
-          </div>
-        </div>
+        <div class="info-row"><div class="info-label">Consecutivo:</div><div class="info-value"><strong>${d.consecutive}</strong></div></div>
+        <div class="info-row"><div class="info-label">Responsable:</div><div class="info-value">${d.responsible_name}</div></div>
+        <div class="info-row"><div class="info-label">Revisado por:</div><div class="info-value">${d.reviewed_by || "—"}</div></div>
+        <div class="info-row"><div class="info-label">Estado:</div><div class="info-value"><span class="badge badge-green">✅ Cierre definitivo</span></div></div>
       </div>
       <div class="divider"></div>
       <p style="font-size:13px;font-weight:700;color:#2e5244;margin-bottom:8px;">📋 Hallazgo original:</p>
@@ -272,40 +246,18 @@ const getAccionCierreTemplate = (data: EmailRequest): string => {
     </div>`);
 };
 
-// 3️⃣ Seguimiento pendiente (NO) — acción permanece abierta
 const getAccionSeguimientoTemplate = (data: EmailRequest): string => {
   const d = data.data!;
   return getBaseTemplate("Seguimiento Pendiente — Acción de Mejora", `
     <div class="content">
       <div class="title">🕐 Acción de Mejora — Seguimiento Pendiente</div>
-      <div class="message">
-        La siguiente acción de mejora <strong>permanece activa</strong> y requiere
-        seguimiento. Se ha registrado una nota de revisión.
-      </div>
+      <div class="message">La siguiente acción de mejora <strong>permanece activa</strong> y requiere seguimiento.</div>
       <div class="info-box">
-        <div class="info-row">
-          <div class="info-label">Consecutivo:</div>
-          <div class="info-value"><strong>${d.consecutive}</strong></div>
-        </div>
-        <div class="info-row">
-          <div class="info-label">Responsable:</div>
-          <div class="info-value">${d.responsible_name}</div>
-        </div>
-        <div class="info-row">
-          <div class="info-label">Revisado por:</div>
-          <div class="info-value">${d.reviewed_by || "—"}</div>
-        </div>
-        ${d.proposed_date ? `
-        <div class="info-row">
-          <div class="info-label">Fecha límite:</div>
-          <div class="info-value"><strong>${d.proposed_date}</strong></div>
-        </div>` : ""}
-        <div class="info-row">
-          <div class="info-label">Estado:</div>
-          <div class="info-value">
-            <span class="badge badge-amber">🕐 En espera de solución</span>
-          </div>
-        </div>
+        <div class="info-row"><div class="info-label">Consecutivo:</div><div class="info-value"><strong>${d.consecutive}</strong></div></div>
+        <div class="info-row"><div class="info-label">Responsable:</div><div class="info-value">${d.responsible_name}</div></div>
+        <div class="info-row"><div class="info-label">Revisado por:</div><div class="info-value">${d.reviewed_by || "—"}</div></div>
+        ${d.proposed_date ? `<div class="info-row"><div class="info-label">Fecha límite:</div><div class="info-value"><strong>${d.proposed_date}</strong></div></div>` : ""}
+        <div class="info-row"><div class="info-label">Estado:</div><div class="info-value"><span class="badge badge-amber">🕐 En espera de solución</span></div></div>
       </div>
       <div class="divider"></div>
       <p style="font-size:13px;font-weight:700;color:#2e5244;margin-bottom:8px;">📋 Hallazgo:</p>
@@ -317,7 +269,6 @@ const getAccionSeguimientoTemplate = (data: EmailRequest): string => {
       </div>
     </div>`);
 };
-
 
 // ══════════════════════════════════════════════════════════════════════
 // TEMPLATE — EVALUACIÓN DE COMPETENCIAS
@@ -340,7 +291,6 @@ const getEvaluacionTemplate = (req: EmailRequest): string => {
   };
   const color = nivelColor[d.nivel || ""] || "#6dbd96";
 
-  // ── Tabla completa de preguntas ──────────────────────────────────────
   const tablaHtml = (d.tabla_completa || []).map(cat => {
     const filasHtml = cat.preguntas.map((p, idx) => {
       const op = nivelShort[p.respuesta] || { texto: "—", color: "#888" };
@@ -352,7 +302,6 @@ const getEvaluacionTemplate = (req: EmailRequest): string => {
           ${marcado ? `<span style="display:inline-block;width:16px;height:16px;background:${c};border-radius:3px;color:white;font-size:11px;font-weight:bold;line-height:16px;text-align:center;">✓</span>` : ""}
         </td>`;
       }).join("");
-
       return `<tr style="background:${bg};border-bottom:1px solid #e5e7eb;">
         <td style="padding:6px 8px;font-size:11px;color:#333;line-height:1.4;">${p.texto}</td>
         ${celdas}
@@ -361,21 +310,16 @@ const getEvaluacionTemplate = (req: EmailRequest): string => {
         </td>
       </tr>`;
     }).join("");
-
     return `
       <tr style="background:#2e5244;">
-        <td colspan="7" style="padding:7px 10px;color:white;font-size:12px;font-weight:bold;">
-          ${cat.categoria}
-        </td>
+        <td colspan="7" style="padding:7px 10px;color:white;font-size:12px;font-weight:bold;">${cat.categoria}</td>
       </tr>
       ${filasHtml}`;
   }).join("");
 
   const tablaSeccion = tablaHtml ? `
     <div style="margin-top:24px;">
-      <p style="font-size:13px;font-weight:700;color:#2e5244;margin-bottom:10px;border-bottom:2px solid #6dbd96;padding-bottom:6px;">
-        Detalle de la Evaluación
-      </p>
+      <p style="font-size:13px;font-weight:700;color:#2e5244;margin-bottom:10px;border-bottom:2px solid #6dbd96;padding-bottom:6px;">Detalle de la Evaluación</p>
       <table style="width:100%;border-collapse:collapse;font-size:11px;">
         <thead>
           <tr style="background:#1a3330;color:white;">
@@ -400,18 +344,12 @@ const getEvaluacionTemplate = (req: EmailRequest): string => {
         los resultados de tu evaluación de desempeño correspondiente al período
         <strong>${d.periodo}</strong>.
       </div>
-
-      <!-- Resultado principal -->
       <div style="background:${color}18;border:2px solid ${color}40;border-radius:8px;padding:20px;text-align:center;margin:20px 0">
         <div style="font-size:48px;font-weight:900;color:${color};font-family:monospace;line-height:1">
           ${d.puntaje}<span style="font-size:24px;opacity:0.6">/85</span>
         </div>
-        <div style="margin-top:8px;display:inline-block;background:${color};color:white;padding:6px 20px;border-radius:20px;font-size:14px;font-weight:700">
-          ${d.nivel}
-        </div>
+        <div style="margin-top:8px;display:inline-block;background:${color};color:white;padding:6px 20px;border-radius:20px;font-size:14px;font-weight:700">${d.nivel}</div>
       </div>
-
-      <!-- Datos -->
       <div class="info-box">
         <div class="info-row"><div class="info-label">Empleado:</div><div class="info-value"><strong>${d.empleado_nombre}</strong></div></div>
         <div class="info-row"><div class="info-label">Cargo:</div><div class="info-value">${d.empleado_cargo}</div></div>
@@ -420,20 +358,140 @@ const getEvaluacionTemplate = (req: EmailRequest): string => {
         <div class="info-row"><div class="info-label">Fecha:</div><div class="info-value">${d.fecha}</div></div>
         <div class="info-row"><div class="info-label">Evaluado por:</div><div class="info-value">${d.evaluador_nombre}</div></div>
       </div>
-
-      <!-- Tabla completa de evaluación -->
       ${tablaSeccion}
-
-      <!-- Notas -->
-      ${d.notas ? `
+      ${d.notas ? `<div class="divider"></div><p style="font-size:14px;font-weight:700;color:#2e5244;margin-bottom:8px;">📝 Aspectos a Mejorar / Relevantes</p><div class="reason-box">${d.notas}</div>` : ""}
       <div class="divider"></div>
-      <p style="font-size:14px;font-weight:700;color:#2e5244;margin-bottom:8px;">📝 Aspectos a Mejorar / Relevantes</p>
-      <div class="reason-box">${d.notas}</div>` : ""}
+      <p style="font-size:12px;color:#888;text-align:center;font-style:italic;">Este informe es confidencial. Comunícate con Gestión Humana si tienes preguntas.</p>
+    </div>`);
+};
 
+// ══════════════════════════════════════════════════════════════════════
+// TEMPLATES — INFORMES DE GESTIÓN  ← NUEVOS
+// ══════════════════════════════════════════════════════════════════════
+
+// Notificación a gerencia cuando un usuario sube un informe
+const getInformeEnviadoTemplate = (req: EmailRequest): string => {
+  const d = req.data!;
+  return getBaseTemplate("Nuevo Informe de Gestión", `
+    <div class="content">
+      <div class="title">📄 Nuevo Informe Subido para Revisión</div>
+      <div class="message">
+        Se ha subido un nuevo informe de gestión al sistema que requiere tu revisión.
+      </div>
+      <div class="info-box">
+        <div class="info-row">
+          <div class="info-label">Consecutivo:</div>
+          <div class="info-value"><strong style="font-family:monospace;color:#2e5244">${d.consecutive}</strong></div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Título:</div>
+          <div class="info-value"><strong>${d.title}</strong></div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Proceso / Área:</div>
+          <div class="info-value">${d.process_name}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Período:</div>
+          <div class="info-value">${d.period}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Subido por:</div>
+          <div class="info-value">${d.created_by}</div>
+        </div>
+      </div>
+      <div style="background:#fff7ed;border-left:3px solid #d97706;padding:12px 16px;margin:16px 0;border-radius:4px;font-size:13px;color:#92400e">
+        ⏳ Este informe está pendiente de revisión.
+      </div>
+      <div style="text-align:center;margin-top:28px;">
+        <a href="${APP_URL}/mejoramiento-continuo" class="btn">Revisar Informe</a>
+      </div>
+    </div>`);
+};
+
+// Notificación al autor cuando gerencia aprueba el informe
+const getInformeRevisadoOkTemplate = (req: EmailRequest): string => {
+  const d = req.data!;
+  return getBaseTemplate("Informe Aprobado", `
+    <div class="content">
+      <div class="title">✅ Tu Informe Fue Aprobado</div>
+      <div class="message">
+        ¡Excelente! Tu informe de gestión ha sido <strong>revisado y aprobado</strong>
+        por la dirección.
+      </div>
+      <div class="info-box">
+        <div class="info-row">
+          <div class="info-label">Consecutivo:</div>
+          <div class="info-value"><strong style="font-family:monospace;color:#2e5244">${d.consecutive}</strong></div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Título:</div>
+          <div class="info-value"><strong>${d.title}</strong></div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Proceso / Área:</div>
+          <div class="info-value">${d.process_name}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Período:</div>
+          <div class="info-value">${d.period}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Revisado por:</div>
+          <div class="info-value">${d.reviewer_name}</div>
+        </div>
+      </div>
+      ${d.review_notes ? `
       <div class="divider"></div>
-      <p style="font-size:12px;color:#888;text-align:center;font-style:italic;">
-        Este informe es confidencial. Comunícate con Gestión Humana si tienes preguntas.
+      <p style="font-size:13px;font-weight:700;color:#2e5244;margin-bottom:8px;">📝 Observaciones de gerencia:</p>
+      <div class="reason-box">${d.review_notes}</div>` : ""}
+      <div style="text-align:center;margin-top:28px;">
+        <a href="${APP_URL}/mejoramiento-continuo" class="btn">Ver Informe</a>
+      </div>
+    </div>`);
+};
+
+// Notificación al autor cuando gerencia solicita correcciones
+const getInformeRevisionSolicitadaTemplate = (req: EmailRequest): string => {
+  const d = req.data!;
+  return getBaseTemplate("Se Solicitaron Correcciones en tu Informe", `
+    <div class="content">
+      <div class="title">🔄 Tu Informe Requiere Correcciones</div>
+      <div class="message">
+        La dirección ha revisado tu informe y ha solicitado que realices
+        algunas correcciones antes de aprobarlo.
+      </div>
+      <div class="info-box">
+        <div class="info-row">
+          <div class="info-label">Consecutivo:</div>
+          <div class="info-value"><strong style="font-family:monospace;color:#2e5244">${d.consecutive}</strong></div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Título:</div>
+          <div class="info-value"><strong>${d.title}</strong></div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Proceso / Área:</div>
+          <div class="info-value">${d.process_name}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Período:</div>
+          <div class="info-value">${d.period}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Revisado por:</div>
+          <div class="info-value">${d.reviewer_name}</div>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <p style="font-size:13px;font-weight:700;color:#dc2626;margin-bottom:8px;">📋 Correcciones solicitadas:</p>
+      <div class="reason-box-warn">${d.review_notes || "Sin observaciones adicionales"}</div>
+      <p style="font-size:13px;color:#666;margin-top:16px;">
+        Por favor ingresa al sistema, realiza las correcciones indicadas y vuelve a enviar tu informe.
       </p>
+      <div style="text-align:center;margin-top:28px;">
+        <a href="${APP_URL}/mejoramiento-continuo" class="btn">Editar y Reenviar Informe</a>
+      </div>
     </div>`);
 };
 
@@ -459,24 +517,27 @@ serve(async (req) => {
       );
     }
 
-    // Validar que llegue el payload correcto según el tipo
+    // Clasificar el tipo para validación del payload
+    const isDocType    = ["pending", "approved", "rejected"].includes(type);
     const isAccionType = type.startsWith("accion_mejora");
     const isEvalType   = type === "evaluacion_retroalimentacion";
-    if (!isAccionType && !isEvalType && !document) {
+    const isInformeType = type.startsWith("informe_");
+
+    if (isDocType && !document) {
       return new Response(
         JSON.stringify({ error: "Falta el campo document para tipos de documento" }),
         { status: 400, headers: JSON_HEADERS }
       );
     }
-    if ((isAccionType || isEvalType) && !data) {
+    if ((isAccionType || isEvalType || isInformeType) && !data) {
       return new Response(
-        JSON.stringify({ error: "Falta el campo data para tipos de acción de mejora" }),
+        JSON.stringify({ error: "Falta el campo data para este tipo de email" }),
         { status: 400, headers: JSON_HEADERS }
       );
     }
 
     // Credenciales Gmail
-    const GMAIL_USER = Deno.env.get("GMAIL_USER");
+    const GMAIL_USER         = Deno.env.get("GMAIL_USER");
     const GMAIL_APP_PASSWORD = Deno.env.get("GMAIL_APP_PASSWORD");
 
     if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
@@ -492,12 +553,12 @@ serve(async (req) => {
       auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
     });
 
-    // ── Generar subject y html según tipo ────────────────────────────
     let subject = "";
-    let html = "";
+    let html    = "";
 
     switch (type) {
-      // ── Gestión Documental ────────────────────────────────────────
+
+      // ── Gestión Documental ──────────────────────────────────────────
       case "pending":
         subject = `📄 Documento pendiente de aprobación: ${document!.code}`;
         html = getPendingTemplate({ type, to, document, rejection_reason });
@@ -511,7 +572,7 @@ serve(async (req) => {
         html = getRejectedTemplate({ type, to, document, rejection_reason });
         break;
 
-      // ── Acciones de Mejora ────────────────────────────────────────
+      // ── Acciones de Mejora ──────────────────────────────────────────
       case "accion_mejora_creacion":
         subject = `🎯 Nueva Acción de Mejora asignada: ${data!.consecutive}`;
         html = getAccionCreacionTemplate({ type, to, data });
@@ -531,6 +592,20 @@ serve(async (req) => {
         html = getEvaluacionTemplate({ type, to, data });
         break;
 
+      // ── Informes de Gestión ─────────────────────────────────────────
+      case "informe_enviado":
+        subject = `📄 Nuevo informe para revisión: ${data!.consecutive} — ${data!.title}`;
+        html = getInformeEnviadoTemplate({ type, to, data });
+        break;
+      case "informe_revisado_ok":
+        subject = `✅ Tu informe fue aprobado: ${data!.consecutive}`;
+        html = getInformeRevisadoOkTemplate({ type, to, data });
+        break;
+      case "informe_revision_solicitada":
+        subject = `🔄 Se solicitaron correcciones en tu informe: ${data!.consecutive}`;
+        html = getInformeRevisionSolicitadaTemplate({ type, to, data });
+        break;
+
       default:
         return new Response(
           JSON.stringify({ error: `Tipo de email no reconocido: ${type}` }),
@@ -543,7 +618,7 @@ serve(async (req) => {
 
     const info = await transporter.sendMail({
       from: `Garana SIG <${GMAIL_USER}>`,
-      to: recipients.join(", "),
+      to:   recipients.join(", "),
       subject,
       html,
     });
@@ -552,11 +627,11 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        success: true,
-        message: `Email enviado a ${recipients.length} destinatario(s)`,
+        success:    true,
+        message:    `Email enviado a ${recipients.length} destinatario(s)`,
         type,
         recipients,
-        messageId: info.messageId,
+        messageId:  info.messageId,
       }),
       { status: 200, headers: JSON_HEADERS }
     );
