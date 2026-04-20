@@ -1,5 +1,5 @@
 // src/components/modules/MejoramientoContinuo/Actas/FormularioActa.jsx
-// ✅ v2.0 — Con sección de Evidencias Fotográficas
+// ✅ v3.0 — Con selector DUAL de asistentes (usuarios sistema + manual)
 
 import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
@@ -36,13 +36,14 @@ import {
   Camera,
   ImagePlus,
   ZoomIn,
+  UserCheck,
+  Edit3,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 
 const C = { green: '#2e5244', mint: '#6dbd96', olive: '#6f7b2c', sand: '#dedecc' };
 
-// Tipos aceptados para fotos
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_PHOTO_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_PHOTOS = 20;
@@ -60,24 +61,32 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
     approved_by: '',
   });
 
-  const [attendees,    setAttendees]    = useState([{ id: Date.now(), name: '', position: '' }]);
-  const [commitments,  setCommitments]  = useState([{ id: Date.now(), activity: '', responsible_id: '', due_date: '' }]);
+  // ✨ NUEVO: attendees con user_id opcional
+  const [attendees, setAttendees] = useState([
+    { 
+      id: Date.now(), 
+      name: '', 
+      position: '', 
+      user_id: null,        // ← FK a profile (null si manual)
+      input_mode: 'manual'  // ← 'manual' o 'system'
+    }
+  ]);
+  
+  const [commitments, setCommitments] = useState([
+    { id: Date.now(), activity: '', responsible_id: '', due_date: '' }
+  ]);
 
-  // ── FOTOS ──────────────────────────────────────────────────────
-  // existingPhotos: fotos ya guardadas en BD (tienen .path y .url o .name)
-  // newPhotos: fotos recién seleccionadas (File[] con preview local)
-  // deletedPaths: rutas de fotos a eliminar del Storage al guardar
+  // Fotos
   const [existingPhotos, setExistingPhotos] = useState([]);
-  const [newPhotos,       setNewPhotos]      = useState([]); // {file, preview, name}
-  const [deletedPaths,    setDeletedPaths]   = useState([]);
-  const [photoError,      setPhotoError]     = useState('');
-  const [lightboxSrc,     setLightboxSrc]    = useState(null);
+  const [newPhotos, setNewPhotos] = useState([]);
+  const [deletedPaths, setDeletedPaths] = useState([]);
+  const [photoError, setPhotoError] = useState('');
+  const [lightboxSrc, setLightboxSrc] = useState(null);
   const photoInputRef = useRef();
-  // ────────────────────────────────────────────────────────────────
 
-  const [errors,       setErrors]       = useState({});
+  const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [usuarios,     setUsuarios]     = useState([]);
+  const [usuarios, setUsuarios] = useState([]);
   const [loadingUsuarios, setLoadingUsuarios] = useState(false);
 
   // Cargar usuarios
@@ -105,22 +114,27 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
   useEffect(() => {
     if (actaToEdit) {
       setFormData({
-        title:       actaToEdit.title        || '',
+        title: actaToEdit.title || '',
         meeting_date: actaToEdit.meeting_date || '',
-        location:    actaToEdit.location     || '',
-        objective:   actaToEdit.objective    || '',
-        agenda:      actaToEdit.agenda       || '',
-        development: actaToEdit.development  || '',
-        approved_by: actaToEdit.approved_by  || '',
+        location: actaToEdit.location || '',
+        objective: actaToEdit.objective || '',
+        agenda: actaToEdit.agenda || '',
+        development: actaToEdit.development || '',
+        approved_by: actaToEdit.approved_by || '',
       });
-      if (actaToEdit.attendees?.length > 0) {
+
+      // ✨ NUEVO: Cargar asistentes con user_id
+      if (actaToEdit.attendees && actaToEdit.attendees.length > 0) {
         setAttendees(actaToEdit.attendees.map(a => ({
           id: a.id || Date.now() + Math.random(),
           name: a.name,
-          position: a.position
+          position: a.position,
+          user_id: a.user_id || null,
+          input_mode: a.user_id ? 'system' : 'manual'
         })));
       }
-      if (actaToEdit.commitments?.length > 0) {
+
+      if (actaToEdit.commitments && actaToEdit.commitments.length > 0) {
         setCommitments(actaToEdit.commitments.map(c => ({
           id: c.id || Date.now() + Math.random(),
           activity: c.activity,
@@ -128,8 +142,8 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
           due_date: c.due_date
         })));
       }
-      // Cargar fotos existentes (pueden tener URL firmada o no)
-      if (actaToEdit.photos?.length > 0) {
+
+      if (actaToEdit.photos && actaToEdit.photos.length > 0) {
         setExistingPhotos(actaToEdit.photos);
       }
     }
@@ -140,73 +154,162 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
     if (errors[field]) setErrors(prev => ({ ...prev, [field]: null }));
   };
 
-  // ── ASISTENTES ─────────────────────────────────────────────────
-  const addAttendee    = () => setAttendees(p => [...p, { id: Date.now(), name: '', position: '' }]);
-  const removeAttendee = (id) => { if (attendees.length > 1) setAttendees(p => p.filter(a => a.id !== id)); };
-  const updateAttendee = (id, f, v) => setAttendees(p => p.map(a => a.id === id ? { ...a, [f]: v } : a));
+  // ═══════════════════════════════════════════════════════
+  // ✨ NUEVO: FUNCIONES PARA ASISTENTES CON SELECTOR DUAL
+  // ═══════════════════════════════════════════════════════
+  
+  const addAttendee = () => {
+    setAttendees(prev => [
+      ...prev,
+      { 
+        id: Date.now(), 
+        name: '', 
+        position: '', 
+        user_id: null,
+        input_mode: 'manual'
+      }
+    ]);
+  };
 
-  // ── COMPROMISOS ────────────────────────────────────────────────
-  const addCommitment    = () => setCommitments(p => [...p, { id: Date.now(), activity: '', responsible_id: '', due_date: '' }]);
-  const removeCommitment = (id) => { if (commitments.length > 1) setCommitments(p => p.filter(c => c.id !== id)); };
-  const updateCommitment = (id, f, v) => setCommitments(p => p.map(c => c.id === id ? { ...c, [f]: v } : c));
+  const removeAttendee = (id) => {
+    setAttendees(prev => prev.filter(a => a.id !== id));
+  };
 
-  // ── FOTOS — agregar ────────────────────────────────────────────
+  // Cambiar modo de entrada
+  const toggleAttendeeMode = (id) => {
+    setAttendees(prev => prev.map(a => {
+      if (a.id !== id) return a;
+      
+      const newMode = a.input_mode === 'manual' ? 'system' : 'manual';
+      
+      // Al cambiar a manual, limpiar user_id pero mantener name/position
+      // Al cambiar a sistema, limpiar name/position
+      return {
+        ...a,
+        input_mode: newMode,
+        user_id: newMode === 'system' ? null : null,
+        name: newMode === 'system' ? '' : a.name,
+        position: newMode === 'system' ? '' : a.position
+      };
+    }));
+  };
+
+  // Seleccionar usuario del sistema
+  const selectSystemUser = (attendeeId, userId) => {
+    const selectedUser = usuarios.find(u => u.id === userId);
+    if (!selectedUser) return;
+
+    setAttendees(prev => prev.map(a => {
+      if (a.id !== attendeeId) return a;
+      
+      return {
+        ...a,
+        user_id: userId,
+        name: selectedUser.full_name,
+        position: selectedUser.role === 'admin' ? 'Administrador' 
+                : selectedUser.role === 'gerencia' ? 'Gerencia'
+                : 'Usuario'
+      };
+    }));
+  };
+
+  // Actualizar campos manuales
+  const updateAttendeeManual = (id, field, value) => {
+    setAttendees(prev => prev.map(a => 
+      a.id === id ? { ...a, [field]: value } : a
+    ));
+  };
+
+  // ═══════════════════════════════════════════════════════
+  // COMPROMISOS (sin cambios)
+  // ═══════════════════════════════════════════════════════
+  
+  const addCommitment = () => {
+    setCommitments(prev => [
+      ...prev,
+      { id: Date.now(), activity: '', responsible_id: '', due_date: '' }
+    ]);
+  };
+
+  const removeCommitment = (id) => {
+    setCommitments(prev => prev.filter(c => c.id !== id));
+  };
+
+  const updateCommitment = (id, field, value) => {
+    setCommitments(prev => prev.map(c => 
+      c.id === id ? { ...c, [field]: value } : c
+    ));
+  };
+
+  // ═══════════════════════════════════════════════════════
+  // FOTOS (sin cambios)
+  // ═══════════════════════════════════════════════════════
+  
   const handlePhotoSelect = (e) => {
     const files = Array.from(e.target.files || []);
-    setPhotoError('');
+    if (files.length === 0) return;
 
-    const totalAfter = existingPhotos.length + newPhotos.length + files.length;
-    if (totalAfter > MAX_PHOTOS) {
-      setPhotoError(`Máximo ${MAX_PHOTOS} fotos por acta`);
-      e.target.value = '';
+    setPhotoError('');
+    const currentTotal = existingPhotos.length + newPhotos.length;
+
+    if (currentTotal + files.length > MAX_PHOTOS) {
+      setPhotoError(`Máximo ${MAX_PHOTOS} fotos permitidas`);
       return;
     }
 
     const validFiles = [];
     for (const file of files) {
       if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-        setPhotoError(`"${file.name}" no es una imagen válida (JPG, PNG, WEBP, GIF)`);
+        setPhotoError(`${file.name} no es un tipo de imagen válido`);
         continue;
       }
       if (file.size > MAX_PHOTO_SIZE) {
-        setPhotoError(`"${file.name}" supera 5MB`);
+        setPhotoError(`${file.name} excede el tamaño máximo (5MB)`);
         continue;
       }
-      validFiles.push({
-        file,
-        preview: URL.createObjectURL(file),
-        name: file.name,
-        id: Date.now() + Math.random()
-      });
+      validFiles.push(file);
     }
 
-    setNewPhotos(p => [...p, ...validFiles]);
-    e.target.value = '';
+    const newPhotoObjects = validFiles.map(file => ({
+      file,
+      preview: URL.createObjectURL(file),
+      name: file.name
+    }));
+
+    setNewPhotos(prev => [...prev, ...newPhotoObjects]);
+    if (photoInputRef.current) photoInputRef.current.value = '';
   };
 
-  // ── FOTOS — eliminar foto NUEVA (aún no guardada) ──────────────
-  const removeNewPhoto = (photoId) => {
-    setNewPhotos(p => {
-      const removed = p.find(x => x.id === photoId);
-      if (removed) URL.revokeObjectURL(removed.preview);
-      return p.filter(x => x.id !== photoId);
+  const removeNewPhoto = (index) => {
+    setNewPhotos(prev => {
+      const updated = [...prev];
+      URL.revokeObjectURL(updated[index].preview);
+      updated.splice(index, 1);
+      return updated;
     });
   };
 
-  // ── FOTOS — eliminar foto EXISTENTE (ya guardada) ─────────────
-  const removeExistingPhoto = (photo) => {
-    setDeletedPaths(p => [...p, photo.path]);
-    setExistingPhotos(p => p.filter(x => x.path !== photo.path));
+  const removeExistingPhoto = (index) => {
+    const photo = existingPhotos[index];
+    setDeletedPaths(prev => [...prev, photo.path]);
+    setExistingPhotos(prev => {
+      const updated = [...prev];
+      updated.splice(index, 1);
+      return updated;
+    });
   };
 
-  // ── VALIDACIÓN ─────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════
+  // VALIDACIÓN
+  // ═══════════════════════════════════════════════════════
+  
   const validateForm = () => {
     const newErrors = {};
     if (!formData.meeting_date) newErrors.meeting_date = 'La fecha es obligatoria';
-    if (!formData.location)     newErrors.location     = 'El lugar es obligatorio';
-    if (!formData.objective)    newErrors.objective    = 'El objetivo es obligatorio';
-    if (!formData.agenda)       newErrors.agenda       = 'El orden del día es obligatorio';
-    if (!formData.development)  newErrors.development  = 'El desarrollo es obligatorio';
+    if (!formData.location) newErrors.location = 'El lugar es obligatorio';
+    if (!formData.objective) newErrors.objective = 'El objetivo es obligatorio';
+    if (!formData.agenda) newErrors.agenda = 'El orden del día es obligatorio';
+    if (!formData.development) newErrors.development = 'El desarrollo es obligatorio';
 
     const validAttendees = attendees.filter(a => a.name.trim() && a.position.trim());
     if (validAttendees.length === 0) newErrors.attendees = 'Debe haber al menos un asistente';
@@ -221,30 +324,43 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
     return Object.keys(newErrors).length === 0;
   };
 
-  // ── GUARDAR ────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════
+  // GUARDAR
+  // ═══════════════════════════════════════════════════════
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
 
     setIsSubmitting(true);
     try {
+      // ✨ NUEVO: Incluir user_id en asistentes
       const validAttendees = attendees
         .filter(a => a.name.trim() && a.position.trim())
-        .map((a, i) => ({ name: a.name.trim(), position: a.position.trim(), order_index: i + 1 }));
+        .map((a, i) => ({
+          name: a.name.trim(),
+          position: a.position.trim(),
+          user_id: a.user_id || null, // ← NUEVO
+          order_index: i + 1
+        }));
 
       const validCommitments = commitments
         .filter(c => c.activity.trim() && c.responsible_id && c.due_date)
-        .map((c, i) => ({ activity: c.activity.trim(), responsible_id: c.responsible_id, due_date: c.due_date, order_index: i + 1 }));
+        .map((c, i) => ({
+          activity: c.activity.trim(),
+          responsible_id: c.responsible_id,
+          due_date: c.due_date,
+          order_index: i + 1
+        }));
 
       const actaData = {
         ...formData,
-        approved_by:      formData.approved_by || null,
-        attendees:        validAttendees,
-        commitments:      validCommitments,
-        // Fotos
-        photos:           existingPhotos,       // fotos existentes (sin las eliminadas)
-        newPhotoFiles:    newPhotos.map(p => p.file), // File[] nuevas
-        deletedPhotoPaths: deletedPaths,        // paths a borrar del Storage
+        approved_by: formData.approved_by || null,
+        attendees: validAttendees,
+        commitments: validCommitments,
+        photos: existingPhotos,
+        newPhotoFiles: newPhotos.map(p => p.file),
+        deletedPhotoPaths: deletedPaths,
       };
 
       await onSave(actaData);
@@ -298,24 +414,35 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
                 <Calendar className="h-4 w-4" /> 1. Fecha de reunión *
               </Label>
               <Input
-                id="meeting_date" type="date"
+                id="meeting_date"
+                type="date"
                 value={formData.meeting_date}
                 onChange={e => handleInputChange('meeting_date', e.target.value)}
                 className={errors.meeting_date ? 'border-red-500' : ''}
               />
-              {errors.meeting_date && <p className="text-sm text-red-500 flex items-center gap-1"><AlertCircle className="h-3 w-3" />{errors.meeting_date}</p>}
+              {errors.meeting_date && (
+                <p className="text-sm text-red-500 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />{errors.meeting_date}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="location" className="flex items-center gap-2">
                 <MapPin className="h-4 w-4" /> 2. Lugar *
               </Label>
               <Input
-                id="location" type="text" placeholder="Ej: Sala de Juntas Principal"
+                id="location"
+                type="text"
+                placeholder="Ej: Sala de Juntas Principal"
                 value={formData.location}
                 onChange={e => handleInputChange('location', e.target.value)}
                 className={errors.location ? 'border-red-500' : ''}
               />
-              {errors.location && <p className="text-sm text-red-500 flex items-center gap-1"><AlertCircle className="h-3 w-3" />{errors.location}</p>}
+              {errors.location && (
+                <p className="text-sm text-red-500 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />{errors.location}
+                </p>
+              )}
             </div>
           </div>
 
@@ -324,7 +451,9 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
               <FileText className="h-4 w-4" /> Título del acta (opcional)
             </Label>
             <Input
-              id="title" type="text" placeholder="Ej: Revisión trimestral de indicadores"
+              id="title"
+              type="text"
+              placeholder="Ej: Revisión trimestral de indicadores"
               value={formData.title}
               onChange={e => handleInputChange('title', e.target.value)}
               maxLength={200}
@@ -335,76 +464,219 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
           <div className="space-y-2">
             <Label htmlFor="objective">3. Objetivo *</Label>
             <Textarea
-              id="objective" rows={2} placeholder="Objetivo de la reunión..."
+              id="objective"
+              rows={2}
+              placeholder="Objetivo de la reunión..."
               value={formData.objective}
               onChange={e => handleInputChange('objective', e.target.value)}
               className={errors.objective ? 'border-red-500' : ''}
             />
-            {errors.objective && <p className="text-sm text-red-500 flex items-center gap-1"><AlertCircle className="h-3 w-3" />{errors.objective}</p>}
+            {errors.objective && (
+              <p className="text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />{errors.objective}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="agenda">4. Orden del día *</Label>
             <Textarea
-              id="agenda" rows={4} placeholder={"1. Tema 1\n2. Tema 2\n3. Tema 3..."}
+              id="agenda"
+              rows={4}
+              placeholder={"1. Tema 1\n2. Tema 2\n3. Tema 3..."}
               value={formData.agenda}
               onChange={e => handleInputChange('agenda', e.target.value)}
               className={errors.agenda ? 'border-red-500' : ''}
             />
-            {errors.agenda && <p className="text-sm text-red-500 flex items-center gap-1"><AlertCircle className="h-3 w-3" />{errors.agenda}</p>}
+            {errors.agenda && (
+              <p className="text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />{errors.agenda}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="approved_by">Aprobado por (opcional)</Label>
+            <div className="flex gap-2">
+              <Select
+                value={formData.approved_by}
+                onValueChange={v => handleInputChange('approved_by', v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Sin aprobar" />
+                </SelectTrigger>
+                <SelectContent>
+                  {usuarios
+                    .filter(u => u.role === 'admin' || u.role === 'gerencia')
+                    .map(u => (
+                      <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              {formData.approved_by && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleInputChange('approved_by', '')}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
 
       {/* ═══════════════════════════════════════════════════════
-          SECCIÓN 2: ASISTENTES
+          ✨ SECCIÓN 2: ASISTENTES CON SELECTOR DUAL
       ═══════════════════════════════════════════════════════ */}
       <Card className="border-2" style={{ borderColor: C.mint }}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2" style={{ color: C.green }}>
-                <Users className="h-5 w-5" /> 5. Asistentes
+                <Users className="h-5 w-5" /> 5. Asistentes *
               </CardTitle>
-              <CardDescription>Personas que participaron en la reunión</CardDescription>
+              <CardDescription>
+                Seleccione usuarios del sistema o ingrese asistentes manualmente
+              </CardDescription>
             </div>
-            <Button type="button" size="sm" onClick={addAttendee} style={{ backgroundColor: C.mint }} className="text-white">
+            <Button
+              type="button"
+              size="sm"
+              onClick={addAttendee}
+              style={{ backgroundColor: C.mint }}
+              className="text-white"
+            >
               <Plus className="h-4 w-4 mr-2" /> Agregar
             </Button>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">#</TableHead>
-                  <TableHead>Nombre *</TableHead>
-                  <TableHead>Cargo *</TableHead>
-                  <TableHead className="w-20 text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {attendees.map((attendee, index) => (
-                  <TableRow key={attendee.id}>
-                    <TableCell className="text-center text-sm text-gray-500">{index + 1}</TableCell>
-                    <TableCell>
-                      <Input placeholder="Nombre completo" value={attendee.name} onChange={e => updateAttendee(attendee.id, 'name', e.target.value)} />
-                    </TableCell>
-                    <TableCell>
-                      <Input placeholder="Cargo o posición" value={attendee.position} onChange={e => updateAttendee(attendee.id, 'position', e.target.value)} />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button type="button" size="sm" variant="ghost" onClick={() => removeAttendee(attendee.id)} disabled={attendees.length === 1} className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50">
-                        <Trash2 className="h-4 w-4" />
+          <div className="space-y-4">
+            {attendees.map((attendee, index) => (
+              <div
+                key={attendee.id}
+                className="border rounded-lg p-4"
+                style={{ borderColor: C.sand }}
+              >
+                <div className="flex items-start gap-4">
+                  {/* Número */}
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold"
+                    style={{ backgroundColor: C.sand, color: C.green }}
+                  >
+                    {index + 1}
+                  </div>
+
+                  <div className="flex-1 space-y-3">
+                    {/* Toggle: Sistema vs Manual */}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={attendee.input_mode === 'system' ? 'default' : 'outline'}
+                        onClick={() => toggleAttendeeMode(attendee.id)}
+                        style={
+                          attendee.input_mode === 'system'
+                            ? { backgroundColor: C.green, color: 'white' }
+                            : {}
+                        }
+                      >
+                        <UserCheck className="h-4 w-4 mr-2" />
+                        Usuario Sistema
                       </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={attendee.input_mode === 'manual' ? 'default' : 'outline'}
+                        onClick={() => toggleAttendeeMode(attendee.id)}
+                        style={
+                          attendee.input_mode === 'manual'
+                            ? { backgroundColor: C.green, color: 'white' }
+                            : {}
+                        }
+                      >
+                        <Edit3 className="h-4 w-4 mr-2" />
+                        Escribir Manual
+                      </Button>
+                    </div>
+
+                    {/* Modo: SISTEMA */}
+                    {attendee.input_mode === 'system' && (
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label className="text-sm">Seleccionar usuario</Label>
+                          <Select
+                            value={attendee.user_id || ''}
+                            onValueChange={v => selectSystemUser(attendee.id, v)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={loadingUsuarios ? 'Cargando...' : 'Seleccionar usuario...'} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {usuarios.map(u => (
+                                <SelectItem key={u.id} value={u.id}>
+                                  {u.full_name} ({u.role})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Vista previa */}
+                        {attendee.user_id && (
+                          <div className="p-3 rounded" style={{ backgroundColor: C.sand }}>
+                            <p className="text-sm font-medium">{attendee.name}</p>
+                            <p className="text-xs text-gray-600">{attendee.position}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Modo: MANUAL */}
+                    {attendee.input_mode === 'manual' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label className="text-sm">Nombre *</Label>
+                          <Input
+                            placeholder="Nombre completo"
+                            value={attendee.name}
+                            onChange={e => updateAttendeeManual(attendee.id, 'name', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-sm">Cargo *</Label>
+                          <Input
+                            placeholder="Cargo o posición"
+                            value={attendee.position}
+                            onChange={e => updateAttendeeManual(attendee.id, 'position', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Botón eliminar */}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => removeAttendee(attendee.id)}
+                    disabled={attendees.length === 1}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
           </div>
-          {errors.attendees && <p className="text-sm text-red-500 flex items-center gap-1 mt-2"><AlertCircle className="h-3 w-3" />{errors.attendees}</p>}
+          {errors.attendees && (
+            <p className="text-sm text-red-500 flex items-center gap-1 mt-2">
+              <AlertCircle className="h-3 w-3" />{errors.attendees}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -424,7 +696,11 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
             onChange={e => handleInputChange('development', e.target.value)}
             className={errors.development ? 'border-red-500' : ''}
           />
-          {errors.development && <p className="text-sm text-red-500 flex items-center gap-1 mt-2"><AlertCircle className="h-3 w-3" />{errors.development}</p>}
+          {errors.development && (
+            <p className="text-sm text-red-500 flex items-center gap-1 mt-2">
+              <AlertCircle className="h-3 w-3" />{errors.development}
+            </p>
+          )}
           <p className="text-xs text-gray-500 mt-2">{formData.development.length} caracteres</p>
         </CardContent>
       </Card>
@@ -441,7 +717,13 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
               </CardTitle>
               <CardDescription>Actividades y responsables derivados de la reunión</CardDescription>
             </div>
-            <Button type="button" size="sm" onClick={addCommitment} style={{ backgroundColor: C.mint }} className="text-white">
+            <Button
+              type="button"
+              size="sm"
+              onClick={addCommitment}
+              style={{ backgroundColor: C.mint }}
+              className="text-white"
+            >
               <Plus className="h-4 w-4 mr-2" /> Agregar
             </Button>
           </div>
@@ -463,23 +745,44 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
                   <TableRow key={commitment.id}>
                     <TableCell className="text-center text-sm text-gray-500">{index + 1}</TableCell>
                     <TableCell>
-                      <Textarea rows={2} placeholder="Descripción de la actividad..." value={commitment.activity} onChange={e => updateCommitment(commitment.id, 'activity', e.target.value)} />
+                      <Textarea
+                        rows={2}
+                        placeholder="Descripción de la actividad..."
+                        value={commitment.activity}
+                        onChange={e => updateCommitment(commitment.id, 'activity', e.target.value)}
+                      />
                     </TableCell>
                     <TableCell>
-                      <Select value={commitment.responsible_id} onValueChange={v => updateCommitment(commitment.id, 'responsible_id', v)}>
+                      <Select
+                        value={commitment.responsible_id}
+                        onValueChange={v => updateCommitment(commitment.id, 'responsible_id', v)}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder={loadingUsuarios ? 'Cargando...' : 'Seleccionar...'} />
                         </SelectTrigger>
                         <SelectContent>
-                          {usuarios.map(u => <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>)}
+                          {usuarios.map(u => (
+                            <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </TableCell>
                     <TableCell>
-                      <Input type="date" value={commitment.due_date} onChange={e => updateCommitment(commitment.id, 'due_date', e.target.value)} />
+                      <Input
+                        type="date"
+                        value={commitment.due_date}
+                        onChange={e => updateCommitment(commitment.id, 'due_date', e.target.value)}
+                      />
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button type="button" size="sm" variant="ghost" onClick={() => removeCommitment(commitment.id)} disabled={commitments.length === 1} className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => removeCommitment(commitment.id)}
+                        disabled={commitments.length === 1}
+                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </TableCell>
@@ -488,215 +791,171 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
               </TableBody>
             </Table>
           </div>
-          {errors.commitments && <p className="text-sm text-red-500 flex items-center gap-1 mt-2"><AlertCircle className="h-3 w-3" />{errors.commitments}</p>}
-        </CardContent>
-      </Card>
-
-      {/* ═══════════════════════════════════════════════════════
-          SECCIÓN 5 🆕: EVIDENCIAS FOTOGRÁFICAS
-      ═══════════════════════════════════════════════════════ */}
-      <Card className="border-2" style={{ borderColor: C.olive }}>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2" style={{ color: C.green }}>
-                <Camera className="h-5 w-5" />
-                8. Evidencias Fotográficas
-                {totalPhotos > 0 && (
-                  <span className="text-sm font-normal px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: C.mint }}>
-                    {totalPhotos} foto{totalPhotos !== 1 ? 's' : ''}
-                  </span>
-                )}
-              </CardTitle>
-              <CardDescription>
-                Fotos de la reunión — opcional, máx {MAX_PHOTOS} fotos de 5MB c/u (JPG, PNG, WEBP)
-              </CardDescription>
-            </div>
-            <Button
-              type="button" size="sm"
-              onClick={() => photoInputRef.current?.click()}
-              disabled={totalPhotos >= MAX_PHOTOS}
-              style={{ backgroundColor: C.olive }}
-              className="text-white"
-            >
-              <ImagePlus className="h-4 w-4 mr-2" />
-              Agregar fotos
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
-            multiple
-            className="hidden"
-            onChange={handlePhotoSelect}
-          />
-
-          {photoError && (
-            <div className="flex items-center gap-2 p-3 mb-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-              <AlertCircle className="h-4 w-4 flex-shrink-0" />
-              <span>{photoError}</span>
-            </div>
-          )}
-
-          {totalPhotos === 0 ? (
-            /* Zona de drop vacía */
-            <button
-              type="button"
-              onClick={() => photoInputRef.current?.click()}
-              className="w-full border-2 border-dashed rounded-xl py-10 flex flex-col items-center gap-3 hover:bg-gray-50 transition-colors"
-              style={{ borderColor: C.sand }}
-            >
-              <Camera className="h-10 w-10 text-gray-300" />
-              <div className="text-center">
-                <p className="text-sm font-medium text-gray-500">Click para agregar fotos</p>
-                <p className="text-xs text-gray-400 mt-1">JPG, PNG, WEBP · máx 5MB por foto · hasta {MAX_PHOTOS} fotos</p>
-              </div>
-            </button>
-          ) : (
-            /* Grid de miniaturas */
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-
-              {/* Fotos EXISTENTES (ya guardadas en BD) */}
-              {existingPhotos.map((photo, idx) => (
-                <div key={`existing-${idx}`} className="relative group aspect-square">
-                  <img
-                    src={photo.url || ''}
-                    alt={photo.name || `Foto ${idx + 1}`}
-                    className="w-full h-full object-cover rounded-lg border-2 border-gray-200 cursor-pointer"
-                    style={{ borderColor: C.sand }}
-                    onClick={() => photo.url && setLightboxSrc(photo.url)}
-                    onError={e => { e.target.src = ''; e.target.className = 'w-full h-full rounded-lg bg-gray-100'; }}
-                  />
-                  {/* Overlay hover */}
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all rounded-lg flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-                    {photo.url && (
-                      <button type="button" onClick={() => setLightboxSrc(photo.url)} className="p-1.5 rounded-full bg-white/80 hover:bg-white">
-                        <ZoomIn className="h-3.5 w-3.5 text-gray-700" />
-                      </button>
-                    )}
-                    <button type="button" onClick={() => removeExistingPhoto(photo)} className="p-1.5 rounded-full bg-red-500/90 hover:bg-red-600">
-                      <Trash2 className="h-3.5 w-3.5 text-white" />
-                    </button>
-                  </div>
-                  <div className="absolute bottom-1 left-1 right-1 bg-black/50 rounded text-white text-[10px] px-1 py-0.5 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                    {photo.name}
-                  </div>
-                </div>
-              ))}
-
-              {/* Fotos NUEVAS (pendientes de guardar) */}
-              {newPhotos.map((photo) => (
-                <div key={photo.id} className="relative group aspect-square">
-                  <img
-                    src={photo.preview}
-                    alt={photo.name}
-                    className="w-full h-full object-cover rounded-lg border-2"
-                    style={{ borderColor: C.mint }}
-                    onClick={() => setLightboxSrc(photo.preview)}
-                  />
-                  {/* Badge "Nueva" */}
-                  <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-bold text-white" style={{ backgroundColor: C.mint }}>
-                    Nueva
-                  </div>
-                  {/* Overlay hover */}
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all rounded-lg flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-                    <button type="button" onClick={() => setLightboxSrc(photo.preview)} className="p-1.5 rounded-full bg-white/80 hover:bg-white">
-                      <ZoomIn className="h-3.5 w-3.5 text-gray-700" />
-                    </button>
-                    <button type="button" onClick={() => removeNewPhoto(photo.id)} className="p-1.5 rounded-full bg-red-500/90 hover:bg-red-600">
-                      <Trash2 className="h-3.5 w-3.5 text-white" />
-                    </button>
-                  </div>
-                  <div className="absolute bottom-1 left-1 right-1 bg-black/50 rounded text-white text-[10px] px-1 py-0.5 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                    {photo.name}
-                  </div>
-                </div>
-              ))}
-
-              {/* Botón agregar más */}
-              {totalPhotos < MAX_PHOTOS && (
-                <button
-                  type="button"
-                  onClick={() => photoInputRef.current?.click()}
-                  className="aspect-square border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-1 hover:bg-gray-50 transition-colors"
-                  style={{ borderColor: C.sand }}
-                >
-                  <ImagePlus className="h-6 w-6 text-gray-300" />
-                  <span className="text-[11px] text-gray-400">Agregar</span>
-                </button>
-              )}
-            </div>
-          )}
-
-          {totalPhotos > 0 && (
-            <p className="text-xs text-gray-400 mt-3">
-              {totalPhotos} de {MAX_PHOTOS} fotos · pasa el cursor sobre una foto para ampliarla o eliminarla
+          {errors.commitments && (
+            <p className="text-sm text-red-500 flex items-center gap-1 mt-2">
+              <AlertCircle className="h-3 w-3" />{errors.commitments}
             </p>
           )}
         </CardContent>
       </Card>
 
       {/* ═══════════════════════════════════════════════════════
-          SECCIÓN 6: APROBACIÓN
+          SECCIÓN 5: EVIDENCIAS FOTOGRÁFICAS
       ═══════════════════════════════════════════════════════ */}
-      <Card className="border-2" style={{ borderColor: C.sand }}>
+      <Card className="border-2" style={{ borderColor: C.mint }}>
         <CardHeader>
-          <CardTitle style={{ color: C.green }}>Aprobación</CardTitle>
-          <CardDescription>Opcional: Seleccionar quién aprueba el acta</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2" style={{ color: C.green }}>
+                <Camera className="h-5 w-5" /> 8. Evidencias Fotográficas (Opcional)
+              </CardTitle>
+              <CardDescription>
+                Sube fotos de la reunión (máx. {MAX_PHOTOS} fotos, 5MB c/u)
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">
+                {totalPhotos}/{MAX_PHOTOS}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={totalPhotos >= MAX_PHOTOS}
+                style={{ backgroundColor: C.mint }}
+                className="text-white"
+              >
+                <ImagePlus className="h-4 w-4 mr-2" />
+                Subir Fotos
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
-            <Label htmlFor="approved_by">Aprobado por</Label>
-            <Select
-              value={formData.approved_by}
-              onValueChange={v => handleInputChange('approved_by', v)}
-            >
-              <SelectTrigger id="approved_by">
-                <SelectValue placeholder={loadingUsuarios ? 'Cargando usuarios...' : 'Seleccionar usuario...'} />
-              </SelectTrigger>
-              <SelectContent>
-                {usuarios.map(u => <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-gray-500">Si no se selecciona, el acta quedará en estado "Borrador"</p>
-          </div>
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept={ACCEPTED_IMAGE_TYPES.join(',')}
+            multiple
+            onChange={handlePhotoSelect}
+            className="hidden"
+          />
+
+          {photoError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+              {photoError}
+            </div>
+          )}
+
+          {/* Galería de fotos */}
+          {(existingPhotos.length > 0 || newPhotos.length > 0) && (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {/* Fotos existentes */}
+              {existingPhotos.map((photo, index) => (
+                <div key={`existing-${index}`} className="relative group">
+                  <div className="aspect-square rounded-lg overflow-hidden border-2"
+                    style={{ borderColor: C.sand }}
+                  >
+                    <img
+                      src={photo.url || photo.preview}
+                      alt={photo.name || `Foto ${index + 1}`}
+                      className="w-full h-full object-cover cursor-pointer hover:opacity-75 transition-opacity"
+                      onClick={() => setLightboxSrc(photo.url || photo.preview)}
+                    />
+                  </div>
+                  <div className="absolute top-2 right-2 flex gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 w-7 p-0 bg-white/90 hover:bg-white"
+                      onClick={() => setLightboxSrc(photo.url || photo.preview)}
+                    >
+                      <ZoomIn className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-7 w-7 p-0 bg-red-500 hover:bg-red-600 text-white"
+                      onClick={() => removeExistingPhoto(index)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1 truncate">
+                    {photo.name || `Foto ${index + 1}`}
+                  </p>
+                </div>
+              ))}
+
+              {/* Fotos nuevas */}
+              {newPhotos.map((photo, index) => (
+                <div key={`new-${index}`} className="relative group">
+                  <div className="aspect-square rounded-lg overflow-hidden border-2 border-blue-300">
+                    <img
+                      src={photo.preview}
+                      alt={photo.name}
+                      className="w-full h-full object-cover cursor-pointer hover:opacity-75 transition-opacity"
+                      onClick={() => setLightboxSrc(photo.preview)}
+                    />
+                  </div>
+                  <div className="absolute top-2 right-2 flex gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 w-7 p-0 bg-white/90 hover:bg-white"
+                      onClick={() => setLightboxSrc(photo.preview)}
+                    >
+                      <ZoomIn className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-7 w-7 p-0 bg-red-500 hover:bg-red-600 text-white"
+                      onClick={() => removeNewPhoto(index)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1 truncate flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 rounded-full bg-blue-500"></span>
+                    {photo.name}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {existingPhotos.length === 0 && newPhotos.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              <Camera className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No hay fotos adjuntas</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Botones finales */}
-      <div className="flex justify-end gap-4 pt-4 border-t">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>Cancelar</Button>
-        <Button type="submit" style={{ backgroundColor: C.green }} className="text-white" disabled={isSubmitting}>
-          <Save className="h-4 w-4 mr-2" />
-          {isSubmitting ? 'Guardando...' : (actaToEdit ? 'Actualizar Acta' : 'Guardar Acta')}
-        </Button>
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════
-          LIGHTBOX — ampliar foto
-      ═══════════════════════════════════════════════════════ */}
+      {/* Lightbox */}
       {lightboxSrc && (
         <div
-          className="fixed inset-0 z-[100] bg-black/85 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
           onClick={() => setLightboxSrc(null)}
         >
-          <div className="relative max-w-4xl max-h-[90vh]">
-            <img
-              src={lightboxSrc}
-              alt="Vista ampliada"
-              className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
-              onClick={e => e.stopPropagation()}
-            />
-            <button
-              onClick={() => setLightboxSrc(null)}
-              className="absolute -top-3 -right-3 bg-white rounded-full p-1.5 shadow-lg hover:bg-gray-100"
-            >
-              <X className="h-5 w-5 text-gray-700" />
-            </button>
-          </div>
+          <img
+            src={lightboxSrc}
+            alt="Vista ampliada"
+            className="max-w-full max-h-full object-contain"
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="absolute top-4 right-4"
+            onClick={() => setLightboxSrc(null)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </div>
       )}
     </form>
