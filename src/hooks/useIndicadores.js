@@ -451,7 +451,7 @@ export function useIndicadores() {
   };
 
   // ── FETCH MEDICIONES ───────────────────────────────────────────────────────
-  const fetchMeasurements = async (indicatorId) => {
+  const fetchMeasurements = async (indicatorId, goalDirection = 'asc') => {
     try {
       const { data, error: fetchError } = await supabase
         .from('indicator_measurement')
@@ -472,7 +472,7 @@ export function useIndicadores() {
       return (data || []).map(m => ({
         ...m,
         created_by_name: pm[m.created_by]?.full_name || '—',
-        status_info:     getMeasurementStatus(m.measured_value, m.goal_value),
+        status_info:     getMeasurementStatus(m.measured_value, m.goal_value, goalDirection),
         formula_inputs:  Array.isArray(m.formula_inputs) ? {} :
           (typeof m.formula_inputs === 'string'
             ? JSON.parse(m.formula_inputs)

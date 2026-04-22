@@ -113,7 +113,7 @@ export default function IndicadorModal({
   useEffect(() => {
     if ((isView || isEdit) && indicator && activeTab === 'history' && fetchMeasurements) {
       setLoadingMed(true);
-      fetchMeasurements(indicator.id).then(data => {
+      fetchMeasurements(indicator.id, indicator.goal_direction || 'asc').then(data => {
         setMeasurements(data);
         setLoadingMed(false);
       });

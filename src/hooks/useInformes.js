@@ -258,13 +258,14 @@ export function useInformes() {
   };
 
   // ── URL firmada para el PDF ───────────────────────────────────────
-  const getSignedUrl = async (filePath) => {
-    const { data, error: err } = await supabase.storage
-      .from('reports')
-      .createSignedUrl(filePath, 3600);
-    if (err) throw err;
-    return data.signedUrl;
-  };
+// ── getPublicUrl (reemplaza getSignedUrl) ─────────────────────────
+const getSignedUrl = async (filePath) => {
+  // Bucket es público → usar getPublicUrl, no createSignedUrl
+  const { data } = supabase.storage
+    .from('reports')
+    .getPublicUrl(filePath);
+  return data.publicUrl;
+};
 
   // ── Emails silenciosos ────────────────────────────────────────────
   // Usa RPC con SECURITY DEFINER para saltear RLS del profile

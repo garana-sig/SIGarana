@@ -86,7 +86,7 @@ export default function MedicionModal({ indicator, onSave, onClose }) {
 
   // El valor final a guardar (calculado o manual)
   const finalValue = hasFormula ? calcResult : (manualValue !== '' ? parseFloat(manualValue) : null);
-  const statusInfo = getMeasurementStatus(finalValue, parseFloat(goalValue) || null);
+  const statusInfo = getMeasurementStatus(finalValue, parseFloat(goalValue) || null, indicator?.goal_direction || 'asc');
 
   const handleSave = async () => {
     if (finalValue === null) return;
