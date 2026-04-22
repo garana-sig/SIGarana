@@ -195,7 +195,7 @@ function IndicadorDrillModal({ ind, allMeasurements, onClose }) {
   const chartData = sorted.map(m => ({
     periodo: m.period_label || m.measurement_date?.substring(0,7),
     valor:   m.measured_value !== null ? Number(m.measured_value) : null,
-    meta:    m.goal_value !== null ? Number(m.goal_value) : (ind.goal_value ? Number(ind.goal_value) : null),
+    meta:    m.goal_value !== null ? Number(m.goal_value) : (ind.goal_value_parsed != null ? Number(ind.goal_value_parsed) : null),
     status:  m.measurement_status,
   }));
 
@@ -333,7 +333,7 @@ function IndicadorDrillModal({ ind, allMeasurements, onClose }) {
               <div style={{ backgroundColor:T.panel2, borderRadius:8, padding:'12px 14px', border:`1px solid ${T.border}` }}>
                 <p style={{ fontSize:9, color:T.textMuted, textTransform:'uppercase', letterSpacing:0.8, fontWeight:700, marginBottom:8 }}>ℹ️ Detalles</p>
                 {[
-                  { label:'Proceso',     value:ind.process_source||'—' },
+                  { label:'Proceso',     value:ind.process_name||'—' },
                   { label:'Divulgado a', value:ind.disclosed_to||'—' },
                   { label:'Dirección',   value:ind.goal_direction==='asc'?'↑ Mayor es mejor':'↓ Menor es mejor' },
                   { label:'Tipo',        value:ind.indicator_subtype||ind.indicator_type||'—' },
@@ -430,8 +430,19 @@ function CmiPerspCard({ persp, items, measurements, allMeasurements, onIndicator
         const m   = measurements[ind.id];
         const sk  = m?.measurement_status || 'no_data';
         const sc  = STATUS_MAP[sk];
-        const pctInd = (m?.measured_value!=null && ind.goal_value)
-          ? Math.min(100, Math.round(Math.abs(m.measured_value/ind.goal_value)*100)) : 0;
+        const pctInd = (() => {
+          if (m?.measured_value == null || !ind.goal_value_parsed || ind.goal_value_parsed === 0) return 0;
+          let pct;
+          if (ind.goal_direction === 'desc') {
+            // Menor es mejor: si medido <= meta → 100%, sino (meta/medido)*100
+            pct = m.measured_value <= ind.goal_value_parsed
+              ? 100
+              : (ind.goal_value_parsed / m.measured_value) * 100;
+          } else {
+            pct = (m.measured_value / ind.goal_value_parsed) * 100;
+          }
+          return Math.min(100, Math.max(0, Math.round(pct)));
+        })();
         const histCount = (allMeasurements[ind.id]||[]).length;
         return (
           <div key={ind.id} onClick={()=>onIndicatorClick(ind)}
@@ -493,7 +504,7 @@ export default function RevisionDireccionManager({ onBack }) {
 
         // Indicadores con TODAS sus mediciones (historial completo para modal)
         supabase.from('indicator')
-          .select('*, indicator_measurement(*)')
+          .select('*, indicator_measurement(*), process:process_id(name)')
           .eq('status','active')
           .order('indicator_name'),
 
@@ -547,11 +558,14 @@ export default function RevisionDireccionManager({ onBack }) {
       const msMap = {}, allMsMap = {};
       inds.forEach(ind => {
         const all = ind.indicator_measurement || [];
-        allMsMap[ind.id] = [...all].sort((a,b) => new Date(a.measurement_date)-new Date(b.measurement_date));
-        const inRange = all
-          .filter(m => m.measurement_date >= range.start && m.measurement_date <= range.end)
-          .sort((a,b) => new Date(b.measurement_date)-new Date(a.measurement_date));
-        msMap[ind.id] = inRange[0] || null;
+        // Ordenar ascendente para historial (más antiguo primero)
+        const sorted = [...all].sort((a,b) => new Date(a.measurement_date)-new Date(b.measurement_date));
+        allMsMap[ind.id] = sorted;
+        // Última medición registrada (sin filtrar por rango) para mostrar estado actual real
+        msMap[ind.id] = sorted.length > 0 ? sorted[sorted.length - 1] : null;
+        // Aplanar process_name desde el join
+        ind.process_name = ind.process?.name || '—';
+        delete ind.process;
         delete ind.indicator_measurement;
       });
 

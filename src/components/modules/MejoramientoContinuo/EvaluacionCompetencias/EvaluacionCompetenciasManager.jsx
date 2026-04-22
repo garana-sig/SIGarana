@@ -1,6 +1,5 @@
 // src/components/modules/MejoramientoContinuo/EvaluacionCompetencias/EvaluacionCompetenciasManager.jsx
 import { useState, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import {
   useEvaluacionCompetencias,
   calcularNivel, COLOR_NIVEL, BG_NIVEL,
@@ -20,31 +19,6 @@ import {
 } from 'lucide-react';
 
 // ─── Paleta ───────────────────────────────────────────────────────────────────
-// PDF: nuestro PrintView usa 100% inline styles.
-// Eliminamos todos los stylesheets del clon para que html2canvas
-// no encuentre variables oklch de Tailwind v4.
-const PDF_OPTS = (filename) => ({
-  margin:      [8, 8, 8, 8],
-  filename,
-  image:       { type: 'jpeg', quality: 0.97 },
-  html2canvas: {
-    scale:           2,
-    useCORS:         true,
-    logging:         false,
-    backgroundColor: '#ffffff',
-    onclone: (doc) => {
-      // Eliminar TODOS los <link rel="stylesheet"> y <style> del clon
-      // El PrintView no los necesita (usa solo inline styles)
-      doc.querySelectorAll('link[rel="stylesheet"], style').forEach(el => el.remove());
-      // Agregar solo el mínimo para que html2canvas renderice bien
-      const s = doc.createElement('style');
-      s.textContent = 'body{margin:0;padding:0;background:#fff;}*{box-sizing:border-box;}';
-      doc.head.appendChild(s);
-    },
-  },
-  jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-});
-
 const P = {
   verde:  '#2e5244',
   menta:  '#6dbd96',
@@ -54,6 +28,8 @@ const P = {
   ambar:  '#d97706',
   rojo:   '#ef4444',
 };
+
+const LOGO_URL = 'https://wnsnymxabmxswnpcpvoj.supabase.co/storage/v1/object/public/templates/garana1.png';
 
 // ─── Combobox empleados ───────────────────────────────────────────────────────
 function EmpleadoCombobox({ empleados, value, onChange, placeholder = 'Buscar por nombre o cédula…' }) {
@@ -265,7 +241,6 @@ function EmpleadoForm({ inicial, onSave, onClose, loading, usuarios = [] }) {
             onChange={e => set('fecha_ingreso', e.target.value)} />
         </div>
       </div>
-      {/* Vinculación con cuenta del sistema */}
       <div>
         <label className="text-xs font-medium text-gray-600 mb-1 block">
           Cuenta en el sistema
@@ -307,7 +282,7 @@ function EmpleadoForm({ inicial, onSave, onClose, loading, usuarios = [] }) {
   );
 }
 
-// ─── Formulario evaluación — Matriz estilo Excel ────────────────────────────
+// ─── Formulario evaluación — Matriz estilo Excel ──────────────────────────────
 function FormularioEvaluacion({
   empleadoInicial, empleadosPermitidos, categorias,
   periodos, periodoActivo,
@@ -337,8 +312,6 @@ function FormularioEvaluacion({
 
   return (
     <div className="space-y-4">
-
-      {/* Empleado + Período */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl"
         style={{ background: '#f8faf8', border: `1px solid ${P.menta}30` }}>
         <div className="md:col-span-2">
@@ -385,7 +358,7 @@ function FormularioEvaluacion({
         </div>
       </div>
 
-      {/* ── Matriz de evaluación ── */}
+      {/* Matriz */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: P.verde + '30' }}>
         <table className="w-full text-sm border-collapse">
           <thead>
@@ -408,29 +381,18 @@ function FormularioEvaluacion({
               const pregs = cat.preguntas.filter(p => p.is_active);
               if (!pregs.length) return null;
               return pregs.map((preg, idx) => {
-                const selVal = respuestas[preg.id];
+                const selVal  = respuestas[preg.id];
                 const isFirst = idx === 0;
                 return (
-                  <tr key={preg.id}
-                    className="border-b"
+                  <tr key={preg.id} className="border-b"
                     style={{
                       background: selVal ? COLOR_NIVEL[calcularNivel(selVal * (PUNTAJE_MAX / totalPreguntas))] + '08' : (idx % 2 === 0 ? 'white' : '#fafaf8'),
                       borderColor: '#e5e7eb',
                     }}>
                     {isFirst ? (
-                      <td
-                        rowSpan={pregs.length}
-                        className="px-3 py-2 text-xs font-bold align-top border-r"
-                        style={{
-                          color: P.verde,
-                          borderColor: P.verde + '20',
-                          background: P.verde + '08',
-                          verticalAlign: 'top',
-                          paddingTop: 12,
-                        }}>
-                        <div style={{ writingMode: 'horizontal-tb' }}>
-                          {cat.nombre}
-                        </div>
+                      <td rowSpan={pregs.length} className="px-3 py-2 text-xs font-bold align-top border-r"
+                        style={{ color: P.verde, borderColor: P.verde + '20', background: P.verde + '08', verticalAlign: 'top', paddingTop: 12 }}>
+                        <div style={{ writingMode: 'horizontal-tb' }}>{cat.nombre}</div>
                       </td>
                     ) : null}
                     <td className="px-3 py-2.5 border-r" style={{ borderColor: '#e5e7eb', color: P.dark }}>
@@ -439,25 +401,15 @@ function FormularioEvaluacion({
                     {OPCIONES_RESPUESTA.map(o => {
                       const marcado = selVal === o.value;
                       return (
-                        <td key={o.value}
-                          className="text-center border-r cursor-pointer transition-all"
-                          style={{
-                            borderColor: '#e5e7eb',
-                            background: marcado ? o.color + '18' : 'transparent',
-                          }}
+                        <td key={o.value} className="text-center border-r cursor-pointer transition-all"
+                          style={{ borderColor: '#e5e7eb', background: marcado ? o.color + '18' : 'transparent' }}
                           onClick={() => setRespuestas(r => ({ ...r, [preg.id]: o.value }))}>
                           <div className="flex items-center justify-center py-2.5 px-2">
                             {marcado ? (
-                              <div
-                                className="w-6 h-6 rounded flex items-center justify-center text-white text-sm font-bold"
-                                style={{ background: o.color }}>
-                                ✓
-                              </div>
+                              <div className="w-6 h-6 rounded flex items-center justify-center text-white text-sm font-bold"
+                                style={{ background: o.color }}>✓</div>
                             ) : (
-                              <div
-                                className="w-6 h-6 rounded border-2"
-                                style={{ borderColor: '#d1d5db' }}
-                              />
+                              <div className="w-6 h-6 rounded border-2" style={{ borderColor: '#d1d5db' }} />
                             )}
                           </div>
                         </td>
@@ -474,9 +426,7 @@ function FormularioEvaluacion({
       {/* Tabla de ajustes */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: P.verde + '20' }}>
         <div className="px-4 py-2 text-xs font-semibold text-center"
-          style={{ background: P.verde, color: 'white' }}>
-          Tabla de Ajustes
-        </div>
+          style={{ background: P.verde, color: 'white' }}>Tabla de Ajustes</div>
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b" style={{ background: '#f8faf8' }}>
@@ -498,9 +448,7 @@ function FormularioEvaluacion({
                 <td className="text-center px-3 py-2 font-mono" style={{ color: P.dark }}>{puntos}</td>
                 <td className="px-3 py-2">
                   <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
-                    style={{ background: COLOR_NIVEL[niv]+'20', color: COLOR_NIVEL[niv] }}>
-                    {niv}
-                  </span>
+                    style={{ background: COLOR_NIVEL[niv]+'20', color: COLOR_NIVEL[niv] }}>{niv}</span>
                 </td>
                 <td className="text-center px-3 py-2 font-bold font-mono" style={{ color: COLOR_NIVEL[niv] }}>{valor}</td>
               </tr>
@@ -514,8 +462,7 @@ function FormularioEvaluacion({
         <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
           Aspectos a Mejorar / Aspectos Relevantes
         </label>
-        <textarea
-          className="w-full px-3 py-2 border rounded-md text-sm resize-none"
+        <textarea className="w-full px-3 py-2 border rounded-md text-sm resize-none"
           style={{ borderColor: P.menta, minHeight: 80 }}
           value={notas}
           onChange={e => setNotas(e.target.value)}
@@ -616,7 +563,6 @@ function PerfilEmpleado({
     if (!empleado.user_id) return;
     setEnviandoId(ev.id);
     try {
-      // Cargar detalles de esa evaluación
       const dets = await loadDetalles(ev.id);
       const { data: perfil } = await supabase
         .from('profile').select('email, full_name').eq('id', empleado.user_id).single();
@@ -626,10 +572,7 @@ function PerfilEmpleado({
         categoria: cat.nombre,
         preguntas: dets
           .filter(d => d.pregunta?.categoria_id === cat.id)
-          .map(d => ({
-            texto:     d.pregunta?.texto || '',
-            respuesta: d.respuesta,
-          })),
+          .map(d => ({ texto: d.pregunta?.texto || '', respuesta: d.respuesta })),
       })).filter(c => c.preguntas.length > 0);
 
       const { error } = await supabase.functions.invoke('send-email', {
@@ -656,38 +599,232 @@ function PerfilEmpleado({
     } finally { setEnviandoId(null); }
   }
 
-  async function handleImprimir() {
-    const el = document.getElementById('garana-pdf-print');
-    if (!el) return;
+  // ── PDF con motor nativo del navegador ──────────────────────────────────────
+  // Nombre: "Evaluacion - {nombre} - {periodo}"
+  function handleImprimir() {
+    if (!detModal || !empleado) return;
 
-    const nombreLimpio = (empleado.nombre_completo || 'empleado')
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-zA-Z\s]/g, '').trim().replace(/\s+/g, '_');
-    const periodo  = detModal?.periodo?.nombre || detModal?.periodo || 'Evaluacion';
-    const filename = `Evaluacion_${nombreLimpio}_${periodo}.pdf`;
+    const periodo  = detModal.periodo?.nombre || detModal.periodo || 'Evaluacion';
+    const fileName = `Evaluacion - ${empleado.nombre_completo} - ${periodo}`;
 
-    setGenerandoPdf(true);
-    el.style.display = 'block';
+    const nivel = detModal.nivel_desempeno || '';
+    const color = COLOR_NIVEL[nivel] || '#2e5244';
+    const fecha = detModal.fecha_evaluacion
+      ? new Date(detModal.fecha_evaluacion).toLocaleDateString('es-CO', { year:'numeric', month:'long', day:'numeric' })
+      : '';
 
-    try {
-      if (!window.html2pdf) {
-        await new Promise((resolve, reject) => {
-          const s = document.createElement('script');
-          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-          s.onload  = resolve;
-          s.onerror = () => reject(new Error('No se pudo cargar la librería PDF'));
-          document.head.appendChild(s);
-        });
-      }
-      await new Promise(r => setTimeout(r, 150));
-      await window.html2pdf().set(PDF_OPTS(filename)).from(el).save();
-    } catch (err) {
-      console.error('PDF error:', err);
-      alert('Error al generar el PDF:\n' + err.message);
-    } finally {
-      el.style.display = 'none';
-      setGenerandoPdf(false);
+    // Promedios por categoría
+    const promediosCat = categorias.map(cat => {
+      const dets = detalles.filter(d => d.pregunta?.categoria_id === cat.id);
+      const prom = dets.length ? (dets.reduce((s,d)=>s+d.respuesta,0)/dets.length).toFixed(1) : '—';
+      return { nombre: cat.nombre, promedio: prom };
+    });
+
+    // Filas de la tabla con rowspan por categoría
+    const filasHtml = categorias.map(cat => {
+      const catDets = detalles.filter(d => d.pregunta?.categoria_id === cat.id);
+      if (!catDets.length) return '';
+      return catDets.map((d, idx) => {
+        const celdas = OPCIONES_RESPUESTA.map(o => {
+          const marcado = d.respuesta === o.value;
+          return `<td style="text-align:center;padding:5px 4px;border-right:1px solid #f0f0f0;background:${marcado ? o.color+'22' : 'transparent'};">
+            ${marcado ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;background:${o.color};border-radius:3px;color:white;font-size:12px;font-weight:bold;">✓</span>` : ''}
+          </td>`;
+        }).join('');
+
+        const catCell = idx === 0
+          ? `<td rowspan="${catDets.length}" style="padding:8px 10px;font-size:10px;font-weight:bold;color:#2e5244;background:#eef5f1;border-right:2px solid #6dbd96;vertical-align:top;width:110px;padding-top:10px;">${cat.nombre}</td>`
+          : '';
+
+        return `<tr style="background:${idx%2===0?'white':'#f9fbf9'};border-bottom:1px solid #e5e7eb;">
+          ${catCell}
+          <td style="padding:6px 10px;border-right:1px solid #e5e7eb;font-size:11px;line-height:1.4;">${d.pregunta?.texto || ''}</td>
+          ${celdas}
+        </tr>`;
+      }).join('');
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>${fileName}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; color: #1a2e25; background: white; font-size: 12px; }
+    .page { max-width: 210mm; margin: 0 auto; }
+    .print-actions { position:fixed; top:14px; right:14px; z-index:999; display:flex; gap:8px; }
+    .btn-print { padding:9px 22px; background:#2e5244; color:white; border:none; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.2); }
+    .btn-print:hover { background:#1a2e25; }
+    .btn-close { padding:9px 14px; background:#e5e7eb; color:#374151; border:none; border-radius:8px; font-size:13px; cursor:pointer; }
+    table { border-collapse: collapse; }
+    .tabla-eval { width:100%; font-size:11px; }
+    .tabla-eval th { background:#2e5244; color:white; padding:7px 10px; text-align:left; }
+    .tabla-eval th.centro { text-align:center; width:50px; font-size:10px; line-height:1.2; padding:7px 4px; }
+    .tabla-eval tr { page-break-inside:avoid; break-inside:avoid; }
+    .no-break { page-break-inside:avoid; break-inside:avoid; }
+    .footer-bar { background:#2e5244; padding:10px 28px; display:flex; justify-content:space-between; font-size:10px; color:#dedecc; margin-top:14px; }
+    @media print {
+      @page { size:A4; margin:10mm 12mm; }
+      body  { font-size:10px; }
+      .page { max-width:100%; }
+      .print-actions { display:none !important; }
+      .tabla-eval tr { page-break-inside:avoid; break-inside:avoid; }
+      .no-break { page-break-inside:avoid; break-inside:avoid; }
+      thead { display:table-header-group; }
     }
+  </style>
+</head>
+<body>
+
+<div class="print-actions">
+  <button class="btn-print" onclick="window.print()">⬇️ Guardar como PDF</button>
+  <button class="btn-close"  onclick="window.close()">✕ Cerrar</button>
+</div>
+
+<div class="page">
+
+  <!-- ENCABEZADO -->
+  <div style="background:linear-gradient(135deg,#2e5244 0%,#1a3330 100%);">
+    <div style="padding:18px 28px 14px;display:flex;align-items:center;justify-content:space-between;">
+      <img src="${LOGO_URL}" alt="Garana Art" style="max-height:80px;max-width:220px;object-fit:contain;" crossorigin="anonymous"/>
+      <div style="text-align:right;color:white;">
+        <div style="font-size:18px;font-weight:bold;letter-spacing:1px;">EVALUACIÓN DE COMPETENCIAS</div>
+        <div style="font-size:10px;color:#6dbd96;margin-top:4px;letter-spacing:2px;">SISTEMA DE GESTIÓN INTEGRAL · GARANA SIG</div>
+        <div style="color:#dedecc;font-size:9px;margin-top:5px;">INDECON S.A.S. / Garana Art — Riosucio, Caldas</div>
+      </div>
+    </div>
+    <div style="background:${color};padding:12px 28px;display:flex;align-items:center;gap:20px;">
+      <div>
+        <span style="color:white;font-size:38px;font-weight:900;font-family:monospace;line-height:1;">${detModal.puntaje_total}</span>
+        <span style="color:white;font-size:18px;font-weight:900;opacity:.7;font-family:monospace;"> / 85</span>
+      </div>
+      <div>
+        <div style="color:white;font-size:9px;opacity:.8;margin-bottom:2px;">NIVEL DE DESEMPEÑO</div>
+        <div style="color:white;font-size:16px;font-weight:bold;">${nivel}</div>
+      </div>
+      <div style="margin-left:auto;text-align:right;color:white;font-size:10px;opacity:.9;line-height:1.5;">
+        <div>Fecha de evaluación</div>
+        <div style="font-weight:bold;font-size:11px;">${fecha}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FICHA EMPLEADO -->
+  <div style="padding:14px 28px;background:#f4f7f5;border-bottom:3px solid #6dbd96;display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;" class="no-break">
+    ${[
+      ['Empleado',    empleado.nombre_completo],
+      ['Cédula',      empleado.cedula],
+      ['Cargo',       empleado.cargo || '—'],
+      ['Departamento',empleado.departamento],
+      ['Evaluador',   detModal.evaluador?.full_name || '—'],
+      ['Período',     detModal.periodo?.nombre || detModal.periodo || '—'],
+    ].map(([lbl, val]) => `
+      <div style="font-size:12px;display:flex;gap:6px;">
+        <span style="font-weight:bold;color:#2e5244;min-width:90px;">${lbl}:</span>
+        <span>${val}</span>
+      </div>`).join('')}
+  </div>
+
+  <!-- TABLA DE EVALUACIÓN -->
+  <div style="padding:16px 28px 0;">
+    <div style="font-size:10px;font-weight:bold;color:#2e5244;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;border-bottom:1px solid #dee8e3;padding-bottom:4px;">
+      Resultados de la Evaluación
+    </div>
+    <table class="tabla-eval">
+      <thead>
+        <tr>
+          <th style="width:110px;">Categoría</th>
+          <th>Pregunta</th>
+          ${OPCIONES_RESPUESTA.map(o => `<th class="centro">${o.short}<br/><span style="font-size:9px;opacity:.7;">${o.value}</span></th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>${filasHtml}</tbody>
+    </table>
+  </div>
+
+  <!-- RESUMEN + NOTAS -->
+  <div style="padding:14px 28px 0;display:grid;grid-template-columns:1fr 1fr;gap:16px;" class="no-break">
+    <div>
+      <div style="font-size:10px;font-weight:bold;color:#2e5244;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;border-bottom:1px solid #dee8e3;padding-bottom:4px;">
+        Promedio por Categoría
+      </div>
+      ${promediosCat.map(({ nombre, promedio }) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;border-bottom:1px solid #e5e7eb;font-size:11px;">
+          <span style="color:#333;">${nombre}</span>
+          <span style="background:${color}20;color:${color};padding:1px 10px;border-radius:10px;font-weight:bold;">${promedio} / 5</span>
+        </div>`).join('')}
+      <div style="margin-top:12px;">
+        <div style="font-size:10px;font-weight:bold;color:#2e5244;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;border-bottom:1px solid #dee8e3;padding-bottom:4px;">
+          Tabla de Ajustes
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:10px;">
+          <tbody>
+            ${[['0–17','Muy debajo Expectativas','#dc2626'],['18–34','Debajo de Expectativas','#d97706'],['35–51','Alcanza Expectativas','#6f7b2c'],['52–68','Mejora Expectativas','#6dbd96'],['69–85','Sobresaliente','#2e5244']]
+              .map(([rango, niv, c]) => `
+              <tr style="border-bottom:1px solid #f0f0f0;">
+                <td style="padding:3px 8px;font-family:monospace;font-weight:bold;color:${c};width:60px;">${rango}</td>
+                <td style="padding:3px 8px;color:#333;">${niv}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:bold;color:#2e5244;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;border-bottom:1px solid #dee8e3;padding-bottom:4px;">
+        Aspectos a Mejorar / Relevantes
+      </div>
+      <div style="background:#f8faf8;border:1px solid #dee8e3;border-radius:4px;padding:10px 12px;font-size:11px;color:${detModal.notas?'#333':'#aaa'};font-style:${detModal.notas?'normal':'italic'};line-height:1.7;">
+        ${detModal.notas || 'Sin observaciones registradas'}
+      </div>
+    </div>
+  </div>
+
+  <!-- FIRMAS -->
+  <div style="padding:14px 28px 10px;display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:8px;" class="no-break">
+    <div style="text-align:center;">
+      <div style="height:40px;"></div>
+      <div style="border-top:1px solid #888;padding-top:6px;font-size:11px;color:#555;">
+        Firma Evaluado<br/>
+        <strong>${empleado.nombre_completo}</strong><br/>
+        <span style="font-size:10px;color:#888;">C.C. ${empleado.cedula}</span>
+      </div>
+    </div>
+    <div style="text-align:center;">
+      <div style="height:40px;"></div>
+      <div style="border-top:1px solid #888;padding-top:6px;font-size:11px;color:#555;">
+        Firma Evaluador<br/>
+        <strong>${detModal.evaluador?.full_name || '—'}</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer-bar">
+    <span>Garana SIG — Sistema de Gestión Integral</span>
+    <span>Documento generado el ${new Date().toLocaleDateString('es-CO')}</span>
+  </div>
+
+</div>
+
+<script>
+  window.addEventListener('load', function () {
+    var img = document.querySelector('img');
+    var trigger = function () { setTimeout(window.print, 350); };
+    if (img && !img.complete) {
+      img.addEventListener('load',  trigger);
+      img.addEventListener('error', trigger);
+    } else { trigger(); }
+  });
+</script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=960,height=750,scrollbars=yes');
+    if (!win) { alert('Permite las ventanas emergentes para generar el PDF.'); return; }
+    win.document.write(html);
+    win.document.close();
+    win.document.title = fileName;
   }
 
   async function handleEnviarCorreo() {
@@ -699,15 +836,11 @@ function PerfilEmpleado({
         .from('profile').select('email, full_name').eq('id', empleado.user_id).single();
       if (!perfil?.email) throw new Error('El usuario vinculado no tiene email registrado');
 
-      // Construir tabla completa con preguntas y respuestas
       const tablaCompleta = categorias.map(cat => ({
         categoria: cat.nombre,
         preguntas: detalles
           .filter(d => d.pregunta?.categoria_id === cat.id)
-          .map(d => ({
-            texto:     d.pregunta?.texto || '',
-            respuesta: d.respuesta,
-          })),
+          .map(d => ({ texto: d.pregunta?.texto || '', respuesta: d.respuesta })),
       })).filter(c => c.preguntas.length > 0);
 
       const { error } = await supabase.functions.invoke('send-email', {
@@ -729,327 +862,309 @@ function PerfilEmpleado({
         },
       });
       if (error) throw error;
+      setMailOk(true);
+    } catch (e) {
+      alert('Error al enviar: ' + e.message);
     } finally { setSendingMail(false); }
   }
 
-  // ── CORRECCIÓN: Fragment <> envuelve los dos elementos raíz ──
   return (
-    <>
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <button onClick={onBack} className="p-2 rounded-lg hover:bg-gray-100">
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold" style={{ color: P.dark }}>{empleado.nombre_completo}</h2>
-              <BadgeEstado evaluado={yaEval} />
-            </div>
-            <p className="text-sm text-gray-500">
-              {empleado.cargo || 'Sin cargo'} · {empleado.departamento} · C.C. {empleado.cedula}
-            </p>
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 rounded-lg hover:bg-gray-100">
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold" style={{ color: P.dark }}>{empleado.nombre_completo}</h2>
+            <BadgeEstado evaluado={yaEval} />
           </div>
-          {canEvaluar(empleado.departamento) && (
-            <Button onClick={onNuevaEval} style={{ background: P.verde, color: 'white' }}>
-              <Plus className="h-4 w-4 mr-2" /> Nueva Evaluación
-            </Button>
-          )}
+          <p className="text-sm text-gray-500">
+            {empleado.cargo || 'Sin cargo'} · {empleado.departamento} · C.C. {empleado.cedula}
+          </p>
         </div>
-
-        {/* KPIs */}
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: 'Evaluaciones',  value: info.count,                     icon: Award,     color: P.verde },
-            { label: 'Último Puntaje',value: info.ultima?.puntaje_total ?? '—', icon: Star,   color: P.menta },
-            { label: 'Último Nivel',  value: info.ultima?.nivel_desempeno?.split(' ')[0] ?? '—', icon: TrendingUp, color: P.oliva },
-          ].map(({ label, value, icon: Icon, color }) => (
-            <div key={label} className="p-4 rounded-xl border text-center" style={{ borderColor: color + '40' }}>
-              <Icon className="h-5 w-5 mx-auto mb-1" style={{ color }} />
-              <div className="text-xl font-bold" style={{ color }}>{value}</div>
-              <div className="text-xs text-gray-500">{label}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Historial */}
-        <div className="rounded-xl border overflow-hidden" style={{ borderColor: P.verde + '20' }}>
-          <div className="px-4 py-3 font-semibold text-sm" style={{ background: P.verde, color: 'white' }}>
-            Historial de Evaluaciones
-          </div>
-          {evals.length === 0
-            ? <div className="p-8 text-center text-gray-400 text-sm">Sin evaluaciones registradas</div>
-            : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-gray-500 border-b" style={{ background: '#f8faf8' }}>
-                    <th className="text-left px-4 py-2">#</th>
-                    <th className="text-left px-4 py-2">Fecha</th>
-                    <th className="text-left px-4 py-2">Período</th>
-                    <th className="text-left px-4 py-2">Evaluador</th>
-                    <th className="text-center px-4 py-2">Puntaje</th>
-                    <th className="text-left px-4 py-2">Nivel</th>
-                    <th className="px-4 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {evals.map((ev, i) => (
-                    <tr key={ev.id} className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-2 text-gray-400">{i + 1}</td>
-                      <td className="px-4 py-2">{new Date(ev.fecha_evaluacion).toLocaleDateString('es-CO')}</td>
-                      <td className="px-4 py-2">
-                        <span className="text-xs px-2 py-0.5 rounded-full"
-                          style={{ background: P.verde + '15', color: P.verde }}>
-                          {ev.periodo?.nombre || ev.periodo || '—'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-gray-600">{ev.evaluador?.full_name || '—'}</td>
-                      <td className="px-4 py-2 w-28"><PuntajeBar puntaje={ev.puntaje_total} /></td>
-                      <td className="px-4 py-2"><NivelBadge nivel={ev.nivel_desempeno} /></td>
-                      <td className="px-4 py-2">
-                        <div className="flex gap-1">
-                          <button onClick={() => verDetalle(ev)}
-                            className="p-1 rounded hover:bg-gray-100 text-gray-500"
-                            title="Ver detalle">
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          {/* Correo retroactivo: empleado con cuenta + evaluación 2025+ */}
-                          {empleado.user_id && new Date(ev.fecha_evaluacion).getFullYear() >= 2025 && (
-                            <button
-                              onClick={() => enviarCorreoRetroactivo(ev)}
-                              disabled={enviandoId === ev.id}
-                              className="p-1 rounded hover:bg-blue-50 text-blue-400"
-                              title="Enviar retroalimentación por correo">
-                              {enviandoId === ev.id
-                                ? <Send className="h-4 w-4 animate-pulse" />
-                                : <Mail className="h-4 w-4" />}
-                            </button>
-                          )}
-                          {isAdminOrGerencia && (
-                            <button onClick={() => eliminar(ev.id)} disabled={deleting === ev.id}
-                              className="p-1 rounded hover:bg-red-50 text-red-400"
-                              title="Eliminar">
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-        </div>
-
-        {/* Modal detalle / edición */}
-        {detModal && (
-          <Modal
-            title={modoEdicion
-              ? `Editando — ${empleado.nombre_completo}`
-              : `Evaluación — ${new Date(detModal.fecha_evaluacion).toLocaleDateString('es-CO')}`}
-            onClose={() => { setDetModal(null); setModoEdicion(false); }}
-            size={modoEdicion ? 'xl' : 'lg'}>
-            {loadingDet ? (
-              <div className="text-center py-8 text-gray-400">Cargando…</div>
-            ) : modoEdicion ? (
-              /* ── MODO EDICIÓN ── */
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 p-3 rounded-xl"
-                  style={{ background: '#f8faf8', border: `1px solid ${P.menta}30` }}>
-                  <label className="text-xs font-semibold text-gray-600 shrink-0">Período:</label>
-                  <select className="px-3 py-1.5 border rounded-md text-sm"
-                    style={{ borderColor: P.menta }}
-                    value={editPeriodo}
-                    onChange={e => setEditPeriodo(e.target.value)}>
-                    <option value="">— Sin período —</option>
-                    {periodos.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.nombre}{p.is_active ? ' (activo)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flex-1 flex items-center gap-2 justify-end">
-                    {(() => {
-                      const pts  = Object.values(editResp).reduce((s,v)=>s+v,0);
-                      const niv  = calcularNivel(pts);
-                      return (
-                        <>
-                          <NivelBadge nivel={niv} />
-                          <span className="font-black text-lg font-mono" style={{ color: COLOR_NIVEL[niv] }}>{pts}</span>
-                          <span className="text-xs text-gray-400">/ {PUNTAJE_MAX}</span>
-                        </>
-                      );
-                    })()}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border overflow-hidden" style={{ borderColor: P.verde + '30' }}>
-                  <table className="w-full text-sm border-collapse">
-                    <thead>
-                      <tr style={{ background: P.verde }}>
-                        <th className="text-left px-3 py-2 text-xs font-semibold text-white w-28">Categoría</th>
-                        <th className="text-left px-3 py-2 text-xs font-semibold text-white">Pregunta</th>
-                        {OPCIONES_RESPUESTA.map(o => (
-                          <th key={o.value} className="text-center px-1 py-2 text-xs font-semibold w-16 text-white">
-                            <span className="block leading-tight">{o.short}</span>
-                            <span className="text-xs opacity-70">{o.value}</span>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {categorias.map(cat => {
-                        const pregs = cat.preguntas.filter(p => p.is_active);
-                        if (!pregs.length) return null;
-                        return pregs.map((preg, idx) => {
-                          const selVal = editResp[preg.id];
-                          return (
-                            <tr key={preg.id} className="border-b"
-                              style={{ background: idx % 2 === 0 ? 'white' : '#fafaf8', borderColor: '#e5e7eb' }}>
-                              {idx === 0 ? (
-                                <td rowSpan={pregs.length} className="px-3 py-2 text-xs font-bold align-top border-r"
-                                  style={{ color: P.verde, borderColor: P.verde + '20', background: P.verde + '08', paddingTop: 12 }}>
-                                  {cat.nombre}
-                                </td>
-                              ) : null}
-                              <td className="px-3 py-2 border-r text-xs" style={{ borderColor: '#e5e7eb', color: P.dark }}>
-                                {preg.texto}
-                              </td>
-                              {OPCIONES_RESPUESTA.map(o => (
-                                <td key={o.value}
-                                  className="text-center border-r cursor-pointer"
-                                  style={{ borderColor: '#e5e7eb', background: selVal === o.value ? o.color + '18' : 'transparent' }}
-                                  onClick={() => setEditResp(r => ({ ...r, [preg.id]: o.value }))}>
-                                  <div className="flex items-center justify-center py-2 px-1">
-                                    {selVal === o.value ? (
-                                      <div className="w-5 h-5 rounded flex items-center justify-center text-white text-xs font-bold"
-                                        style={{ background: o.color }}>✓</div>
-                                    ) : (
-                                      <div className="w-5 h-5 rounded border-2" style={{ borderColor: '#d1d5db' }} />
-                                    )}
-                                  </div>
-                                </td>
-                              ))}
-                            </tr>
-                          );
-                        });
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
-                    Aspectos a Mejorar / Aspectos Relevantes
-                  </label>
-                  <textarea className="w-full px-3 py-2 border rounded-md text-sm resize-none"
-                    style={{ borderColor: P.menta, minHeight: 70 }}
-                    value={editNotas}
-                    onChange={e => setEditNotas(e.target.value)}
-                    placeholder="MEJORAR: … / ASPECTO RELEVANTE: …" />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" onClick={() => setModoEdicion(false)} disabled={savingEdit}>
-                    Cancelar
-                  </Button>
-                  <Button onClick={guardarEdicion} disabled={savingEdit}
-                    style={{ background: P.verde, color: 'white' }}>
-                    <Save className="h-4 w-4 mr-2" />
-                    {savingEdit ? 'Guardando…' : 'Guardar Cambios'}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              /* ── MODO VISUALIZACIÓN ── */
-              <div className="space-y-4">
-                <div className="flex items-center gap-4 p-3 rounded-lg"
-                  style={{ background: BG_NIVEL[detModal.nivel_desempeno] }}>
-                  <div className="text-3xl font-bold font-mono"
-                    style={{ color: COLOR_NIVEL[detModal.nivel_desempeno] }}>
-                    {detModal.puntaje_total}
-                  </div>
-                  <div className="flex-1">
-                    <NivelBadge nivel={detModal.nivel_desempeno} />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Evaluado por: {detModal.evaluador?.full_name} ·
-                      Período: {detModal.periodo?.nombre || detModal.periodo || '—'}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    {empleado.user_id ? (
-                      <Button onClick={handleEnviarCorreo} disabled={sendingMail || loadingDet}
-                        size="sm" style={{ background: mailOk ? P.menta : '#3b82f6', color: 'white' }}>
-                        {mailOk
-                          ? <><CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Enviado</>
-                          : sendingMail
-                            ? <><Send className="h-3.5 w-3.5 mr-1 animate-pulse" /> Enviando…</>
-                            : <><Mail className="h-3.5 w-3.5 mr-1" /> Enviar correo</>}
-                      </Button>
-                    ) : (
-                      <Button onClick={handleImprimir}
-                        disabled={loadingDet || generandoPdf}
-                        size="sm"
-                        style={{ background: generandoPdf ? '#9ca3af' : P.oliva, color: 'white' }}>
-                        <Printer className="h-3.5 w-3.5 mr-1" />
-                        {generandoPdf ? 'Generando…' : 'Descargar PDF'}
-                      </Button>
-                    )}
-                    {isAdminOrGerencia && (
-                      <Button onClick={activarEdicion}
-                        style={{ background: P.menta, color: 'white' }} size="sm">
-                        <Edit3 className="h-3.5 w-3.5 mr-1" /> Editar
-                      </Button>
-                    )}
-                  </div>
-                </div>
-
-                {categorias.map(cat => {
-                  const dets = detalles.filter(d => d.pregunta?.categoria_id === cat.id);
-                  if (!dets.length) return null;
-                  return (
-                    <div key={cat.id}>
-                      <h4 className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: P.verde }}>
-                        {cat.nombre}
-                      </h4>
-                      {dets.map(d => {
-                        const op = OPCIONES_RESPUESTA.find(o => o.value === d.respuesta);
-                        return (
-                          <div key={d.id}
-                            className="flex items-center justify-between py-1.5 border-b last:border-b-0 text-sm">
-                            <span className="text-gray-700 flex-1 pr-4">{d.pregunta?.texto}</span>
-                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full shrink-0"
-                              style={{ background: op?.color + '20', color: op?.color }}>{op?.short}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-
-                {detModal.notas && (
-                  <div className="p-3 rounded-lg text-sm text-gray-700" style={{ background: '#f8faf8' }}>
-                    <p className="text-xs font-semibold text-gray-500 mb-1">Notas</p>
-                    {detModal.notas}
-                  </div>
-                )}
-              </div>
-            )}
-          </Modal>
+        {canEvaluar(empleado.departamento) && (
+          <Button onClick={onNuevaEval} style={{ background: P.verde, color: 'white' }}>
+            <Plus className="h-4 w-4 mr-2" /> Nueva Evaluación
+          </Button>
         )}
       </div>
 
-    {/* Portal: se monta directamente en <body> para que el CSS de impresión funcione */}
-      {detModal && !modoEdicion && detalles.length > 0 && createPortal(
-        <EvaluacionPrintView
-          empleado={empleado}
-          evaluacion={detModal}
-          detalles={detalles}
-          categorias={categorias}
-          logoUrl="https://wnsnymxabmxswnpcpvoj.supabase.co/storage/v1/object/public/templates/garana1.png"
-        />,
-        document.body
+      {/* KPIs */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: 'Evaluaciones',   value: info.count,                                           icon: Award,     color: P.verde },
+          { label: 'Último Puntaje', value: info.ultima?.puntaje_total ?? '—',                    icon: Star,      color: P.menta },
+          { label: 'Último Nivel',   value: info.ultima?.nivel_desempeno?.split(' ')[0] ?? '—',   icon: TrendingUp, color: P.oliva },
+        ].map(({ label, value, icon: Icon, color }) => (
+          <div key={label} className="p-4 rounded-xl border text-center" style={{ borderColor: color + '40' }}>
+            <Icon className="h-5 w-5 mx-auto mb-1" style={{ color }} />
+            <div className="text-xl font-bold" style={{ color }}>{value}</div>
+            <div className="text-xs text-gray-500">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Historial */}
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: P.verde + '20' }}>
+        <div className="px-4 py-3 font-semibold text-sm" style={{ background: P.verde, color: 'white' }}>
+          Historial de Evaluaciones
+        </div>
+        {evals.length === 0
+          ? <div className="p-8 text-center text-gray-400 text-sm">Sin evaluaciones registradas</div>
+          : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs text-gray-500 border-b" style={{ background: '#f8faf8' }}>
+                  <th className="text-left px-4 py-2">#</th>
+                  <th className="text-left px-4 py-2">Fecha</th>
+                  <th className="text-left px-4 py-2">Período</th>
+                  <th className="text-left px-4 py-2">Evaluador</th>
+                  <th className="text-center px-4 py-2">Puntaje</th>
+                  <th className="text-left px-4 py-2">Nivel</th>
+                  <th className="px-4 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {evals.map((ev, i) => (
+                  <tr key={ev.id} className="border-b hover:bg-gray-50">
+                    <td className="px-4 py-2 text-gray-400">{i + 1}</td>
+                    <td className="px-4 py-2">{new Date(ev.fecha_evaluacion).toLocaleDateString('es-CO')}</td>
+                    <td className="px-4 py-2">
+                      <span className="text-xs px-2 py-0.5 rounded-full"
+                        style={{ background: P.verde + '15', color: P.verde }}>
+                        {ev.periodo?.nombre || ev.periodo || '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-gray-600">{ev.evaluador?.full_name || '—'}</td>
+                    <td className="px-4 py-2 w-28"><PuntajeBar puntaje={ev.puntaje_total} /></td>
+                    <td className="px-4 py-2"><NivelBadge nivel={ev.nivel_desempeno} /></td>
+                    <td className="px-4 py-2">
+                      <div className="flex gap-1">
+                        <button onClick={() => verDetalle(ev)}
+                          className="p-1 rounded hover:bg-gray-100 text-gray-500" title="Ver detalle">
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        {empleado.user_id && new Date(ev.fecha_evaluacion).getFullYear() >= 2025 && (
+                          <button onClick={() => enviarCorreoRetroactivo(ev)} disabled={enviandoId === ev.id}
+                            className="p-1 rounded hover:bg-blue-50 text-blue-400"
+                            title="Enviar retroalimentación por correo">
+                            {enviandoId === ev.id
+                              ? <Send className="h-4 w-4 animate-pulse" />
+                              : <Mail className="h-4 w-4" />}
+                          </button>
+                        )}
+                        {isAdminOrGerencia && (
+                          <button onClick={() => eliminar(ev.id)} disabled={deleting === ev.id}
+                            className="p-1 rounded hover:bg-red-50 text-red-400" title="Eliminar">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+      </div>
+
+      {/* Modal detalle / edición */}
+      {detModal && (
+        <Modal
+          title={modoEdicion
+            ? `Editando — ${empleado.nombre_completo}`
+            : `Evaluación — ${new Date(detModal.fecha_evaluacion).toLocaleDateString('es-CO')}`}
+          onClose={() => { setDetModal(null); setModoEdicion(false); }}
+          size={modoEdicion ? 'xl' : 'lg'}>
+          {loadingDet ? (
+            <div className="text-center py-8 text-gray-400">Cargando…</div>
+          ) : modoEdicion ? (
+            /* ── MODO EDICIÓN ── */
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 p-3 rounded-xl"
+                style={{ background: '#f8faf8', border: `1px solid ${P.menta}30` }}>
+                <label className="text-xs font-semibold text-gray-600 shrink-0">Período:</label>
+                <select className="px-3 py-1.5 border rounded-md text-sm"
+                  style={{ borderColor: P.menta }}
+                  value={editPeriodo}
+                  onChange={e => setEditPeriodo(e.target.value)}>
+                  <option value="">— Sin período —</option>
+                  {periodos.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre}{p.is_active ? ' (activo)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <div className="flex-1 flex items-center gap-2 justify-end">
+                  {(() => {
+                    const pts = Object.values(editResp).reduce((s,v)=>s+v,0);
+                    const niv = calcularNivel(pts);
+                    return (
+                      <>
+                        <NivelBadge nivel={niv} />
+                        <span className="font-black text-lg font-mono" style={{ color: COLOR_NIVEL[niv] }}>{pts}</span>
+                        <span className="text-xs text-gray-400">/ {PUNTAJE_MAX}</span>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              <div className="rounded-xl border overflow-hidden" style={{ borderColor: P.verde + '30' }}>
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr style={{ background: P.verde }}>
+                      <th className="text-left px-3 py-2 text-xs font-semibold text-white w-28">Categoría</th>
+                      <th className="text-left px-3 py-2 text-xs font-semibold text-white">Pregunta</th>
+                      {OPCIONES_RESPUESTA.map(o => (
+                        <th key={o.value} className="text-center px-1 py-2 text-xs font-semibold w-16 text-white">
+                          <span className="block leading-tight">{o.short}</span>
+                          <span className="text-xs opacity-70">{o.value}</span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {categorias.map(cat => {
+                      const pregs = cat.preguntas.filter(p => p.is_active);
+                      if (!pregs.length) return null;
+                      return pregs.map((preg, idx) => {
+                        const selVal = editResp[preg.id];
+                        return (
+                          <tr key={preg.id} className="border-b"
+                            style={{ background: idx % 2 === 0 ? 'white' : '#fafaf8', borderColor: '#e5e7eb' }}>
+                            {idx === 0 ? (
+                              <td rowSpan={pregs.length} className="px-3 py-2 text-xs font-bold align-top border-r"
+                                style={{ color: P.verde, borderColor: P.verde + '20', background: P.verde + '08', paddingTop: 12 }}>
+                                {cat.nombre}
+                              </td>
+                            ) : null}
+                            <td className="px-3 py-2 border-r text-xs" style={{ borderColor: '#e5e7eb', color: P.dark }}>
+                              {preg.texto}
+                            </td>
+                            {OPCIONES_RESPUESTA.map(o => (
+                              <td key={o.value} className="text-center border-r cursor-pointer"
+                                style={{ borderColor: '#e5e7eb', background: selVal === o.value ? o.color + '18' : 'transparent' }}
+                                onClick={() => setEditResp(r => ({ ...r, [preg.id]: o.value }))}>
+                                <div className="flex items-center justify-center py-2 px-1">
+                                  {selVal === o.value ? (
+                                    <div className="w-5 h-5 rounded flex items-center justify-center text-white text-xs font-bold"
+                                      style={{ background: o.color }}>✓</div>
+                                  ) : (
+                                    <div className="w-5 h-5 rounded border-2" style={{ borderColor: '#d1d5db' }} />
+                                  )}
+                                </div>
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      });
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
+                  Aspectos a Mejorar / Aspectos Relevantes
+                </label>
+                <textarea className="w-full px-3 py-2 border rounded-md text-sm resize-none"
+                  style={{ borderColor: P.menta, minHeight: 70 }}
+                  value={editNotas}
+                  onChange={e => setEditNotas(e.target.value)}
+                  placeholder="MEJORAR: … / ASPECTO RELEVANTE: …" />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setModoEdicion(false)} disabled={savingEdit}>
+                  Cancelar
+                </Button>
+                <Button onClick={guardarEdicion} disabled={savingEdit}
+                  style={{ background: P.verde, color: 'white' }}>
+                  <Save className="h-4 w-4 mr-2" />
+                  {savingEdit ? 'Guardando…' : 'Guardar Cambios'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            /* ── MODO VISUALIZACIÓN ── */
+            <div className="space-y-4">
+              <div className="flex items-center gap-4 p-3 rounded-lg"
+                style={{ background: BG_NIVEL[detModal.nivel_desempeno] }}>
+                <div className="text-3xl font-bold font-mono"
+                  style={{ color: COLOR_NIVEL[detModal.nivel_desempeno] }}>
+                  {detModal.puntaje_total}
+                </div>
+                <div className="flex-1">
+                  <NivelBadge nivel={detModal.nivel_desempeno} />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Evaluado por: {detModal.evaluador?.full_name} ·
+                    Período: {detModal.periodo?.nombre || detModal.periodo || '—'}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  {empleado.user_id ? (
+                    <Button onClick={handleEnviarCorreo} disabled={sendingMail || loadingDet}
+                      size="sm" style={{ background: mailOk ? P.menta : '#3b82f6', color: 'white' }}>
+                      {mailOk
+                        ? <><CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Enviado</>
+                        : sendingMail
+                          ? <><Send className="h-3.5 w-3.5 mr-1 animate-pulse" /> Enviando…</>
+                          : <><Mail className="h-3.5 w-3.5 mr-1" /> Enviar correo</>}
+                    </Button>
+                  ) : (
+                    <Button onClick={handleImprimir}
+                      disabled={loadingDet || generandoPdf}
+                      size="sm"
+                      style={{ background: P.oliva, color: 'white' }}>
+                      <Printer className="h-3.5 w-3.5 mr-1" />
+                      Descargar PDF
+                    </Button>
+                  )}
+                  {isAdminOrGerencia && (
+                    <Button onClick={activarEdicion}
+                      style={{ background: P.menta, color: 'white' }} size="sm">
+                      <Edit3 className="h-3.5 w-3.5 mr-1" /> Editar
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {categorias.map(cat => {
+                const dets = detalles.filter(d => d.pregunta?.categoria_id === cat.id);
+                if (!dets.length) return null;
+                return (
+                  <div key={cat.id}>
+                    <h4 className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: P.verde }}>
+                      {cat.nombre}
+                    </h4>
+                    {dets.map(d => {
+                      const op = OPCIONES_RESPUESTA.find(o => o.value === d.respuesta);
+                      return (
+                        <div key={d.id}
+                          className="flex items-center justify-between py-1.5 border-b last:border-b-0 text-sm">
+                          <span className="text-gray-700 flex-1 pr-4">{d.pregunta?.texto}</span>
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full shrink-0"
+                            style={{ background: op?.color + '20', color: op?.color }}>{op?.short}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+
+              {detModal.notas && (
+                <div className="p-3 rounded-lg text-sm text-gray-700" style={{ background: '#f8faf8' }}>
+                  <p className="text-xs font-semibold text-gray-500 mb-1">Notas</p>
+                  {detModal.notas}
+                </div>
+              )}
+            </div>
+          )}
+        </Modal>
       )}
-    </>
+    </div>
   );
 }
 
@@ -1062,25 +1177,17 @@ function ConfigEvaluadores({ configuracion, usuarios, addEvaluador, removeEvalua
     if (!userId || saving) return;
     setSaving(depto);
     setError(null);
-    try {
-      await addEvaluador(depto, userId);
-    } catch (e) {
-      setError(`Error al asignar: ${e.message}`);
-    } finally {
-      setSaving(null);
-    }
+    try { await addEvaluador(depto, userId); }
+    catch (e) { setError(`Error al asignar: ${e.message}`); }
+    finally { setSaving(null); }
   }
 
   async function handleRemove(id, depto) {
     setSaving(depto);
     setError(null);
-    try {
-      await removeEvaluador(id);
-    } catch (e) {
-      setError(`Error al quitar: ${e.message}`);
-    } finally {
-      setSaving(null);
-    }
+    try { await removeEvaluador(id); }
+    catch (e) { setError(`Error al quitar: ${e.message}`); }
+    finally { setSaving(null); }
   }
 
   return (
@@ -1106,7 +1213,7 @@ function ConfigEvaluadores({ configuracion, usuarios, addEvaluador, removeEvalua
             <span className="font-bold text-base leading-none" style={{ color: '#d97706' }}>!</span>
             <div>
               <p className="font-medium text-gray-700">Al cambiar evaluador</p>
-              <p>Quitar al anterior aquí <strong>Y</strong> revocar sus permisos en Gestión de Usuarios. Sin asignación aquí, no ve ningún empleado aunque tenga permisos.</p>
+              <p>Quitar al anterior aquí <strong>Y</strong> revocar sus permisos en Gestión de Usuarios.</p>
             </div>
           </div>
         </div>
@@ -1122,11 +1229,9 @@ function ConfigEvaluadores({ configuracion, usuarios, addEvaluador, removeEvalua
       )}
 
       {DEPARTAMENTOS.map(depto => {
-        const actual   = configuracion.find(c => c.departamento === depto) || null;
-        const isSaving = saving === depto;
-        const disponibles = usuarios.filter(u =>
-          !actual || actual.evaluador_user_id !== u.id
-        );
+        const actual      = configuracion.find(c => c.departamento === depto) || null;
+        const isSaving    = saving === depto;
+        const disponibles = usuarios.filter(u => !actual || actual.evaluador_user_id !== u.id);
 
         return (
           <div key={depto} className="rounded-xl border overflow-hidden"
@@ -1137,7 +1242,6 @@ function ConfigEvaluadores({ configuracion, usuarios, addEvaluador, removeEvalua
               Evaluadores — {depto}
               {isSaving && <span className="text-xs opacity-60 ml-auto font-normal">Guardando…</span>}
             </div>
-
             <div className="p-4 space-y-3">
               {actual ? (
                 <div className="flex items-center justify-between p-3 rounded-xl"
@@ -1154,40 +1258,28 @@ function ConfigEvaluadores({ configuracion, usuarios, addEvaluador, removeEvalua
                       <p className="text-xs text-gray-400">Evaluador asignado</p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleRemove(actual.id, depto)}
-                    disabled={isSaving}
+                  <button onClick={() => handleRemove(actual.id, depto)} disabled={isSaving}
                     className="p-1.5 rounded-lg hover:bg-red-50 transition-colors"
-                    style={{ color: '#dc2626' }}
-                    title="Quitar evaluador">
+                    style={{ color: '#dc2626' }} title="Quitar evaluador">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
               ) : (
                 <p className="text-sm text-gray-400 italic">Sin evaluador asignado</p>
               )}
-
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">
                   {actual ? 'Cambiar por:' : 'Asignar evaluador:'}
                 </label>
-                <select
-                  className="w-full px-3 py-2 border rounded-md text-sm transition-colors"
-                  style={{
-                    borderColor: P.menta,
-                    opacity: isSaving ? 0.6 : 1,
-                    cursor: isSaving ? 'not-allowed' : 'pointer',
-                  }}
-                  value=""
-                  disabled={isSaving}
+                <select className="w-full px-3 py-2 border rounded-md text-sm transition-colors"
+                  style={{ borderColor: P.menta, opacity: isSaving ? 0.6 : 1, cursor: isSaving ? 'not-allowed' : 'pointer' }}
+                  value="" disabled={isSaving}
                   onChange={e => handleSelect(depto, e.target.value)}>
                   <option value="">
                     {isSaving ? 'Guardando…' : actual ? '— Seleccionar reemplazo —' : '— Seleccionar usuario —'}
                   </option>
                   {disponibles.map(u => (
-                    <option key={u.id} value={u.id}>
-                      {u.full_name} ({u.role})
-                    </option>
+                    <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>
                   ))}
                 </select>
               </div>
@@ -1198,7 +1290,6 @@ function ConfigEvaluadores({ configuracion, usuarios, addEvaluador, removeEvalua
     </div>
   );
 }
-
 
 // ─── Tab Config: Períodos ─────────────────────────────────────────────────────
 function ConfigPeriodos({ periodos, createPeriodo, togglePeriodo, deletePeriodo }) {
@@ -1239,9 +1330,7 @@ function ConfigPeriodos({ periodos, createPeriodo, togglePeriodo, deletePeriodo 
                     <td className="px-4 py-2.5 font-medium" style={{ color: P.dark }}>{p.nombre}</td>
                     <td className="px-4 py-2.5 capitalize text-gray-500 text-xs">{p.frecuencia}</td>
                     <td className="px-4 py-2.5 text-xs text-gray-400">
-                      {p.fecha_inicio && p.fecha_fin
-                        ? `${p.fecha_inicio} → ${p.fecha_fin}`
-                        : '—'}
+                      {p.fecha_inicio && p.fecha_fin ? `${p.fecha_inicio} → ${p.fecha_fin}` : '—'}
                     </td>
                     <td className="px-4 py-2.5 text-center">
                       {p.is_active
@@ -1252,24 +1341,15 @@ function ConfigPeriodos({ periodos, createPeriodo, togglePeriodo, deletePeriodo 
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex gap-1 justify-end">
-                        <button
-                          onClick={() => togglePeriodo(p.id, !p.is_active)}
+                        <button onClick={() => togglePeriodo(p.id, !p.is_active)}
                           className="text-xs px-2 py-1 rounded transition-colors"
-                          style={{
-                            background: p.is_active ? '#fef2f2' : P.menta + '20',
-                            color:      p.is_active ? '#dc2626'  : P.verde,
-                          }}
-                          title={p.is_active ? 'Desactivar' : 'Activar'}>
+                          style={{ background: p.is_active ? '#fef2f2' : P.menta + '20', color: p.is_active ? '#dc2626' : P.verde }}>
                           {p.is_active ? 'Desactivar' : 'Activar'}
                         </button>
                         {!p.is_active && (
-                          <button
-                            onClick={() => {
-                              if (window.confirm(`¿Eliminar el período "${p.nombre}"? Las evaluaciones asociadas perderán el vínculo.`))
-                                deletePeriodo(p.id);
-                            }}
-                            className="p-1 rounded hover:bg-red-50 text-red-400"
-                            title="Eliminar">
+                          <button onClick={() => {
+                            if (window.confirm(`¿Eliminar el período "${p.nombre}"?`)) deletePeriodo(p.id);
+                          }} className="p-1 rounded hover:bg-red-50 text-red-400" title="Eliminar">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         )}
@@ -1287,15 +1367,13 @@ function ConfigPeriodos({ periodos, createPeriodo, togglePeriodo, deletePeriodo 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Nombre *</label>
-            <Input placeholder="Ej: 2025-II"
-              value={nuevo.nombre}
+            <Input placeholder="Ej: 2025-II" value={nuevo.nombre}
               onChange={e => setNuevo(s => ({ ...s, nombre: e.target.value }))} />
           </div>
           <div>
             <label className="text-xs text-gray-500 mb-1 block">Frecuencia</label>
             <select className="w-full px-3 py-2 border rounded-md text-sm"
-              value={nuevo.frecuencia}
-              onChange={e => setNuevo(s => ({ ...s, frecuencia: e.target.value }))}>
+              value={nuevo.frecuencia} onChange={e => setNuevo(s => ({ ...s, frecuencia: e.target.value }))}>
               {FRECUENCIAS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
             </select>
           </div>
@@ -1321,7 +1399,6 @@ function ConfigPeriodos({ periodos, createPeriodo, togglePeriodo, deletePeriodo 
     </div>
   );
 }
-
 
 // ─── Tab Config: Cuestionario ─────────────────────────────────────────────────
 function ConfigCuestionario({ categorias, createCategoria, toggleCategoria, createPregunta, togglePregunta, updatePregunta }) {
@@ -1519,9 +1596,7 @@ function TablaEmpleados({
                 </td>
                 <td className="px-4 py-3"><NivelBadge nivel={info.ultima?.nivel_desempeno} /></td>
                 {mostrarEstado && periodoActivo && (
-                  <td className="px-4 py-3 text-center">
-                    <BadgeEstado evaluado={yaEval} />
-                  </td>
+                  <td className="px-4 py-3 text-center"><BadgeEstado evaluado={yaEval} /></td>
                 )}
                 <td className="px-4 py-3">
                   <div className="flex gap-1 justify-end">
@@ -1554,225 +1629,7 @@ function TablaEmpleados({
   );
 }
 
-// ─── Componente de impresión institucional ────────────────────────────────────
-function EvaluacionPrintView({ empleado, evaluacion, detalles, categorias, logoUrl }) {
-  const fecha = evaluacion ? new Date(evaluacion.fecha_evaluacion).toLocaleDateString('es-CO', {
-    year: 'numeric', month: 'long', day: 'numeric'
-  }) : '';
-  const nivel = evaluacion?.nivel_desempeno || '';
-  const color = COLOR_NIVEL[nivel] || '#2e5244';
-
-  // Calcular promedio por categoría
-  const promediosCat = categorias.map(cat => {
-    const dets = detalles.filter(d => d.pregunta?.categoria_id === cat.id);
-    const prom = dets.length ? (dets.reduce((s,d)=>s+d.respuesta,0)/dets.length).toFixed(1) : '—';
-    return { nombre: cat.nombre, promedio: prom, total: dets.length };
-  });
-
-  const S = {
-    page:     { fontFamily: '"Arial", sans-serif', color: '#1a2e25', background: 'white', fontSize: 12 },
-    // Encabezado
-    header:   { background: 'linear-gradient(135deg, #2e5244 0%, #1a3330 100%)', padding: '0 0 0 0' },
-    logoBar:  { padding: '18px 28px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
-    logoImg:  { maxHeight: 90, maxWidth: 240, objectFit: 'contain' },
-    headerR:  { textAlign: 'right', color: 'white' },
-    titulo:   { fontSize: 20, fontWeight: 'bold', letterSpacing: 1 },
-    subtit:   { fontSize: 11, color: '#6dbd96', marginTop: 4, letterSpacing: 2 },
-    // Banda de nivel
-    banda:    { background: color, padding: '12px 28px', display: 'flex', alignItems: 'center', gap: 20 },
-    puntaje:  { color: 'white', fontSize: 40, fontWeight: 900, fontFamily: 'monospace', lineHeight: 1 },
-    pMax:     { fontSize: 18, opacity: 0.7 },
-    nivelTxt: { color: 'white', fontSize: 17, fontWeight: 'bold' },
-    fechaTxt: { marginLeft: 'auto', color: 'white', fontSize: 11, opacity: 0.9, textAlign: 'right', lineHeight: 1.5 },
-    // Ficha empleado
-    ficha:    { padding: '14px 28px', background: '#f4f7f5', borderBottom: '3px solid #6dbd96', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px' },
-    fichaItem:{ fontSize: 12, display: 'flex', gap: 6 },
-    fichaLbl: { fontWeight: 'bold', color: '#2e5244', minWidth: 90 },
-    // Sección
-    seccion:  { padding: '16px 28px 0' },
-    secTit:   { fontSize: 11, fontWeight: 'bold', color: '#2e5244', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 8, borderBottom: '1px solid #dee8e3', paddingBottom: 4 },
-    // Tabla principal
-    tabla:    { width: '100%', borderCollapse: 'collapse', fontSize: 11 },
-    thVerde:  { background: '#2e5244', color: 'white', padding: '7px 10px', textAlign: 'left' },
-    thCentro: { background: '#2e5244', color: 'white', padding: '7px 4px', textAlign: 'center', width: 50, fontSize: 10, lineHeight: 1.2 },
-    tdCat:    { padding: '7px 10px', fontSize: 10, fontWeight: 'bold', color: '#2e5244', background: '#eef5f1', borderRight: '2px solid #6dbd96', verticalAlign: 'top', paddingTop: 9 },
-    tdPreg:   { padding: '6px 10px', borderRight: '1px solid #e5e7eb', lineHeight: 1.4 },
-    // Fila marcada
-    tdMarca:  (isMarked, c) => ({ textAlign: 'center', padding: '6px 4px', borderRight: '1px solid #f0f0f0', background: isMarked ? c+'22' : 'transparent' }),
-    checkBox: (c) => ({ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, background: c, borderRadius: 3, color: 'white', fontSize: 12, fontWeight: 'bold' }),
-    // Resumen + notas
-    resumen:  { padding: '14px 28px 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 },
-    catBox:   { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 10px', borderBottom: '1px solid #e5e7eb', fontSize: 11 },
-    catProm:  (c) => ({ display: 'inline-block', background: c+'20', color: c, padding: '1px 10px', borderRadius: 10, fontWeight: 'bold', fontSize: 11 }),
-    notasBox: { background: '#f8faf8', border: '1px solid #dee8e3', borderRadius: 4, padding: '10px 12px', fontSize: 11, color: '#333', lineHeight: 1.7 },
-    // Firma
-    firmas:   { padding: '14px 28px 10px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, marginTop: 6 },
-    firmaLn:  { borderTop: '1px solid #888', paddingTop: 6, textAlign: 'center', fontSize: 11, color: '#555' },
-    // Footer
-    footer:   { background: '#2e5244', padding: '10px 28px', display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#dedecc', marginTop: 10 },
-  };
-
-  return (
-    <div id="garana-pdf-print" style={{ ...S.page, display: 'none' }}>
-
-      {/* ── Encabezado ── */}
-      <div style={S.header}>
-        <div style={S.logoBar}>
-          <img src={logoUrl} alt="Garana Art" style={S.logoImg} />
-          <div style={S.headerR}>
-            <div style={S.titulo}>EVALUACIÓN DE COMPETENCIAS</div>
-            <div style={S.subtit}>SISTEMA DE GESTIÓN INTEGRAL · GARANA SIG</div>
-            <div style={{ color: '#dedecc', fontSize: 10, marginTop: 6 }}>INDECON S.A.S. / Garana Art — Riosucio, Caldas</div>
-          </div>
-        </div>
-
-        {/* Banda del nivel/puntaje */}
-        <div style={S.banda}>
-          <div>
-            <span style={S.puntaje}>{evaluacion?.puntaje_total}</span>
-            <span style={{ ...S.puntaje, ...S.pMax }}> / 85</span>
-          </div>
-          <div>
-            <div style={{ color: 'white', fontSize: 10, opacity: 0.8, marginBottom: 3 }}>NIVEL DE DESEMPEÑO</div>
-            <div style={S.nivelTxt}>{nivel}</div>
-          </div>
-          <div style={S.fechaTxt}>
-            <div>Fecha de evaluación</div>
-            <div style={{ fontWeight: 'bold', fontSize: 12 }}>{fecha}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Ficha empleado ── */}
-      <div style={S.ficha}>
-        {[
-          ['Empleado', empleado?.nombre_completo],
-          ['Cédula', empleado?.cedula],
-          ['Cargo', empleado?.cargo || '—'],
-          ['Departamento', empleado?.departamento],
-          ['Evaluador', evaluacion?.evaluador?.full_name || '—'],
-          ['Período', evaluacion?.periodo?.nombre || evaluacion?.periodo || '—'],
-        ].map(([lbl, val]) => (
-          <div key={lbl} style={S.fichaItem}>
-            <span style={S.fichaLbl}>{lbl}:</span>
-            <span>{val}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Matriz de evaluación ── */}
-      <div style={S.seccion}>
-        <div style={S.secTit}>Resultados de la Evaluación</div>
-        <table style={S.tabla}>
-          <thead>
-            <tr>
-              <th style={{ ...S.thVerde, width: 110 }}>Categoría</th>
-              <th style={S.thVerde}>Pregunta</th>
-              {OPCIONES_RESPUESTA.map(o => (
-                <th key={o.value} style={S.thCentro}>
-                  <div>{o.short}</div>
-                  <div style={{ fontSize: 9, opacity: 0.7 }}>{o.value}</div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {categorias.map(cat => {
-              const catDets = detalles.filter(d => d.pregunta?.categoria_id === cat.id);
-              if (!catDets.length) return null;
-              return catDets.map((d, idx) => (
-                <tr key={d.id} style={{ background: idx%2===0 ? 'white' : '#f9fbf9', borderBottom: '1px solid #e5e7eb' }}>
-                  {idx === 0 && (
-                    <td rowSpan={catDets.length} style={S.tdCat}>{cat.nombre}</td>
-                  )}
-                  <td style={S.tdPreg}>{d.pregunta?.texto}</td>
-                  {OPCIONES_RESPUESTA.map(o => {
-                    const marcado = d.respuesta === o.value;
-                    return (
-                      <td key={o.value} style={S.tdMarca(marcado, o.color)}>
-                        {marcado && <span style={S.checkBox(o.color)}>✓</span>}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ));
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* ── Resumen por categoría + Notas ── */}
-      <div style={S.resumen}>
-        {/* Promedio por categoría */}
-        <div>
-          <div style={S.secTit}>Promedio por Categoría</div>
-          {promediosCat.map(({ nombre, promedio }) => (
-            <div key={nombre} style={S.catBox}>
-              <span style={{ color: '#333' }}>{nombre}</span>
-              <span style={S.catProm(color)}>{promedio} / 5</span>
-            </div>
-          ))}
-          {/* Tabla de ajustes compacta */}
-          <div style={{ marginTop: 12 }}>
-            <div style={S.secTit}>Tabla de Ajustes</div>
-            <table style={{ ...S.tabla, fontSize: 10 }}>
-              <tbody>
-                {[
-                  ['0–17',  'Muy debajo Expectativas',  '#dc2626'],
-                  ['18–34', 'Debajo de Expectativas',    '#d97706'],
-                  ['35–51', 'Alcanza Expectativas',      '#6f7b2c'],
-                  ['52–68', 'Mejora Expectativas',       '#6dbd96'],
-                  ['69–85', 'Sobresaliente',             '#2e5244'],
-                ].map(([rango, niv, c]) => (
-                  <tr key={niv} style={{ background: nivel.startsWith(niv.split(' ')[0]) ? c+'18' : 'transparent', borderBottom: '1px solid #f0f0f0' }}>
-                    <td style={{ padding: '3px 8px', fontFamily: 'monospace', fontWeight: 'bold', color: c, width: 60 }}>{rango}</td>
-                    <td style={{ padding: '3px 8px', color: '#333' }}>{niv}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Notas */}
-        <div>
-          <div style={S.secTit}>Aspectos a Mejorar / Relevantes</div>
-          {evaluacion?.notas
-            ? <div style={S.notasBox}>{evaluacion.notas}</div>
-            : <div style={{ ...S.notasBox, color: '#aaa', fontStyle: 'italic' }}>Sin observaciones registradas</div>
-          }
-        </div>
-      </div>
-
-      {/* ── Firmas ── */}
-      <div style={S.firmas}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ height: 36 }} />
-          <div style={S.firmaLn}>
-            Firma Evaluado<br />
-            <strong>{empleado?.nombre_completo}</strong><br />
-            <span style={{ fontSize: 10, color: '#888' }}>C.C. {empleado?.cedula}</span>
-          </div>
-        </div>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ height: 36 }} />
-          <div style={S.firmaLn}>
-            Firma Evaluador<br />
-            <strong>{evaluacion?.evaluador?.full_name || '—'}</strong>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Footer ── */}
-      <div style={S.footer}>
-        <span>Garana SIG — Sistema de Gestión Integral</span>
-        <span>Documento generado el {new Date().toLocaleDateString('es-CO')}</span>
-      </div>
-    </div>
-  );
-}
-
-
+// ─── Componente principal ─────────────────────────────────────────────────────
 export default function EvaluacionCompetenciasManager({ onBack }) {
   const {
     empleados, empleadosPermitidos, empleadosPendientes,
@@ -1841,7 +1698,6 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
     return matchS && matchD;
   });
 
-  // ── Vista formulario ──────────────────────────────────────────────────────
   if (view === 'formulario') {
     return (
       <Modal title="Nueva Evaluación de Desempeño"
@@ -1860,7 +1716,6 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
     );
   }
 
-  // ── Vista perfil ──────────────────────────────────────────────────────────
   if (view === 'perfil' && selEmpleado) {
     return (
       <PerfilEmpleado
@@ -1891,9 +1746,9 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
   ];
 
   const CONFIG_TABS = [
-    { id: 'evaluadores',  label: 'Evaluadores' },
-    { id: 'periodos',     label: 'Períodos'    },
-    { id: 'cuestionario', label: 'Cuestionario'},
+    { id: 'evaluadores',  label: 'Evaluadores'  },
+    { id: 'periodos',     label: 'Períodos'     },
+    { id: 'cuestionario', label: 'Cuestionario' },
   ];
 
   return (
@@ -1902,9 +1757,7 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
       {toast && (
         <div className="fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2"
           style={{ background: toast.type === 'ok' ? P.verde : P.rojo, color: 'white' }}>
-          {toast.type === 'ok'
-            ? <CheckCircle2 className="h-4 w-4" />
-            : <AlertCircle className="h-4 w-4" />}
+          {toast.type === 'ok' ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
           {toast.msg}
         </div>
       )}
@@ -1932,7 +1785,7 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
         )}
       </div>
 
-      {/* Banner período(s) activo(s) */}
+      {/* Banner período(s) */}
       {periodosActivos.length === 0 ? (
         <BannerPeriodo periodoActivo={null} pendientes={0} total={0} />
       ) : periodosActivos.length === 1 ? (
@@ -1984,7 +1837,7 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
         })}
       </div>
 
-      {/* ── Tab: Todos los empleados ── */}
+      {/* Tab: Todos */}
       {tab === 'empleados' && (
         <div className="space-y-4">
           <div className="flex gap-3">
@@ -2017,11 +1870,11 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
         </div>
       )}
 
-      {/* ── Tab: Pendientes ── */}
+      {/* Tab: Pendientes */}
       {tab === 'pendientes' && (() => {
-        const pidActivo  = periodoFiltroId || periodoActivo?.id || null;
-        const periodoSel = periodos.find(p => p.id === pidActivo) || periodoActivo;
-        const evaluadosSel  = getEvaluadosEnPeriodo(pidActivo);
+        const pidActivo      = periodoFiltroId || periodoActivo?.id || null;
+        const periodoSel     = periodos.find(p => p.id === pidActivo) || periodoActivo;
+        const evaluadosSel   = getEvaluadosEnPeriodo(pidActivo);
         const pendientesBase = empleadosPermitidos.filter(e => !evaluadosSel.has(e.id));
         const pendientesSel  = deptoFiltroPend
           ? pendientesBase.filter(e => e.departamento === deptoFiltroPend)
@@ -2033,8 +1886,7 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
                 <label className="text-sm font-medium shrink-0" style={{ color: P.dark }}>
                   Ver pendientes del período:
                 </label>
-                <select
-                  className="px-3 py-1.5 border rounded-md text-sm flex-1"
+                <select className="px-3 py-1.5 border rounded-md text-sm flex-1"
                   style={{ borderColor: P.menta }}
                   value={pidActivo || ''}
                   onChange={e => setPeriodoFiltroId(e.target.value || null)}>
@@ -2098,12 +1950,12 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
         );
       })()}
 
-      {/* ── Tab: Dashboard ── */}
+      {/* Tab: Dashboard */}
       {tab === 'dashboard' && (
         <EvaluacionDashboard evaluaciones={evaluaciones} categorias={categorias} />
       )}
 
-      {/* ── Tab: Configuración ── */}
+      {/* Tab: Configuración */}
       {tab === 'config' && isAdminOrGerencia && (
         <div className="space-y-4">
           <div className="flex gap-1 p-1 rounded-lg" style={{ background: '#f4f7f5' }}>

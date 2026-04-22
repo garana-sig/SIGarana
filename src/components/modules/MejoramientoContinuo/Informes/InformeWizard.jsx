@@ -4,13 +4,14 @@ import { motion, AnimatePresence }                  from 'framer-motion';
 import {
   ArrowLeft, ArrowRight, BarChart2, Edit3, Send,
   Loader2, ChevronDown, ChevronUp, FileBarChart,
-  AlertCircle, Info, Check, Eye, User,
+  AlertCircle, Info, Check, Eye, User, Printer,
 } from 'lucide-react';
 
 import { supabase }    from '@/lib/supabase';
 import { useInformes } from '@/hooks/useInformes';
 import { getProcessItems, getProcessConfig } from './constants/processItems';
-import RichEditor      from './components/RichEditor';
+import { printInforme }  from '../../../../utils/printReport';
+import RichEditor        from './components/RichEditor';
 
 import { Button }   from '@/app/components/ui/button';
 import { Input }    from '@/app/components/ui/input';
@@ -21,8 +22,6 @@ import {
 } from '@/app/components/ui/select';
 
 // ─────────────────────────────────────────────────────────────────────────────
-const LOGO_URL = 'https://wnsnymxabmxswnpcpvoj.supabase.co/storage/v1/object/public/templates/garana1.png';
-
 const STEPS = [
   { id: 1, label: 'Info',        icon: FileBarChart },
   { id: 2, label: 'Indicadores', icon: BarChart2    },
@@ -60,7 +59,7 @@ function StepperHeader({ current }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PASO 1 — Solo: título, proceso, responsable, período
+// PASO 1 — Info general
 // ─────────────────────────────────────────────────────────────────────────────
 function Step1({ form, setForm, processes, users, errors }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -70,7 +69,6 @@ function Step1({ form, setForm, processes, users, errors }) {
         <h3 className="text-base font-bold text-[#2e5244] mb-0.5">Información general</h3>
         <p className="text-xs text-gray-400">Título, proceso, responsable y período del informe</p>
       </div>
-
       <div>
         <Label className="text-sm font-medium text-gray-700 mb-1.5 block">Título <span className="text-red-500">*</span></Label>
         <Input value={form.title} onChange={e=>set('title',e.target.value)}
@@ -78,7 +76,6 @@ function Step1({ form, setForm, processes, users, errors }) {
           className={errors.title?'border-red-400':''} />
         {errors.title && <p className="text-xs text-red-500 mt-1">{errors.title}</p>}
       </div>
-
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label className="text-sm font-medium text-gray-700 mb-1.5 block">Proceso <span className="text-red-500">*</span></Label>
@@ -98,7 +95,6 @@ function Step1({ form, setForm, processes, users, errors }) {
             </p>
           )}
         </div>
-
         <div>
           <Label className="text-sm font-medium text-gray-700 mb-1.5 block">Responsable <span className="text-red-500">*</span></Label>
           <Select value={form.responsible_id} onValueChange={v=>set('responsible_id',v)}>
@@ -110,7 +106,6 @@ function Step1({ form, setForm, processes, users, errors }) {
           {errors.responsible_id && <p className="text-xs text-red-500 mt-1">{errors.responsible_id}</p>}
         </div>
       </div>
-
       <div>
         <Label className="text-sm font-medium text-gray-700 mb-1.5 block">Período <span className="text-red-500">*</span></Label>
         <Input value={form.period} onChange={e=>set('period',e.target.value)}
@@ -123,16 +118,12 @@ function Step1({ form, setForm, processes, users, errors }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PASO 2 — Indicadores + muestra objetivos derivados automáticamente
+// PASO 2 — Indicadores con objetivos derivados
 // ─────────────────────────────────────────────────────────────────────────────
 function Step2({ processId, selected, setSelected, indicators, loadingIndicators }) {
   const procCfg = getProcessConfig(processId);
   const toggle  = id => setSelected(p => p.includes(id) ? p.filter(x=>x!==id) : [...p,id]);
-
-  // Objetivos únicos de los indicadores seleccionados
-  const derivedObjectives = [...new Set(
-    indicators.filter(i => selected.includes(i.id)).map(i => i.objective).filter(Boolean)
-  )];
+  const objectives = [...new Set(indicators.filter(i=>selected.includes(i.id)).map(i=>i.objective).filter(Boolean))];
 
   if (loadingIndicators) return (
     <div className="flex items-center justify-center py-16 text-gray-400 gap-2 text-sm">
@@ -144,11 +135,8 @@ function Step2({ processId, selected, setSelected, indicators, loadingIndicators
     <div className="space-y-4">
       <div>
         <h3 className="text-base font-bold text-[#2e5244] mb-0.5">Indicadores del informe</h3>
-        <p className="text-xs text-gray-400">
-          Selecciona los indicadores. Los <strong>objetivos estratégicos</strong> se derivarán automáticamente.
-        </p>
+        <p className="text-xs text-gray-400">Los objetivos se derivarán automáticamente de los seleccionados.</p>
       </div>
-
       {indicators.length === 0 ? (
         <div className="rounded-xl p-6 text-center text-sm text-gray-400" style={{ background:'#f5f5ef' }}>
           <BarChart2 className="h-8 w-8 mx-auto mb-2 opacity-30"/>
@@ -157,30 +145,25 @@ function Step2({ processId, selected, setSelected, indicators, loadingIndicators
       ) : (
         <div className="space-y-2">
           <div className="flex justify-between items-center">
-            <span className="text-xs text-gray-400">{selected.length} / {indicators.length} seleccionados</span>
+            <span className="text-xs text-gray-400">{selected.length} / {indicators.length}</span>
             <button type="button" className="text-xs font-semibold hover:underline" style={{ color:'#2e5244' }}
               onClick={() => setSelected(selected.length===indicators.length ? [] : indicators.map(i=>i.id))}>
               {selected.length===indicators.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
             </button>
           </div>
-
           {indicators.map(ind => {
             const sel = selected.includes(ind.id);
             return (
               <motion.div key={ind.id} whileTap={{ scale:0.99 }} onClick={() => toggle(ind.id)}
                 className="flex items-start gap-3 p-3 rounded-xl cursor-pointer border-2 transition-all select-none"
                 style={{ borderColor: sel?(procCfg?.color??'#6dbd96'):'#e5e7eb', background: sel?`${procCfg?.color??'#6dbd96'}0d`:'white' }}>
-                <div className="w-5 h-5 rounded flex items-center justify-center shrink-0 mt-0.5 transition-all"
+                <div className="w-5 h-5 rounded flex items-center justify-center shrink-0 mt-0.5"
                   style={{ background: sel?(procCfg?.color??'#6dbd96'):'white', border:`2px solid ${sel?(procCfg?.color??'#6dbd96'):'#d1d5db'}` }}>
                   {sel && <Check size={11} color="white"/>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-800">{ind.indicator_name}</p>
-                  {ind.objective && (
-                    <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
-                      <span className="font-medium" style={{ color: procCfg?.color }}>Objetivo:</span> {ind.objective}
-                    </p>
-                  )}
+                  {ind.objective && <p className="text-xs text-gray-400 mt-0.5"><span className="font-medium" style={{ color:procCfg?.color }}>Objetivo:</span> {ind.objective}</p>}
                 </div>
                 <span className="text-xs font-mono text-gray-400 shrink-0 mt-0.5">{ind.consecutive}</span>
               </motion.div>
@@ -188,22 +171,15 @@ function Step2({ processId, selected, setSelected, indicators, loadingIndicators
           })}
         </div>
       )}
-
-      {/* Panel de objetivos derivados */}
-      {derivedObjectives.length > 0 && (
+      {objectives.length > 0 && (
         <div className="rounded-xl border p-4 space-y-2" style={{ background:'#f0f7f4', borderColor:'#6dbd9640' }}>
-          <p className="text-xs font-bold text-[#2e5244] uppercase tracking-wide">
-            🎯 Objetivos estratégicos que se incluirán en el informe
-          </p>
-          {derivedObjectives.map((obj, i) => (
+          <p className="text-xs font-bold text-[#2e5244] uppercase tracking-wide">🎯 Objetivos que se incluirán</p>
+          {objectives.map((obj,i) => (
             <div key={i} className="flex items-start gap-2">
               <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ background:'#6dbd96' }}/>
               <p className="text-xs text-gray-700">{obj}</p>
             </div>
           ))}
-          <p className="text-[10px] text-gray-400 pt-1">
-            Estos objetivos se generan automáticamente a partir de los indicadores seleccionados.
-          </p>
         </div>
       )}
     </div>
@@ -222,10 +198,10 @@ function Step3({ reportId, processId, sections, setSections, onAutoSave }) {
 
   useEffect(() => { if (items.length>0 && openItem===null) setOpenItem(items[0].key); }, []);
 
-  const getData = k => sections[k] ?? { logros:'', por_mejorar:'', hallazgos:'', por_resaltar:'' };
+  const getData  = k => sections[k] ?? { logros:'', por_mejorar:'', hallazgos:'', por_resaltar:'' };
   const isFilled = k => { const s=getData(k); return [s.logros,s.por_mejorar,s.hallazgos,s.por_resaltar].some(v=>v&&v!=='<p></p>'); };
-  const filled = items.filter(i=>isFilled(i.key)).length;
-  const pct    = items.length>0 ? Math.round((filled/items.length)*100) : 0;
+  const filled   = items.filter(i=>isFilled(i.key)).length;
+  const pct      = items.length>0 ? Math.round((filled/items.length)*100) : 0;
 
   const handleChange = (key, field, value) => {
     setSections(p => ({ ...p, [key]: { ...getData(key), [field]: value } }));
@@ -238,7 +214,7 @@ function Step3({ reportId, processId, sections, setSections, onAutoSave }) {
     }, 1500);
   };
 
-  const grouped = items.reduce((acc, item) => {
+  const grouped = items.reduce((acc,item) => {
     const cat = item.category ?? 'default';
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(item);
@@ -249,9 +225,8 @@ function Step3({ reportId, processId, sections, setSections, onAutoSave }) {
     <div className="space-y-4">
       <div>
         <h3 className="text-base font-bold text-[#2e5244] mb-0.5">Contenido del informe</h3>
-        <p className="text-xs text-gray-400">Se guarda automáticamente mientras escribes.</p>
+        <p className="text-xs text-gray-400">Se guarda automáticamente. Puedes pegar imágenes e insertar tablas.</p>
       </div>
-
       <div className="space-y-1">
         <div className="flex justify-between text-xs text-gray-500">
           <span>{filled} de {items.length} ítems</span>
@@ -261,7 +236,6 @@ function Step3({ reportId, processId, sections, setSections, onAutoSave }) {
           <div className="h-1.5 rounded-full transition-all" style={{ width:`${pct}%`, background:'#6dbd96' }}/>
         </div>
       </div>
-
       {Object.entries(grouped).map(([cat, catItems]) => (
         <div key={cat}>
           {Object.keys(grouped).length>1 && cat!=='default' && (
@@ -291,8 +265,7 @@ function Step3({ reportId, processId, sections, setSections, onAutoSave }) {
                   </button>
                   <AnimatePresence>
                     {isOpen && (
-                      <motion.div initial={{ height:0,opacity:0 }} animate={{ height:'auto',opacity:1 }} exit={{ height:0,opacity:0 }} transition={{ duration:0.2 }}
-                        className="overflow-hidden">
+                      <motion.div initial={{ height:0,opacity:0 }} animate={{ height:'auto',opacity:1 }} exit={{ height:0,opacity:0 }} transition={{ duration:0.2 }} className="overflow-hidden">
                         <div className="p-3 border-t border-gray-100 bg-gray-50/50">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {[
@@ -323,7 +296,7 @@ function Step3({ reportId, processId, sections, setSections, onAutoSave }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Plantilla PDF — objetivos derivados de indicadores
+// Plantilla inline para preview (dentro del SIG)
 // ─────────────────────────────────────────────────────────────────────────────
 export function InformePDFTemplate({ formData, sections, indicators, selectedIndicators, processId, processList, users }) {
   const items   = getProcessItems(processId);
@@ -331,32 +304,28 @@ export function InformePDFTemplate({ formData, sections, indicators, selectedInd
   const proc    = processList.find(p=>p.id===processId);
   const selInds = indicators.filter(i=>selectedIndicators.includes(i.id));
   const responsible = users.find(u=>u.id===formData.responsible_id);
-
-  // Objetivos únicos derivados de los indicadores seleccionados
-  const objectives = [...new Set(selInds.map(i => i.objective).filter(Boolean))];
+  const objectives  = [...new Set(selInds.map(i=>i.objective).filter(Boolean))];
 
   return (
-    <div style={{ fontFamily:'Georgia, serif', background:'#fff', padding:'40px', fontSize:'12px', color:'#1f2937', maxWidth:'794px', margin:'0 auto' }}>
+    <div style={{ fontFamily:'Georgia, serif', background:'#fff', padding:'32px', fontSize:'12px', color:'#1f2937', maxWidth:'794px', margin:'0 auto' }}>
       {/* Portada */}
-      <div style={{ borderBottom:'3px solid #2e5244', paddingBottom:'24px', marginBottom:'28px' }}>
+      <div style={{ borderBottom:'3px solid #2e5244', paddingBottom:'20px', marginBottom:'24px' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'20px' }}>
           <div style={{ flex:1 }}>
-            <img src={LOGO_URL} alt="Garana" crossOrigin="anonymous" style={{ height:'52px', objectFit:'contain', marginBottom:'14px', display:'block' }}/>
-            <h1 style={{ fontSize:'18px', fontWeight:'bold', color:'#2e5244', margin:'0 0 4px' }}>{formData.title}</h1>
-            <p style={{ fontSize:'12px', color:'#6b7280', margin:0 }}>Sistema de Gestión Integral · Garana Art S.A.S.</p>
+            <img src="https://wnsnymxabmxswnpcpvoj.supabase.co/storage/v1/object/public/templates/garana1.png" alt="Garana" crossOrigin="anonymous"
+              style={{ height:'48px', objectFit:'contain', marginBottom:'12px', display:'block' }}/>
+            <h1 style={{ fontSize:'17px', fontWeight:'bold', color:'#2e5244', margin:'0 0 4px' }}>{formData.title}</h1>
+            <p style={{ fontSize:'11px', color:'#6b7280', margin:0 }}>Sistema de Gestión Integral · Garana Art S.A.S.</p>
           </div>
-          <div style={{ textAlign:'right', minWidth:'185px' }}>
-            <div style={{ background:`${procCfg?.color??'#6dbd96'}18`, padding:'10px 14px', borderRadius:'8px', border:`1px solid ${procCfg?.color??'#6dbd96'}35`, marginBottom:'10px' }}>
-              <p style={{ margin:'0 0 2px', fontSize:'9px', color:'#6b7280', textTransform:'uppercase', letterSpacing:'0.07em' }}>Proceso</p>
-              <p style={{ margin:0, fontWeight:'bold', color:procCfg?.color??'#2e5244', fontSize:'13px' }}>{procCfg?.icon} {proc?.name}</p>
+          <div style={{ textAlign:'right', minWidth:'175px' }}>
+            <div style={{ background:`${procCfg?.color??'#6dbd96'}18`, padding:'8px 12px', borderRadius:'7px', border:`1px solid ${procCfg?.color??'#6dbd96'}35`, marginBottom:'8px' }}>
+              <p style={{ margin:'0 0 2px', fontSize:'8px', color:'#6b7280', textTransform:'uppercase', letterSpacing:'.07em' }}>Proceso</p>
+              <p style={{ margin:0, fontWeight:'bold', color:procCfg?.color??'#2e5244', fontSize:'12px' }}>{procCfg?.icon} {proc?.name}</p>
             </div>
-            <table style={{ width:'100%', fontSize:'11px', borderCollapse:'collapse' }}>
+            <table style={{ width:'100%', fontSize:'10px', borderCollapse:'collapse' }}>
               <tbody>
-                {[['Período', formData.period], ['Responsable', responsible?.full_name??'—'], ['Fecha', new Date().toLocaleDateString('es-CO',{ day:'2-digit', month:'long', year:'numeric' })]].map(([k,v]) => (
-                  <tr key={k}>
-                    <td style={{ color:'#9ca3af', padding:'2px 8px 2px 0', textAlign:'right' }}>{k}</td>
-                    <td style={{ fontWeight:'600', color:'#374151', textAlign:'right' }}>{v}</td>
-                  </tr>
+                {[['Período',responsible?.full_name?formData.period:formData.period],['Responsable',responsible?.full_name??'—'],['Fecha',new Date().toLocaleDateString('es-CO',{day:'2-digit',month:'long',year:'numeric'})]].map(([k,v])=>(
+                  <tr key={k}><td style={{ color:'#9ca3af', padding:'2px 6px 2px 0', textAlign:'right' }}>{k}</td><td style={{ fontWeight:'600', color:'#374151', textAlign:'right' }}>{v}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -364,52 +333,48 @@ export function InformePDFTemplate({ formData, sections, indicators, selectedInd
         </div>
       </div>
 
-      {/* Objetivos estratégicos — derivados de indicadores */}
-      {objectives.length > 0 && (
-        <div style={{ marginBottom:'28px' }}>
-          <h2 style={{ fontSize:'11px', fontWeight:'bold', color:'#2e5244', textTransform:'uppercase', letterSpacing:'0.07em', borderBottom:'1px solid #e5e7eb', paddingBottom:'6px', marginBottom:'10px' }}>
-            🎯 Objetivos estratégicos evaluados
-          </h2>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-            {objectives.map((obj, i) => (
-              <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:'8px', padding:'6px 10px', background:'#f0f7f4', borderLeft:'2px solid #6dbd96', borderRadius:'0 4px 4px 0' }}>
-                <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:'#6dbd96', flexShrink:0, marginTop:'4px' }}/>
-                <p style={{ margin:0, fontSize:'11px', color:'#374151', lineHeight:1.5 }}>{obj}</p>
+      {/* Objetivos */}
+      {objectives.length>0 && (
+        <div style={{ marginBottom:'20px' }}>
+          <h2 style={{ fontSize:'10px', fontWeight:'bold', color:'#2e5244', textTransform:'uppercase', letterSpacing:'.07em', borderBottom:'1px solid #e5e7eb', paddingBottom:'5px', marginBottom:'8px' }}>🎯 Objetivos estratégicos</h2>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'5px' }}>
+            {objectives.map((obj,i) => (
+              <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:'7px', padding:'5px 9px', background:'#f0f7f4', borderLeft:'2px solid #6dbd96', borderRadius:'0 4px 4px 0' }}>
+                <div style={{ width:'5px', height:'5px', borderRadius:'50%', background:'#6dbd96', flexShrink:0, marginTop:'4px' }}/>
+                <p style={{ margin:0, fontSize:'10px', color:'#374151', lineHeight:1.4 }}>{obj}</p>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Indicadores vinculados */}
-      {selInds.length > 0 && (
-        <div style={{ marginBottom:'28px' }}>
-          <h2 style={{ fontSize:'11px', fontWeight:'bold', color:'#2e5244', textTransform:'uppercase', letterSpacing:'0.07em', borderBottom:'1px solid #e5e7eb', paddingBottom:'6px', marginBottom:'10px' }}>
-            📊 Indicadores de seguimiento
-          </h2>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+      {/* Indicadores */}
+      {selInds.length>0 && (
+        <div style={{ marginBottom:'20px' }}>
+          <h2 style={{ fontSize:'10px', fontWeight:'bold', color:'#2e5244', textTransform:'uppercase', letterSpacing:'.07em', borderBottom:'1px solid #e5e7eb', paddingBottom:'5px', marginBottom:'8px' }}>📊 Indicadores</h2>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'5px' }}>
             {selInds.map(ind => (
-              <div key={ind.id} style={{ background:'#f9fafb', padding:'7px 10px', borderRadius:'5px', border:'1px solid #e5e7eb' }}>
-                <p style={{ margin:'0 0 2px', fontWeight:'600', color:'#111827', fontSize:'11px' }}>{ind.indicator_name}</p>
-                {ind.consecutive && <p style={{ margin:0, color:'#9ca3af', fontSize:'9px', fontFamily:'monospace' }}>{ind.consecutive}</p>}
+              <div key={ind.id} style={{ background:'#f9fafb', padding:'6px 10px', borderRadius:'5px', border:'1px solid #e5e7eb' }}>
+                <p style={{ margin:'0 0 1px', fontWeight:'600', color:'#111827', fontSize:'10px' }}>{ind.indicator_name}</p>
+                {ind.consecutive && <p style={{ margin:0, color:'#9ca3af', fontSize:'8px', fontFamily:'monospace' }}>{ind.consecutive}</p>}
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Ítems de contenido */}
+      {/* Ítems */}
       {items.map(item => {
         const s = sections[item.key];
         if (!s) return null;
         const hasContent = [s.logros,s.por_mejorar,s.hallazgos,s.por_resaltar].some(v=>v&&v!=='<p></p>');
         if (!hasContent) return null;
         return (
-          <div key={item.key} style={{ marginBottom:'24px', breakInside:'avoid', pageBreakInside:'avoid' }}>
-            <div style={{ background:'linear-gradient(135deg,#2e5244,#6dbd96)', padding:'7px 14px', borderRadius:'5px 5px 0 0' }}>
-              <h3 style={{ margin:0, fontSize:'11px', fontWeight:'bold', color:'white', textTransform:'uppercase', letterSpacing:'0.07em' }}>{item.name}</h3>
+          <div key={item.key} style={{ marginBottom:'20px' }}>
+            <div style={{ background:'linear-gradient(135deg,#2e5244,#6dbd96)', padding:'6px 12px', borderRadius:'4px 4px 0 0' }}>
+              <h3 style={{ margin:0, fontSize:'10px', fontWeight:'bold', color:'white', textTransform:'uppercase', letterSpacing:'.07em' }}>{item.name}</h3>
             </div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', border:'1px solid #e5e7eb', borderTop:'none', borderRadius:'0 0 5px 5px', overflow:'hidden' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', border:'1px solid #e5e7eb', borderTop:'none', borderRadius:'0 0 4px 4px', overflow:'hidden' }}>
               {[
                 { field:'logros',       label:'✅ Logros',       bg:'#f0fdf4', accent:'#86efac' },
                 { field:'por_mejorar',  label:'⚠️ Por mejorar',  bg:'#fff7ed', accent:'#fed7aa' },
@@ -419,11 +384,11 @@ export function InformePDFTemplate({ formData, sections, indicators, selectedInd
                 const val   = s[field];
                 const empty = !val || val==='<p></p>';
                 return (
-                  <div key={field} style={{ padding:'9px 12px', background:empty?'#fafafa':bg, borderLeft:empty?'none':`3px solid ${accent}`, borderRight:idx%2===0?'1px solid #e5e7eb':'none', borderBottom:idx<2?'1px solid #e5e7eb':'none' }}>
-                    <p style={{ margin:'0 0 5px', fontSize:'9px', fontWeight:'bold', color:empty?'#d1d5db':'#374151', textTransform:'uppercase', letterSpacing:'0.05em' }}>{label}</p>
+                  <div key={field} style={{ padding:'8px 11px', background:empty?'#fafafa':bg, borderLeft:empty?'none':`2.5px solid ${accent}`, borderRight:idx%2===0?'1px solid #e5e7eb':'none', borderBottom:idx<2?'1px solid #e5e7eb':'none' }}>
+                    <p style={{ margin:'0 0 4px', fontSize:'8px', fontWeight:'bold', color:empty?'#d1d5db':'#374151', textTransform:'uppercase', letterSpacing:'.05em' }}>{label}</p>
                     {empty
-                      ? <p style={{ margin:0, color:'#d1d5db', fontSize:'10px', fontStyle:'italic' }}>Sin información</p>
-                      : <div style={{ fontSize:'11px', lineHeight:1.65, color:'#1f2937' }} dangerouslySetInnerHTML={{ __html:val }}/>}
+                      ? <p style={{ margin:0, color:'#d1d5db', fontSize:'9px', fontStyle:'italic' }}>Sin información</p>
+                      : <div style={{ fontSize:'10px', lineHeight:1.6, color:'#1f2937' }} dangerouslySetInnerHTML={{ __html:val }}/>}
                   </div>
                 );
               })}
@@ -433,9 +398,9 @@ export function InformePDFTemplate({ formData, sections, indicators, selectedInd
       })}
 
       {/* Footer */}
-      <div style={{ borderTop:'2px solid #e5e7eb', paddingTop:'12px', marginTop:'20px', display:'flex', justifyContent:'space-between' }}>
-        <p style={{ margin:0, fontSize:'9px', color:'#9ca3af' }}>Garana Art S.A.S. · Sistema de Gestión Integral · {proc?.name}</p>
-        <p style={{ margin:0, fontSize:'9px', color:'#9ca3af' }}>{responsible?.full_name} · {formData.period}</p>
+      <div style={{ borderTop:'1.5px solid #e5e7eb', paddingTop:'10px', marginTop:'16px', display:'flex', justifyContent:'space-between', fontSize:'8px', color:'#9ca3af' }}>
+        <span>Garana Art S.A.S. · Sistema de Gestión Integral · {proc?.name}</span>
+        <span>{responsible?.full_name} · {formData.period}</span>
       </div>
     </div>
   );
@@ -453,11 +418,20 @@ function Step4Preview({ formData, sections, indicators, selectedIndicators, proc
   const filledItems = items.filter(item => { const s=sections[item.key]; return s&&[s.logros,s.por_mejorar,s.hallazgos,s.por_resaltar].some(v=>v&&v!=='<p></p>'); });
   const objectives  = [...new Set(selInds.map(i=>i.objective).filter(Boolean))];
 
+  const handlePrint = () => printInforme({ formData, sections, indicators, selectedIndicators, processId, processList, users, getProcessItems, getProcessConfig });
+
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-base font-bold text-[#2e5244] mb-0.5">Vista previa</h3>
-        <p className="text-xs text-gray-400">Revisa el contenido antes de generar el PDF.</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-base font-bold text-[#2e5244] mb-0.5">Vista previa</h3>
+          <p className="text-xs text-gray-400">Revisa antes de enviar. También puedes pre-visualizar el PDF.</p>
+        </div>
+        <button onClick={handlePrint}
+          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors"
+          style={{ background:'#f0f7f4', color:'#2e5244', borderColor:'#6dbd9640' }}>
+          <Printer size={13}/> Ver PDF
+        </button>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -474,11 +448,10 @@ function Step4Preview({ formData, sections, indicators, selectedIndicators, proc
         ))}
       </div>
 
-      {/* Objetivos derivados */}
-      {objectives.length > 0 && (
+      {objectives.length>0 && (
         <div className="rounded-xl px-4 py-3 space-y-1.5" style={{ background:'#f0f7f4', borderLeft:'3px solid #6dbd96' }}>
-          <p className="text-xs font-bold text-[#2e5244] uppercase tracking-wide">🎯 Objetivos estratégicos</p>
-          {objectives.map((obj, i) => (
+          <p className="text-xs font-bold text-[#2e5244] uppercase tracking-wide">🎯 Objetivos</p>
+          {objectives.map((obj,i) => (
             <p key={i} className="text-xs text-gray-700 flex items-start gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-[#6dbd96] shrink-0 mt-1.5 inline-block"/>
               {obj}
@@ -489,7 +462,7 @@ function Step4Preview({ formData, sections, indicators, selectedIndicators, proc
 
       {selInds.length>0 && (
         <div>
-          <p className="text-xs font-semibold text-gray-600 mb-1.5">Indicadores vinculados:</p>
+          <p className="text-xs font-semibold text-gray-600 mb-1.5">Indicadores:</p>
           <div className="flex flex-wrap gap-1.5">
             {selInds.map(ind => (
               <Badge key={ind.id} className="text-xs"
@@ -501,12 +474,12 @@ function Step4Preview({ formData, sections, indicators, selectedIndicators, proc
         </div>
       )}
 
-      <div className="border rounded-xl overflow-hidden" style={{ maxHeight:'340px', overflowY:'auto' }}>
+      <div className="border rounded-xl overflow-hidden" style={{ maxHeight:'320px', overflowY:'auto' }}>
         <div className="px-3 py-2 border-b" style={{ background:'linear-gradient(135deg,#2e5244,#6dbd96)' }}>
           <p className="text-white text-xs font-semibold">{formData.title}</p>
           <p className="text-white/70 text-[10px]">{proc?.name} · {responsible?.full_name} · {formData.period}</p>
         </div>
-        <div className="p-3 space-y-4 bg-white">
+        <div className="p-3 space-y-3 bg-white">
           {filledItems.length===0
             ? <p className="text-center text-xs text-gray-400 py-4">Sin ítems con contenido</p>
             : filledItems.map(item => {
@@ -539,17 +512,17 @@ function Step4Preview({ formData, sections, indicators, selectedIndicators, proc
 
       <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs"
         style={{ background:'#f0f7f4', color:'#2e5244', border:'1px solid #6dbd9640' }}>
-        <Info size={13} className="shrink-0"/> Si todo está bien, avanza para generar el PDF y enviar.
+        <Info size={13} className="shrink-0"/>
+        Si todo está bien, avanza para enviar a revisión de gerencia.
       </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PASO 5 — Enviar
+// PASO 5 — Enviar  (sin html2canvas, usa printInforme para previsualizar)
 // ─────────────────────────────────────────────────────────────────────────────
 function Step5Send({ formData, sections, indicators, selectedIndicators, processId, processList, users, onSubmit, submitting }) {
-  const pdfRef  = useRef(null);
   const items   = getProcessItems(processId);
   const procCfg = getProcessConfig(processId);
   const proc    = processList.find(p=>p.id===processId);
@@ -557,36 +530,13 @@ function Step5Send({ formData, sections, indicators, selectedIndicators, process
   const responsible = users.find(u=>u.id===formData.responsible_id);
   const filledItems = items.filter(item => { const s=sections[item.key]; return s&&[s.logros,s.por_mejorar,s.hallazgos,s.por_resaltar].some(v=>v&&v!=='<p></p>'); });
 
-  const handleGenerateAndSubmit = async () => {
-    let pdfBlob = null;
-    try {
-      const html2canvas = (await import('html2canvas')).default;
-      const { jsPDF }   = await import('jspdf');
-      const canvas = await html2canvas(pdfRef.current, {
-        scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false,
-        onclone: clonedDoc => {
-          // Remover stylesheets con oklch (Tailwind v4 usa oklch que html2canvas no soporta)
-          clonedDoc.querySelectorAll('link[rel="stylesheet"]').forEach(el => el.remove());
-        },
-      });
-      const imgW=210, imgH=(canvas.height*imgW)/canvas.width;
-      const pdf = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
-      const pageH=297; let posY=0;
-      while (posY<imgH) {
-        if (posY>0) pdf.addPage();
-        pdf.addImage(canvas.toDataURL('image/jpeg',0.92),'JPEG',0,-posY,imgW,imgH);
-        posY+=pageH;
-      }
-      pdfBlob = pdf.output('blob');
-    } catch(e) { console.warn('[Wizard] PDF:', e.message); }
-    await onSubmit(pdfBlob);
-  };
+  const handlePrint = () => printInforme({ formData, sections, indicators, selectedIndicators, processId, processList, users, getProcessItems, getProcessConfig });
 
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-base font-bold text-[#2e5244] mb-0.5">Generar PDF y enviar</h3>
-        <p className="text-xs text-gray-400">Se notificará a gerencia con el PDF adjunto.</p>
+        <h3 className="text-base font-bold text-[#2e5244] mb-0.5">Enviar informe</h3>
+        <p className="text-xs text-gray-400">Se notificará a gerencia para su revisión.</p>
       </div>
 
       <div className="rounded-xl border p-4 space-y-3 bg-white">
@@ -620,23 +570,26 @@ function Step5Send({ formData, sections, indicators, selectedIndicators, process
           <AlertCircle size={13} className="shrink-0"/> Sin ítems completados. Puedes enviar de todas formas.
         </div>
       )}
+
+      {/* Botón pre-visualizar PDF */}
+      <button onClick={handlePrint}
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-medium transition-colors"
+        style={{ background:'#f0f7f4', color:'#2e5244', borderColor:'#6dbd9640' }}>
+        <Printer size={15}/> Pre-visualizar / Descargar PDF
+      </button>
+
       <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs"
         style={{ background:'#f0f7f4', color:'#2e5244', border:'1px solid #6dbd9640' }}>
-        <Info size={13} className="shrink-0"/> Gerencia recibirá email con el PDF y podrá dejar observaciones.
+        <Info size={13} className="shrink-0"/>
+        Al enviar, gerencia recibirá un email de notificación y podrá revisar el informe.
       </div>
 
-      <Button onClick={handleGenerateAndSubmit} disabled={submitting}
+      <Button onClick={() => onSubmit()} disabled={submitting}
         className="w-full h-11 font-semibold gap-2" style={{ background:'#2e5244', color:'white' }}>
-        {submitting ? <><Loader2 className="h-4 w-4 animate-spin"/> Generando PDF y enviando...</> : <><Send className="h-4 w-4"/> Generar PDF y enviar a revisión</>}
+        {submitting
+          ? <><Loader2 className="h-4 w-4 animate-spin"/> Enviando...</>
+          : <><Send className="h-4 w-4"/> Enviar a revisión</>}
       </Button>
-
-      {/* Plantilla PDF oculta */}
-      <div style={{ position:'absolute', left:'-9999px', top:0, width:'794px', isolation:'isolate' }}>
-        <div ref={pdfRef}>
-          <InformePDFTemplate formData={formData} sections={sections} indicators={indicators}
-            selectedIndicators={selectedIndicators} processId={processId} processList={processList} users={users}/>
-        </div>
-      </div>
     </div>
   );
 }
@@ -691,10 +644,10 @@ export default function InformeWizard({ editTarget, onClose, onSuccess }) {
 
   const validateStep1 = () => {
     const e = {};
-    if (!form.title.trim())       e.title          = 'El título es obligatorio';
-    if (!form.process_id)         e.process_id     = 'Selecciona un proceso';
-    if (!form.responsible_id)     e.responsible_id = 'Selecciona el responsable';
-    if (!form.period.trim())      e.period         = 'El período es obligatorio';
+    if (!form.title.trim())   e.title          = 'El título es obligatorio';
+    if (!form.process_id)     e.process_id     = 'Selecciona un proceso';
+    if (!form.responsible_id) e.responsible_id = 'Selecciona el responsable';
+    if (!form.period.trim())  e.period         = 'El período es obligatorio';
     setFormErrors(e);
     return !Object.keys(e).length;
   };
@@ -727,10 +680,11 @@ export default function InformeWizard({ editTarget, onClose, onSuccess }) {
     await saveSection(reportId, sectionData);
   }, [reportId, saveSection]);
 
-  const handleSubmit = async (pdfBlob) => {
+  // FIX: sin pdfBlob — el PDF se genera desde el navegador via printInforme
+  const handleSubmit = async () => {
     if (!reportId) return;
     setSubmitting(true);
-    const result = await submitInforme(reportId, pdfBlob);
+    const result = await submitInforme(reportId, null);
     setSubmitting(false);
     if (result.success) { onSuccess?.(); }
     else { setStepError(result.error ?? 'Error al enviar'); }
@@ -750,7 +704,7 @@ export default function InformeWizard({ editTarget, onClose, onSuccess }) {
           <h2 className="text-xl font-bold text-[#2e5244]">{editTarget ? 'Editar informe' : 'Nuevo informe'}</h2>
           <p className="text-xs text-gray-400">
             {editTarget?.consecutive && <span className="font-mono mr-1">{editTarget.consecutive} ·</span>}
-            Completa los pasos para generar y enviar
+            Completa los pasos para enviar
           </p>
         </div>
       </div>

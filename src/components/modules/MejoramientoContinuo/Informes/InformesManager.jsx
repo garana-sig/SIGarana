@@ -5,7 +5,7 @@ import {
   ArrowLeft, Plus, Search, Eye, Edit2, Trash2,
   CheckCircle2, Send, AlertTriangle, FileBarChart,
   FolderOpen, Filter, AlertCircle, MessageSquare,
-  Loader2, X, Download,
+  Loader2, X, Printer,
 } from 'lucide-react';
 
 import { Button }   from '@/app/components/ui/button';
@@ -19,11 +19,12 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/app/components/ui/select';
 
-import { useAuth }            from '@/context/AuthContext';
-import { useInformes }        from '@/hooks/useInformes';
-import { getProcessConfig }   from './constants/processItems';
-import { InformePDFTemplate } from './InformeWizard';
-import InformeWizard          from './InformeWizard';
+import { useAuth }                 from '@/context/AuthContext';
+import { useInformes }             from '@/hooks/useInformes';
+import { getProcessConfig, getProcessItems } from './constants/processItems';
+import { printInforme }            from '../../../../utils/printReport';
+import { InformePDFTemplate }      from './InformeWizard';
+import InformeWizard               from './InformeWizard';
 
 // ─────────────────────────────────────────────────────────────────────────────
 const fmtDate = iso => iso
@@ -40,8 +41,7 @@ const STATUS_CONFIG = {
 function StatTile({ label, value, icon: Icon, color, bg }) {
   return (
     <motion.div initial={{ opacity:0,y:8 }} animate={{ opacity:1,y:0 }}
-      className="rounded-xl p-4 flex items-center gap-3 border border-white shadow-sm"
-      style={{ background:bg }}>
+      className="rounded-xl p-4 flex items-center gap-3 border border-white shadow-sm" style={{ background:bg }}>
       <div className="rounded-lg p-2.5" style={{ backgroundColor:`${color}20` }}>
         <Icon className="h-5 w-5" style={{ color }}/>
       </div>
@@ -54,35 +54,34 @@ function StatTile({ label, value, icon: Icon, color, bg }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Modal Vista previa con botón Descargar PDF
+// Modal Vista previa — con botón Imprimir/PDF
 // ─────────────────────────────────────────────────────────────────────────────
-function PreviewModal({ report, onClose, onLoadData, getSignedUrl }) {
-  const [data,        setData]        = useState(null);
-  const [loading,     setLoading]     = useState(true);
-  const [downloading, setDownloading] = useState(false);
+function PreviewModal({ report, onClose, onLoadData }) {
+  const [data,    setData]    = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     onLoadData(report).then(d => { setData(d); setLoading(false); });
   }, [report.id]);
 
-  const handleDownload = async () => {
-    if (!report.pdf_url) return;
-    setDownloading(true);
-    try {
-      const url = await getSignedUrl(report.pdf_url);
-      // Crear link temporal para forzar descarga
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${report.consecutive}_${report.title.replace(/\s+/g,'_')}.pdf`;
-      a.target = '_blank';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } catch {
-      window.open(await getSignedUrl(report.pdf_url), '_blank');
-    } finally {
-      setDownloading(false);
-    }
+  const handlePrint = () => {
+    if (!data) return;
+    printInforme({
+      formData: {
+        title:          report.title,
+        period:         report.period,
+        process_id:     report.process_id,
+        responsible_id: report.responsible_id,
+      },
+      sections:           data.sections,
+      indicators:         data.indicators,
+      selectedIndicators: data.selectedIndicators,
+      processId:          report.process_id,
+      processList:        data.processes,
+      users:              data.users,
+      getProcessItems,
+      getProcessConfig,
+    });
   };
 
   return (
@@ -102,20 +101,13 @@ function PreviewModal({ report, onClose, onLoadData, getSignedUrl }) {
               {report.responsible?.full_name && ` · ${report.responsible.full_name}`}
             </p>
           </div>
-
           <div className="flex items-center gap-2 ml-3 shrink-0">
-            {/* Botón descarga PDF */}
-            {report.pdf_url && (
-              <button
-                onClick={handleDownload}
-                disabled={downloading}
-                className="flex items-center gap-1.5 text-xs font-medium text-white/90 hover:text-white bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                title="Descargar PDF para imprimir"
-              >
-                {downloading
-                  ? <Loader2 size={13} className="animate-spin"/>
-                  : <Download size={13}/>}
-                Descargar PDF
+            {/* Botón imprimir/PDF — disponible cuando el contenido cargó */}
+            {!loading && data && (
+              <button onClick={handlePrint}
+                className="flex items-center gap-1.5 text-xs font-medium text-white/90 hover:text-white bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg transition-colors"
+                title="Imprimir o guardar como PDF">
+                <Printer size={13}/> Imprimir / PDF
               </button>
             )}
             <button onClick={onClose} className="text-white/70 hover:text-white transition-colors p-0.5">
@@ -124,16 +116,14 @@ function PreviewModal({ report, onClose, onLoadData, getSignedUrl }) {
           </div>
         </div>
 
-        {/* Cuerpo */}
+        {/* Contenido */}
         <div className="flex-1 overflow-y-auto bg-gray-50">
           {loading ? (
             <div className="flex items-center justify-center py-20 text-gray-400 gap-2 text-sm">
               <Loader2 className="animate-spin h-5 w-5"/> Cargando contenido...
             </div>
           ) : !data ? (
-            <div className="text-center py-20 text-gray-400 text-sm">
-              No se pudo cargar el contenido
-            </div>
+            <div className="text-center py-20 text-gray-400 text-sm">No se pudo cargar el contenido</div>
           ) : (
             <div className="p-4">
               <InformePDFTemplate
@@ -153,29 +143,18 @@ function PreviewModal({ report, onClose, onLoadData, getSignedUrl }) {
             </div>
           )}
         </div>
-
-        {/* Footer con botón descarga si no tiene PDF aún */}
-        {!report.pdf_url && !loading && (
-          <div className="px-5 py-3 border-t bg-white shrink-0 flex items-center justify-between">
-            <p className="text-xs text-gray-400">
-              El PDF se genera al enviar el informe desde el wizard.
-            </p>
-          </div>
-        )}
       </DialogContent>
     </Dialog>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Modal Revisión — cuando se pide corrección, envía email al autor
+// Modal Revisión — email al autor en ambos casos
 // ─────────────────────────────────────────────────────────────────────────────
 function ReviewModal({ report, onConfirm, onClose, saving }) {
   const [notes,    setNotes]    = useState(report.review_notes ?? '');
   const [approved, setApproved] = useState(true);
-
-  const notesRequired = !approved;
-  const canSubmit     = approved || notes.trim().length > 0;
+  const canSubmit = approved || notes.trim().length > 0;
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -185,9 +164,7 @@ function ReviewModal({ report, onConfirm, onClose, saving }) {
             <MessageSquare className="h-5 w-5 text-[#6dbd96]"/> Revisión del informe
           </DialogTitle>
         </DialogHeader>
-
         <div id="review-info" className="space-y-4 py-1">
-          {/* Info */}
           <div className="rounded-xl p-4 space-y-1.5 text-sm" style={{ background:'#f5f5ef' }}>
             {[
               ['Título',        report.title],
@@ -202,65 +179,46 @@ function ReviewModal({ report, onConfirm, onClose, saving }) {
             ))}
           </div>
 
-          {/* Decisión */}
           <div className="flex gap-2">
             <button onClick={() => setApproved(true)}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${
-                approved
-                  ? 'bg-[#2e5244] text-white border-[#2e5244]'
-                  : 'bg-white text-gray-500 border-gray-200 hover:border-[#2e5244]'
-              }`}>
+              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${approved ? 'bg-[#2e5244] text-white border-[#2e5244]' : 'bg-white text-gray-500 border-gray-200 hover:border-[#2e5244]'}`}>
               ✅ Aprobar
             </button>
             <button onClick={() => setApproved(false)}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${
-                !approved
-                  ? 'bg-red-600 text-white border-red-600'
-                  : 'bg-white text-gray-500 border-gray-200 hover:border-red-400'
-              }`}>
+              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${!approved ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-500 border-gray-200 hover:border-red-400'}`}>
               🔄 Pedir corrección
             </button>
           </div>
 
-          {/* Observaciones */}
           <div>
             <Label className="text-sm font-medium text-gray-700 mb-1.5 block">
               Observaciones
-              {notesRequired
+              {!approved
                 ? <span className="text-red-500"> * obligatorio</span>
                 : <span className="text-gray-400 font-normal"> (opcional)</span>}
             </Label>
             <Textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              placeholder={approved
-                ? 'Comentarios adicionales para el autor...'
-                : 'Describe qué debe corregir el usuario...'}
+              placeholder={approved ? 'Comentarios adicionales...' : 'Describe qué debe corregir el usuario...'}
               rows={3}
-              className={`resize-none text-sm ${notesRequired && !notes.trim() ? 'border-red-300' : ''}`}
+              className={`resize-none text-sm ${!approved && !notes.trim() ? 'border-red-300' : ''}`}
             />
-            {/* Aviso de email */}
-            <div className={`mt-2 flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg ${
-              approved ? 'bg-[#f0f7f4] text-[#2e5244]' : 'bg-red-50 text-red-600'
-            }`}>
+            <div className={`mt-2 flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg ${approved ? 'bg-[#f0f7f4] text-[#2e5244]' : 'bg-red-50 text-red-600'}`}>
               <Send size={11} className="shrink-0"/>
               {approved
-                ? 'Se enviará un email de aprobación al autor del informe.'
-                : 'Se enviará un email al autor con las correcciones indicadas. El informe volverá a estado editable.'}
+                ? 'Se enviará email de aprobación al autor.'
+                : 'El informe vuelve a estado editable y el autor recibirá las correcciones por email.'}
             </div>
           </div>
         </div>
-
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
           <Button
             onClick={() => { if (canSubmit) onConfirm({ approved, notes }); }}
             disabled={saving || !canSubmit}
-            style={{ background: approved ? '#2e5244' : '#dc2626', color:'white' }}
-          >
-            {saving
-              ? 'Guardando...'
-              : approved ? 'Aprobar y notificar' : 'Solicitar corrección'}
+            style={{ background: approved ? '#2e5244' : '#dc2626', color:'white' }}>
+            {saving ? 'Guardando...' : (approved ? 'Aprobar y notificar' : 'Solicitar corrección')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -276,10 +234,7 @@ export default function InformesManager({ onBack }) {
 
   const {
     informes, loading, error,
-    fetchInformes,
-    reviewInforme,
-    deleteInforme,
-    getSignedUrl,
+    fetchInformes, reviewInforme, deleteInforme,
     loadFullReportData,
   } = useInformes();
 
@@ -298,39 +253,32 @@ export default function InformesManager({ onBack }) {
 
   useEffect(() => { fetchInformes(); }, [fetchInformes]);
 
-  const showToast = (msg, type = 'success') => {
+  const showToast = (msg, type='success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
   };
 
-  // ── Filtros ──────────────────────────────────────────────────────
   const filtered = informes.filter(r => {
     const q = search.toLowerCase();
     const matchSearch = !search ||
-      [r.title, r.period, r.process?.name, r.creator?.full_name]
-        .some(f => f?.toLowerCase().includes(q));
-    const matchStatus = filterStatus === 'all' || r.status === filterStatus;
-    return matchSearch && matchStatus;
+      [r.title, r.period, r.process?.name, r.creator?.full_name].some(f => f?.toLowerCase().includes(q));
+    return matchSearch && (filterStatus==='all' || r.status===filterStatus);
   });
 
-  // ── Stats ────────────────────────────────────────────────────────
   const stats = {
     total:     informes.length,
-    submitted: informes.filter(r => r.status === 'submitted').length,
-    reviewed:  informes.filter(r => r.status === 'reviewed').length,
-    pending:   informes.filter(r => r.status === 'revision_requested').length,
+    submitted: informes.filter(r=>r.status==='submitted').length,
+    reviewed:  informes.filter(r=>r.status==='reviewed').length,
+    pending:   informes.filter(r=>r.status==='revision_requested').length,
   };
 
-  // ── Handlers ─────────────────────────────────────────────────────
   const handleReview = async (decision) => {
     setSaving(true);
     const result = await reviewInforme(reviewTarget.id, decision);
     setSaving(false);
     if (result.success) {
       setReviewTarget(null);
-      showToast(decision.approved
-        ? 'Informe aprobado — se notificó al autor'
-        : 'Corrección solicitada — se notificó al autor');
+      showToast(decision.approved ? 'Informe aprobado — autor notificado' : 'Corrección solicitada — autor notificado');
     } else {
       showToast(result.error ?? 'Error al revisar', 'error');
     }
@@ -341,34 +289,12 @@ export default function InformesManager({ onBack }) {
     const result = await deleteInforme(deleteTarget.id);
     setSaving(false);
     setDeleteTarget(null);
-    result.success
-      ? showToast('Informe eliminado')
-      : showToast(result.error ?? 'Error al eliminar', 'error');
+    result.success ? showToast('Informe eliminado') : showToast(result.error ?? 'Error', 'error');
   };
 
-  const handleDownloadPdf = async (report) => {
-    if (!report.pdf_url) return;
-    try {
-      const url = await getSignedUrl(report.pdf_url);
-      const a = document.createElement('a');
-      a.href     = url;
-      a.download = `${report.title.replace(/\s+/g,'_')}.pdf`;
-      a.target   = '_blank';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } catch {
-      showToast('No se pudo descargar el PDF', 'error');
-    }
-  };
+  const canEdit   = r => isAdmin || isGerencia || (r.created_by===user?.id && ['draft','revision_requested'].includes(r.status));
+  const canDelete = r => isAdmin || (r.created_by===user?.id && r.status==='draft');
 
-  // ── Permisos por registro ────────────────────────────────────────
-  const canEdit   = r => isAdmin || isGerencia ||
-    (r.created_by === user?.id && ['draft','revision_requested'].includes(r.status));
-  const canDelete = r => isAdmin ||
-    (r.created_by === user?.id && r.status === 'draft');
-
-  // ── Wizard abierto ────────────────────────────────────────────────
   if (wizardOpen || editTarget) {
     return (
       <InformeWizard
@@ -377,28 +303,24 @@ export default function InformesManager({ onBack }) {
         onSuccess={() => {
           setWizardOpen(false); setEditTarget(null);
           fetchInformes();
-          showToast(editTarget ? 'Informe actualizado' : 'Informe enviado correctamente');
+          showToast(editTarget ? 'Informe actualizado' : 'Informe enviado');
         }}
       />
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
 
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={onBack}
-          className="text-[#2e5244] hover:bg-[#2e524410]">
+        <Button variant="ghost" size="sm" onClick={onBack} className="text-[#2e5244] hover:bg-[#2e524410]">
           <ArrowLeft className="h-4 w-4 mr-1"/> Volver
         </Button>
         <div className="h-5 w-px bg-gray-200"/>
         <div>
           <h2 className="text-xl font-bold text-[#2e5244]">Informes de Gestión</h2>
-          <p className="text-xs text-gray-400">
-            Elaboración, envío y seguimiento de informes por proceso
-          </p>
+          <p className="text-xs text-gray-400">Elaboración, envío y seguimiento de informes por proceso</p>
         </div>
       </div>
 
@@ -415,7 +337,7 @@ export default function InformesManager({ onBack }) {
         <div className="flex flex-wrap gap-2 items-center">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400"/>
-            <Input value={search} onChange={e => setSearch(e.target.value)}
+            <Input value={search} onChange={e=>setSearch(e.target.value)}
               placeholder="Buscar informe..." className="pl-8 h-8 text-xs w-52"/>
           </div>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -433,14 +355,13 @@ export default function InformesManager({ onBack }) {
         </div>
         {canCreate && (
           <Button size="sm" onClick={() => setWizardOpen(true)}
-            className="h-8 text-xs gap-1.5 shrink-0"
-            style={{ background:'#2e5244', color:'white' }}>
+            className="h-8 text-xs gap-1.5 shrink-0" style={{ background:'#2e5244', color:'white' }}>
             <Plus className="h-3.5 w-3.5"/> Nuevo Informe
           </Button>
         )}
       </div>
 
-      {/* Contenido */}
+      {/* Tabla */}
       {loading ? (
         <div className="text-center py-20 text-gray-400 text-sm">
           <div className="w-6 h-6 border-2 border-gray-200 border-t-[#6dbd96] rounded-full animate-spin mx-auto mb-3"/>
@@ -455,12 +376,10 @@ export default function InformesManager({ onBack }) {
         <div className="text-center py-20">
           <FolderOpen className="h-14 w-14 mx-auto text-gray-200 mb-3"/>
           <p className="text-gray-400 text-sm font-medium">
-            {informes.length === 0
-              ? 'Aún no hay informes en el sistema'
-              : 'Sin resultados para los filtros aplicados'}
+            {informes.length===0 ? 'Aún no hay informes' : 'Sin resultados para los filtros aplicados'}
           </p>
-          {informes.length === 0 && canCreate && (
-            <Button size="sm" variant="outline" onClick={() => setWizardOpen(true)}
+          {informes.length===0 && canCreate && (
+            <Button size="sm" variant="outline" onClick={()=>setWizardOpen(true)}
               className="mt-4 text-xs border-[#6dbd96] text-[#2e5244]">
               <Plus className="h-3.5 w-3.5 mr-1.5"/> Crear primer informe
             </Button>
@@ -472,15 +391,11 @@ export default function InformesManager({ onBack }) {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ background:'linear-gradient(135deg,#2e5244 0%,#6dbd96 100%)' }}>
-                  {/* SIN columna consecutivo */}
-                  {[
-                    'Título', 'Proceso', 'Período', 'Estado',
-                    ...(isAdmin || isGerencia ? ['Elaborado por','Fecha'] : ['Fecha']),
-                    'Acciones',
-                  ].map(h => (
-                    <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-white/90 whitespace-nowrap">
-                      {h}
-                    </th>
+                  {/* Sin columna consecutivo */}
+                  {['Título','Proceso','Período','Estado',
+                    ...(isAdmin||isGerencia ? ['Elaborado por','Fecha'] : ['Fecha']),
+                    'Acciones'].map(h => (
+                    <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-white/90 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -491,102 +406,67 @@ export default function InformesManager({ onBack }) {
                   const StIcon = sc.icon;
                   return (
                     <motion.tr key={r.id}
-                      initial={{ opacity:0, x:-8 }}
-                      animate={{ opacity:1, x:0 }}
-                      transition={{ delay: i * 0.025 }}
-                      className="border-b border-gray-50 hover:bg-[#f5f5ef50] transition-colors"
-                    >
-                      {/* Título + nota de corrección */}
+                      initial={{ opacity:0,x:-8 }} animate={{ opacity:1,x:0 }} transition={{ delay:i*0.025 }}
+                      className="border-b border-gray-50 hover:bg-[#f5f5ef50] transition-colors">
+
+                      {/* Título */}
                       <td className="px-3 py-2.5 max-w-[200px]">
                         <p className="text-xs font-semibold text-gray-800 truncate">{r.title}</p>
-                        {r.review_notes && r.status === 'revision_requested' && (
-                          <p className="text-xs text-red-500 truncate mt-0.5">
-                            💬 {r.review_notes}
-                          </p>
+                        {r.review_notes && r.status==='revision_requested' && (
+                          <p className="text-xs text-red-500 truncate mt-0.5">💬 {r.review_notes}</p>
                         )}
                       </td>
 
                       {/* Proceso */}
                       <td className="px-3 py-2.5">
-                        <span
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
-                          style={{
-                            background: `${proc?.color ?? '#9ca3af'}15`,
-                            color:       proc?.color ?? '#9ca3af',
-                            border:     `1px solid ${proc?.color ?? '#9ca3af'}30`,
-                          }}>
-                          {proc?.icon} {r.process?.name ?? '—'}
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
+                          style={{ background:`${proc?.color??'#9ca3af'}15`, color:proc?.color??'#9ca3af', border:`1px solid ${proc?.color??'#9ca3af'}30` }}>
+                          {proc?.icon} {r.process?.name??'—'}
                         </span>
                       </td>
 
                       {/* Período */}
-                      <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">
-                        {r.period}
-                      </td>
+                      <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{r.period}</td>
 
                       {/* Estado */}
                       <td className="px-3 py-2.5">
-                        <span
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap"
-                          style={{ background: sc.bg, color: sc.color }}>
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap"
+                          style={{ background:sc.bg, color:sc.color }}>
                           <StIcon size={10}/> {sc.label}
                         </span>
                       </td>
 
-                      {/* Elaborado por (solo admin/gerencia) */}
-                      {(isAdmin || isGerencia) && (
-                        <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">
-                          {r.creator?.full_name ?? '—'}
-                        </td>
+                      {(isAdmin||isGerencia) && (
+                        <td className="px-3 py-2.5 text-xs text-gray-600 whitespace-nowrap">{r.creator?.full_name??'—'}</td>
                       )}
-
-                      {/* Fecha */}
-                      <td className="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">
-                        {fmtDate(r.created_at)}
-                      </td>
+                      <td className="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">{fmtDate(r.created_at)}</td>
 
                       {/* Acciones */}
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-0.5">
-
-                          {/* Ver contenido — siempre visible */}
-                          <button title="Visualizar informe"
+                          {/* Ver / Imprimir */}
+                          <button title="Ver e imprimir informe"
                             onClick={() => setPreviewTarget(r)}
                             className="p-1.5 rounded-lg hover:bg-[#6dbd9620] transition-colors">
                             <Eye className="h-3.5 w-3.5 text-[#6dbd96]"/>
                           </button>
-
-                          {/* Descargar PDF — visible cuando hay PDF generado */}
-                          {r.pdf_url && (
-                            <button title="Descargar PDF"
-                              onClick={() => handleDownloadPdf(r)}
-                              className="p-1.5 rounded-lg hover:bg-blue-50 transition-colors">
-                              <Download className="h-3.5 w-3.5 text-blue-500"/>
-                            </button>
-                          )}
-
-                          {/* Revisar (gerencia/admin) */}
-                          {canReview && r.status === 'submitted' && (
-                            <button title="Revisar informe"
-                              onClick={() => setReviewTarget(r)}
+                          {/* Revisar */}
+                          {canReview && r.status==='submitted' && (
+                            <button title="Revisar" onClick={() => setReviewTarget(r)}
                               className="p-1.5 rounded-lg hover:bg-[#2e524420] transition-colors">
                               <CheckCircle2 className="h-3.5 w-3.5 text-[#2e5244]"/>
                             </button>
                           )}
-
-                          {/* Editar — propio en draft o revision_requested */}
+                          {/* Editar */}
                           {canEdit(r) && (
-                            <button title="Editar"
-                              onClick={() => setEditTarget(r)}
+                            <button title="Editar" onClick={() => setEditTarget(r)}
                               className="p-1.5 rounded-lg hover:bg-orange-50 transition-colors">
                               <Edit2 className="h-3.5 w-3.5 text-orange-400"/>
                             </button>
                           )}
-
-                          {/* Eliminar — solo borrador propio o admin */}
+                          {/* Eliminar */}
                           {canDelete(r) && (
-                            <button title="Eliminar"
-                              onClick={() => setDeleteTarget(r)}
+                            <button title="Eliminar" onClick={() => setDeleteTarget(r)}
                               className="p-1.5 rounded-lg hover:bg-red-50 transition-colors">
                               <Trash2 className="h-3.5 w-3.5 text-red-400"/>
                             </button>
@@ -599,36 +479,24 @@ export default function InformesManager({ onBack }) {
               </tbody>
             </table>
           </div>
-
           <div className="px-4 py-2 border-t border-gray-50 text-xs text-gray-400 flex justify-between items-center">
             <span>Mostrando {filtered.length} de {informes.length} informes</span>
-            {stats.submitted > 0 && (isAdmin || isGerencia) && (
+            {stats.submitted>0 && (isAdmin||isGerencia) && (
               <span className="text-[#d97706] font-medium">
-                {stats.submitted} pendiente{stats.submitted !== 1 ? 's' : ''} de revisión
+                {stats.submitted} pendiente{stats.submitted!==1?'s':''} de revisión
               </span>
             )}
           </div>
         </div>
       )}
 
-      {/* ── Modales ── */}
-
+      {/* Modales */}
       {previewTarget && (
-        <PreviewModal
-          report={previewTarget}
-          onClose={() => setPreviewTarget(null)}
-          onLoadData={loadFullReportData}
-          getSignedUrl={getSignedUrl}
-        />
+        <PreviewModal report={previewTarget} onClose={() => setPreviewTarget(null)} onLoadData={loadFullReportData}/>
       )}
 
       {reviewTarget && (
-        <ReviewModal
-          report={reviewTarget}
-          onConfirm={handleReview}
-          onClose={() => setReviewTarget(null)}
-          saving={saving}
-        />
+        <ReviewModal report={reviewTarget} onConfirm={handleReview} onClose={() => setReviewTarget(null)} saving={saving}/>
       )}
 
       {deleteTarget && (
@@ -640,13 +508,10 @@ export default function InformesManager({ onBack }) {
               </DialogTitle>
             </DialogHeader>
             <p id="del-desc" className="text-sm text-gray-600 py-2">
-              ¿Eliminar <strong>{deleteTarget.title}</strong>?
-              Esta acción no se puede deshacer.
+              ¿Eliminar <strong>{deleteTarget.title}</strong>? Esta acción no se puede deshacer.
             </p>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={saving}>
-                Cancelar
-              </Button>
+              <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={saving}>Cancelar</Button>
               <Button variant="destructive" onClick={handleDelete} disabled={saving}>
                 {saving ? 'Eliminando...' : 'Sí, eliminar'}
               </Button>
@@ -659,17 +524,10 @@ export default function InformesManager({ onBack }) {
       <AnimatePresence>
         {toast && (
           <motion.div
-            initial={{ opacity:0, y:20, scale:0.95 }}
-            animate={{ opacity:1, y:0,  scale:1    }}
-            exit={{    opacity:0, y:20, scale:0.95 }}
+            initial={{ opacity:0,y:20,scale:0.95 }} animate={{ opacity:1,y:0,scale:1 }} exit={{ opacity:0,y:20,scale:0.95 }}
             className="fixed bottom-6 right-6 px-4 py-3 rounded-xl shadow-xl text-sm font-medium z-50 flex items-center gap-2"
-            style={toast.type === 'error'
-              ? { background:'#ef4444', color:'white' }
-              : { background:'#2e5244', color:'white' }}
-          >
-            {toast.type === 'error'
-              ? <AlertCircle className="h-4 w-4 shrink-0"/>
-              : <CheckCircle2 className="h-4 w-4 shrink-0"/>}
+            style={toast.type==='error' ? { background:'#ef4444',color:'white' } : { background:'#2e5244',color:'white' }}>
+            {toast.type==='error' ? <AlertCircle className="h-4 w-4 shrink-0"/> : <CheckCircle2 className="h-4 w-4 shrink-0"/>}
             {toast.msg}
           </motion.div>
         )}
