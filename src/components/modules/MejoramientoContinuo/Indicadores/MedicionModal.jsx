@@ -9,6 +9,45 @@ const inputStyle = {
   fontSize: 12, height: 34, borderColor: '#D1D5DB',
 };
 
+// Calcula la fecha de cierre del período según frecuencia
+const getPeriodEndDate = (frequency) => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth(); // 0-based
+
+  switch (frequency) {
+    case 'diaria':
+      return now.toISOString().split('T')[0];
+    case 'semanal': {
+      // Último día de la semana actual (domingo)
+      const day = now.getDay(); // 0=dom
+      const sun = new Date(now);
+      sun.setDate(now.getDate() + (day === 0 ? 0 : 7 - day));
+      return sun.toISOString().split('T')[0];
+    }
+    case 'mensual': {
+      // Último día del mes actual
+      const last = new Date(y, m + 1, 0);
+      return last.toISOString().split('T')[0];
+    }
+    case 'trimestral': {
+      // Último día del trimestre actual
+      const trimEnd = [2, 5, 8, 11][Math.floor(m / 3)];
+      const last = new Date(y, trimEnd + 1, 0);
+      return last.toISOString().split('T')[0];
+    }
+    case 'semestral': {
+      const last = m < 6 ? new Date(y, 6, 0) : new Date(y, 12, 0);
+      return last.toISOString().split('T')[0];
+    }
+    case 'anual': {
+      return `${y}-12-31`;
+    }
+    default:
+      return now.toISOString().split('T')[0];
+  }
+};
+
 const PERIOD_LABELS = {
   diaria:     () => new Date().toLocaleDateString('es-CO'),
   semanal:    () => {
@@ -36,7 +75,7 @@ export default function MedicionModal({ indicator, onSave, onClose }) {
   const [goalValue,    setGoalValue]    = useState(indicator?.goal_value || '');
   const [unit,         setUnit]         = useState('%');
   const [periodLabel,  setPeriodLabel]  = useState('');
-  const [measureDate,  setMeasureDate]  = useState(new Date().toISOString().split('T')[0]);
+  const [measureDate,  setMeasureDate]  = useState(getPeriodEndDate(indicator?.frequency));
   const [notes,        setNotes]        = useState('');
   const [saving,       setSaving]       = useState(false);
 
@@ -86,7 +125,7 @@ export default function MedicionModal({ indicator, onSave, onClose }) {
 
   // El valor final a guardar (calculado o manual)
   const finalValue = hasFormula ? calcResult : (manualValue !== '' ? parseFloat(manualValue) : null);
-  const statusInfo = getMeasurementStatus(finalValue, parseFloat(goalValue) || null, indicator?.goal_direction || 'asc');
+  const statusInfo = getMeasurementStatus(finalValue, parseFloat(goalValue) || null);
 
   const handleSave = async () => {
     if (finalValue === null) return;
@@ -155,7 +194,7 @@ export default function MedicionModal({ indicator, onSave, onClose }) {
             </div>
             <div>
               <label style={{ fontSize:11, fontWeight:700, color:'#374151', display:'block', marginBottom:4 }}>
-                Fecha de Medición *
+                Fecha cierre del período *
               </label>
               <Input type="date" value={measureDate}
                 onChange={e => setMeasureDate(e.target.value)} style={inputStyle} />

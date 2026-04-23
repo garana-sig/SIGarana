@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { Input }  from '@/app/components/ui/input';
-import { Loader2, X, Save, Plus, Trash2, BarChart2, Info } from 'lucide-react';
+import { Loader2, X, Save, Plus, Trash2, BarChart2, Info, Pencil, Check } from 'lucide-react';
 import {
   PERSPECTIVES, FREQUENCIES, INDICATOR_TYPES, INDICATOR_SUBTYPES,
   validateFormulaExpression, evaluateFormula, getMeasurementStatus,
@@ -67,7 +67,7 @@ const FORM_INICIAL = {
 export default function IndicadorModal({
   mode, indicator, profiles = [],
   onSave, onClose,
-  fetchMeasurements, deleteMeasurement,
+  fetchMeasurements, deleteMeasurement, updateMeasurement,
 }) {
   const isView   = mode === 'view';
   const isEdit   = mode === 'edit';
@@ -79,7 +79,9 @@ export default function IndicadorModal({
   const [saving,      setSaving]      = useState(false);
   const [errors,      setErrors]      = useState({});
   const [formulaErr,  setFormulaErr]  = useState('');
-  const [measurements, setMeasurements] = useState([]);
+  const [measurements,   setMeasurements]   = useState([]);
+  const [editingMId,     setEditingMId]     = useState(null);  // id de la medición en edición
+  const [editingMData,   setEditingMData]   = useState({});    // datos editados
   const [loadingMed,  setLoadingMed]  = useState(false);
   const [activeTab,   setActiveTab]   = useState('form'); // form | history
 
@@ -481,15 +483,37 @@ export default function IndicadorModal({
                       const si = m.status_info;
                       return (
                         <tr key={m.id} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                          <td style={{ padding:'5px 8px', borderBottom:'1px solid #F3F4F6', fontWeight:600 }}>{m.period_label}</td>
-                          <td style={{ padding:'5px 8px', borderBottom:'1px solid #F3F4F6' }}>
-                            {m.measurement_date ? new Date(m.measurement_date + 'T00:00:00').toLocaleDateString('es-CO') : '—'}
+                          {/* Período — editable */}
+                          <td style={{ padding:'5px 8px', borderBottom:'1px solid #F3F4F6', fontWeight:600 }}>
+                            {editingMId === m.id
+                              ? <input value={editingMData.period_label}
+                                  onChange={e => setEditingMData(p => ({...p, period_label: e.target.value}))}
+                                  style={{ fontSize:11, border:'1px solid #D1D5DB', borderRadius:4, padding:'2px 6px', width:120 }} />
+                              : m.period_label}
                           </td>
+                          {/* Fecha cierre — editable */}
+                          <td style={{ padding:'5px 8px', borderBottom:'1px solid #F3F4F6' }}>
+                            {editingMId === m.id
+                              ? <input type="date" value={editingMData.measurement_date}
+                                  onChange={e => setEditingMData(p => ({...p, measurement_date: e.target.value}))}
+                                  style={{ fontSize:11, border:'1px solid #D1D5DB', borderRadius:4, padding:'2px 4px' }} />
+                              : m.measurement_date ? new Date(m.measurement_date + 'T00:00:00').toLocaleDateString('es-CO') : '—'}
+                          </td>
+                          {/* Valor medido — editable */}
                           <td style={{ padding:'5px 8px', borderBottom:'1px solid #F3F4F6', fontWeight:700, color:'#2e5244' }}>
-                            {m.measured_value ?? '—'} {m.unit || ''}
+                            {editingMId === m.id
+                              ? <input type="number" value={editingMData.measured_value}
+                                  onChange={e => setEditingMData(p => ({...p, measured_value: parseFloat(e.target.value)}))}
+                                  style={{ fontSize:11, border:'1px solid #D1D5DB', borderRadius:4, padding:'2px 4px', width:70 }} />
+                              : <>{m.measured_value ?? '—'} {m.unit || ''}</>}
                           </td>
+                          {/* Meta — editable */}
                           <td style={{ padding:'5px 8px', borderBottom:'1px solid #F3F4F6' }}>
-                            {m.goal_value ?? '—'} {m.unit || ''}
+                            {editingMId === m.id
+                              ? <input type="number" value={editingMData.goal_value}
+                                  onChange={e => setEditingMData(p => ({...p, goal_value: parseFloat(e.target.value)}))}
+                                  style={{ fontSize:11, border:'1px solid #D1D5DB', borderRadius:4, padding:'2px 4px', width:60 }} />
+                              : <>{m.goal_value ?? '—'} {m.unit || ''}</>}
                           </td>
                           <td style={{ padding:'5px 8px', borderBottom:'1px solid #F3F4F6', fontWeight:600, color: si?.color }}>
                             {si?.pct != null ? `${si.pct}%` : '—'}
@@ -502,21 +526,69 @@ export default function IndicadorModal({
                           </td>
                           <td style={{ padding:'5px 8px', borderBottom:'1px solid #F3F4F6', color:'#6B7280' }}>{m.created_by_name}</td>
                           <td style={{ padding:'5px 8px', borderBottom:'1px solid #F3F4F6', color:'#6B7280', maxWidth:140 }}>
-                            <span style={{ fontSize:10 }}>{m.notes || '—'}</span>
+                            {editingMId === m.id
+                              ? <input value={editingMData.notes}
+                                  onChange={e => setEditingMData(p => ({...p, notes: e.target.value}))}
+                                  style={{ fontSize:10, border:'1px solid #D1D5DB', borderRadius:4, padding:'2px 6px', width:'100%' }} />
+                              : <span style={{ fontSize:10 }}>{m.notes || '—'}</span>}
                           </td>
                           <td style={{ padding:'5px 8px', borderBottom:'1px solid #F3F4F6', textAlign:'center' }}>
-                            {deleteMeasurement && (
-                              <button
-                                title="Eliminar medición"
-                                onClick={async () => {
-                                  if (!window.confirm(`¿Eliminar la medición del período "${m.period_label}"?`)) return;
-                                  await deleteMeasurement(m.id);
-                                  setMeasurements(prev => prev.filter(x => x.id !== m.id));
-                                }}
-                                style={{ background:'none', border:'none', cursor:'pointer', color:'#DC2626', padding:2 }}>
-                                <Trash2 size={12} />
-                              </button>
-                            )}
+                            <div style={{ display:'flex', gap:4, justifyContent:'center' }}>
+                              {/* Botón editar */}
+                              {updateMeasurement && editingMId !== m.id && (
+                                <button title="Editar medición"
+                                  onClick={() => {
+                                    setEditingMId(m.id);
+                                    setEditingMData({
+                                      period_label:     m.period_label,
+                                      measurement_date: m.measurement_date,
+                                      measured_value:   m.measured_value,
+                                      goal_value:       m.goal_value,
+                                      unit:             m.unit || '%',
+                                      notes:            m.notes || '',
+                                    });
+                                  }}
+                                  style={{ background:'none', border:'none', cursor:'pointer', color:'#2E75B6', padding:2 }}>
+                                  <Pencil size={12} />
+                                </button>
+                              )}
+                              {/* Botón guardar edición */}
+                              {updateMeasurement && editingMId === m.id && (
+                                <button title="Guardar cambios"
+                                  onClick={async () => {
+                                    const r = await updateMeasurement(m.id, editingMData);
+                                    if (r.success) {
+                                      setMeasurements(prev => prev.map(x =>
+                                        x.id === m.id ? { ...x, ...editingMData } : x
+                                      ));
+                                      setEditingMId(null);
+                                    }
+                                  }}
+                                  style={{ background:'none', border:'none', cursor:'pointer', color:'#16A34A', padding:2 }}>
+                                  <Check size={12} />
+                                </button>
+                              )}
+                              {/* Botón cancelar edición */}
+                              {editingMId === m.id && (
+                                <button title="Cancelar"
+                                  onClick={() => setEditingMId(null)}
+                                  style={{ background:'none', border:'none', cursor:'pointer', color:'#6B7280', padding:2 }}>
+                                  <X size={12} />
+                                </button>
+                              )}
+                              {/* Botón eliminar */}
+                              {deleteMeasurement && editingMId !== m.id && (
+                                <button title="Eliminar medición"
+                                  onClick={async () => {
+                                    if (!window.confirm(`¿Eliminar la medición del período "${m.period_label}"?`)) return;
+                                    await deleteMeasurement(m.id);
+                                    setMeasurements(prev => prev.filter(x => x.id !== m.id));
+                                  }}
+                                  style={{ background:'none', border:'none', cursor:'pointer', color:'#DC2626', padding:2 }}>
+                                  <Trash2 size={12} />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );

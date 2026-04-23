@@ -178,7 +178,7 @@ export default function IndicadoresManager({ onBack }) {
   const {
     indicators, loading, error,
     fetchIndicators, createIndicator, updateIndicator,
-    deleteIndicator, fetchMeasurements, addMeasurement, deleteMeasurement,
+    deleteIndicator, fetchMeasurements, addMeasurement, deleteMeasurement, updateMeasurement,
   } = useIndicadores();
   const { profiles, fetchProfiles } = useProfiles();
 
@@ -556,7 +556,7 @@ export default function IndicadoresManager({ onBack }) {
       {modalOpen && (
         <IndicadorModal mode={modalMode} indicator={selected} profiles={profiles}
           onSave={handleSave} onClose={() => setModalOpen(false)}
-          fetchMeasurements={fetchMeasurements} deleteMeasurement={deleteMeasurement} />
+          fetchMeasurements={fetchMeasurements} deleteMeasurement={deleteMeasurement} updateMeasurement={updateMeasurement} />
       )}
       {medicionOpen && medicionInd && (
         <MedicionModal indicator={medicionInd} onSave={handleMedicionSave} onClose={() => setMedicionOpen(false)} />

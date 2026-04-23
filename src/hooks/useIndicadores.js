@@ -268,10 +268,18 @@ export function useIndicadores() {
         .select('indicator_id, measured_value, goal_value, measurement_status, period_label, measurement_date, created_at')
         .in('indicator_id', indicatorIds)
         .order('measurement_date', { ascending: false })
-        .order('created_at', { ascending: false });  // desempate: la más reciente primero
+        .order('created_at',       { ascending: false });
+
+      // Ordenar explícitamente en JS como garantía adicional:
+      // primero por measurement_date DESC, luego por created_at DESC
+      const sorted = [...(lastMeasurements || [])].sort((a, b) => {
+        const dateDiff = new Date(b.measurement_date) - new Date(a.measurement_date);
+        if (dateDiff !== 0) return dateDiff;
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
 
       const lastByInd = {};
-      (lastMeasurements || []).forEach(m => {
+      sorted.forEach(m => {
         if (!lastByInd[m.indicator_id]) lastByInd[m.indicator_id] = m;
       });
 
@@ -459,6 +467,29 @@ export function useIndicadores() {
     }
   };
 
+  // ── UPDATE MEDICIÓN ──────────────────────────────────────────────────────────
+  const updateMeasurement = async (id, fields) => {
+    try {
+      const { error } = await supabase
+        .from('indicator_measurement')
+        .update({
+          period_label:     fields.period_label,
+          measurement_date: fields.measurement_date,
+          measured_value:   fields.measured_value,
+          goal_value:       fields.goal_value,
+          unit:             fields.unit,
+          notes:            fields.notes,
+          // El trigger recalculará measurement_status automáticamente
+        })
+        .eq('id', id);
+      if (error) throw error;
+      return { success: true };
+    } catch (err) {
+      console.error('❌ updateMeasurement:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
   // ── FETCH MEDICIONES ───────────────────────────────────────────────────────
   const fetchMeasurements = async (indicatorId, goalDirection = 'asc') => {
     try {
@@ -588,5 +619,6 @@ export function useIndicadores() {
     fetchMeasurements,
     addMeasurement,
     deleteMeasurement,
+    updateMeasurement,
   };
 }
