@@ -152,16 +152,21 @@ export function useWorkPlan(planType) {
     if (activePlan?.id) fetchItems(activePlan.id);
   }, [activePlan?.id, fetchItems]);
 
-  // ── Trazabilidad calculada ─────────────────────────────────────────
-  // "Planeada" = mes con valor corto (x, Tema 1, 1...) 
-  // NO cuenta valores condicionales largos como "cuando se presente"
-  const isScheduled = (val) => val && val.trim() && val.trim().length <= 12;
+  // ── Helpers de estado de mes ──────────────────────────────────────
+  // Encoding en BD (columnas TEXT):
+  //   null / ""              → vacío (no programado)
+  //   "EJEC|YYYY-MM-DD|txt"  → ejecutada
+  //   "NO|txt"               → sin ejecutar
+  //   cualquier otro texto   → programada (backward compatible)
 
+  // ── Trazabilidad calculada ─────────────────────────────────────────
   const trazabilidad = MONTH_KEYS.map((key) => {
-    const planeadas  = items.filter(it => isScheduled(it[key])).length;
-    const ejecutadas = items.filter(it => isScheduled(it[key]) && it.is_executed).length;
-    const pct        = planeadas > 0 ? Math.round((ejecutadas / planeadas) * 100) : 0;
-    return { key, planeadas, ejecutadas, pct };
+    const vals = items.map(it => parseMonthVal(it[key]));
+    const planeadas    = vals.filter(v => v.s !== 'empty').length;
+    const ejecutadas   = vals.filter(v => v.s === 'ejecutada').length;
+    const noEjecutadas = vals.filter(v => v.s === 'no_ejecutada').length;
+    const pct          = planeadas > 0 ? Math.round((ejecutadas / planeadas) * 100) : 0;
+    return { key, planeadas, ejecutadas, noEjecutadas, pct };
   });
 
   const totalBudget = items.reduce((s, it) => s + (Number(it.budget) || 0), 0);
@@ -174,3 +179,21 @@ export function useWorkPlan(planType) {
     refetch: fetchPlans,
   };
 }
+
+// ── Helpers exportados para uso en componentes ─────────────────────────
+export const parseMonthVal = (val) => {
+  if (!val?.trim()) return { s: 'empty', text: '', date: '' };
+  if (val.startsWith('EJEC|')) {
+    const parts = val.split('|');
+    return { s: 'ejecutada', date: parts[1] || '', text: parts[2] || '' };
+  }
+  if (val.startsWith('NO|')) return { s: 'no_ejecutada', text: val.slice(3), date: '' };
+  return { s: 'programada', text: val, date: '' };
+};
+
+export const buildMonthVal = (s, text, date) => {
+  if (s === 'empty') return null;
+  if (s === 'ejecutada') return `EJEC|${date}|${text || ''}`;
+  if (s === 'no_ejecutada') return `NO|${text || ''}`;
+  return text?.trim() || 'x'; // programada
+};

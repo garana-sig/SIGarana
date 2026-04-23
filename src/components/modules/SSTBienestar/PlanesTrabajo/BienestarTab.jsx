@@ -10,7 +10,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth }    from '@/context/AuthContext';
 import { supabase }   from '@/lib/supabase';
-import { useWorkPlan, MONTH_KEYS } from '@/hooks/useWorkPlan';
+import { useWorkPlan, MONTH_KEYS, parseMonthVal, buildMonthVal } from '@/hooks/useWorkPlan';
 import { exportWorkPlan } from '@/utils/exportWorkPlan';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -21,7 +21,7 @@ import { Textarea } from '@/app/components/ui/textarea';
 import {
   Plus, Download, Trash2, Pencil, ChevronDown,
   Loader2, AlertCircle, CheckCircle2, CalendarDays,
-  DollarSign, Users,
+  DollarSign, Users, XCircle, Clock, Calendar,
 } from 'lucide-react';
 
 const C = { primary:'#2e5244', mint:'#6dbd96', olive:'#6f7b2c', sand:'#dedecc' };
@@ -31,15 +31,7 @@ const MONTHS_LABEL = ['EN','FE','MA','AB','MA','JU','JL','AG','SE','OC','NO','DI
 
 const fmtCOP = (v) => v ? `$ ${Number(v).toLocaleString('es-CO')}` : '—';
 
-// ─── Determina si una celda de mes está vencida (rojo) ────────────────
-// Mes pasado + tiene valor + no ejecutada
-function isOverdue(item, monthIdx) {
-  const now = new Date();
-  const currentMonthIdx = now.getMonth(); // 0-11
-  if (monthIdx >= currentMonthIdx) return false;
-  const key = MONTH_KEYS[monthIdx];
-  return !!(item[key]?.trim()) && !item.is_executed;
-}
+// Overdue logic now encoded in month value (NO| prefix)
 
 // ─── Hook para cargar usuarios activos con email ──────────────────────
 function useActiveUsers() {
@@ -58,64 +50,153 @@ function useActiveUsers() {
   return users;
 }
 
-// ─── Celda de mes con lógica de color ────────────────────────────────
-function MonthCell({ value, onToggle, onEdit, disabled, monthIdx, item }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft]     = useState('');
-  const hasValue  = value?.trim();
-  const overdue   = isOverdue(item, monthIdx);
+// ─── Estado visual por tipo ───────────────────────────────────────────
+const MONTH_STATUS_META = {
+  empty:        { bg: 'transparent', color: 'transparent', symbol: '·' },
+  programada:   { bg: PLAN_COLOR,    color: '#fff',         symbol: '●' },
+  ejecutada:    { bg: '#16a34a',     color: '#fff',         symbol: '✓' },
+  no_ejecutada: { bg: OVERDUE_COLOR, color: '#fff',         symbol: '✗' },
+};
 
-  // Color de fondo:
-  // - Rojo: vencida (mes pasó + tiene valor + no ejecutada)
-  // - Verde oscuro: activa con valor
-  // - Transparente: vacía
-  const bgColor = overdue
-    ? OVERDUE_COLOR
-    : hasValue ? C.primary : 'transparent';
+// ─── Modal de estado de mes (Bienestar) ───────────────────────────────
+function MonthStatusModal({ open, onClose, value, monthLabel, onSave }) {
+  const parsed = parseMonthVal(value);
+  const [status, setStatus] = useState(parsed.s === 'empty' ? 'programada' : parsed.s);
+  const [text,   setText]   = useState(parsed.text);
+  const [date,   setDate]   = useState(parsed.date || new Date().toISOString().slice(0,10));
 
-  const startEdit = (e) => {
-    e.stopPropagation();
-    setDraft(value || '');
-    setEditing(true);
+  const handleOpen = () => {
+    const p = parseMonthVal(value);
+    setStatus(p.s === 'empty' ? 'programada' : p.s);
+    setText(p.text); setDate(p.date || new Date().toISOString().slice(0,10));
   };
 
-  const commitEdit = () => {
-    setEditing(false);
-    onEdit(draft);
+  const handleSave = (s) => {
+    const finalStatus = s || status;
+    onSave(buildMonthVal(finalStatus, text, date));
+    onClose();
   };
 
-  if (editing) return (
-    <td style={{ padding: 2, minWidth: 36 }}>
-      <input
-        autoFocus value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onBlur={commitEdit}
-        onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(false); }}
-        style={{ width: 52, fontSize: 11, textAlign: 'center',
-          border: `1.5px solid ${PLAN_COLOR}`, borderRadius: 4, padding: '2px 4px', outline: 'none' }}
-      />
-    </td>
-  );
+  const OPTIONS = [
+    { s: 'programada',   label: 'Programada',  icon: Clock,        bg: PLAN_COLOR,    desc: 'Actividad planificada para este mes' },
+    { s: 'ejecutada',    label: 'Ejecutada',    icon: CheckCircle2, bg: '#16a34a',     desc: 'Actividad realizada — indica la fecha' },
+    { s: 'no_ejecutada', label: 'Sin ejecutar', icon: XCircle,      bg: OVERDUE_COLOR, desc: 'Actividad no realizada este mes' },
+  ];
 
   return (
-    <td
-      onClick={!disabled ? onToggle : undefined}
-      onDoubleClick={!disabled ? startEdit : undefined}
-      title={overdue ? '⚠️ Actividad vencida' : disabled ? '' : 'Click: marcar · Doble click: texto libre'}
-      style={{
-        minWidth: 36, textAlign: 'center', padding: '6px 2px',
-        background: bgColor,
-        cursor: disabled ? 'default' : 'pointer',
-        transition: 'background 0.12s',
-        borderRight: '1px solid #e5e7eb',
-        userSelect: 'none',
-        fontSize: 11, fontWeight: 700,
-        color: (hasValue || overdue) ? '#fff' : 'transparent',
-        position: 'relative',
-      }}
-    >
-      {overdue ? '!' : hasValue ? (value.trim() === 'x' ? '✓' : value.trim()) : '·'}
-    </td>
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); else handleOpen(); }}>
+      <DialogContent className="max-w-sm p-0" onOpenAutoFocus={handleOpen}>
+        <div style={{ background: C.primary, padding: '16px 20px', borderRadius: '8px 8px 0 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Calendar size={16} color={C.mint} />
+            <h3 style={{ color: '#fff', fontWeight: 700, fontSize: 14, margin: 0 }}>
+              Estado del mes — {monthLabel}
+            </h3>
+          </div>
+        </div>
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: C.primary,
+              textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 4 }}>
+              Descripción (opcional)
+            </label>
+            <input value={text} onChange={e => setText(e.target.value)}
+              placeholder="Ej: Celebración, Evento, Actividad..."
+              style={{ width: '100%', padding: '7px 10px', borderRadius: 8,
+                border: '1px solid #e5e7eb', fontSize: 13, outline: 'none' }} />
+          </div>
+          {status === 'ejecutada' && (
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#16a34a',
+                textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 4 }}>
+                Fecha de ejecución
+              </label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                style={{ width: '100%', padding: '7px 10px', borderRadius: 8,
+                  border: '1.5px solid #16a34a', fontSize: 13, outline: 'none' }} />
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 4 }}>
+            {OPTIONS.map(opt => {
+              const Icon = opt.icon;
+              const isSelected = status === opt.s;
+              return (
+                <button key={opt.s}
+                  onClick={() => { setStatus(opt.s); if (opt.s !== 'ejecutada') handleSave(opt.s); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '10px 14px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                    background: isSelected ? opt.bg : '#f9fafb',
+                    color: isSelected ? '#fff' : '#374151',
+                    fontWeight: isSelected ? 700 : 500, fontSize: 13,
+                    boxShadow: isSelected ? `0 2px 8px ${opt.bg}50` : 'none',
+                    transition: 'all 0.12s', textAlign: 'left',
+                  }}>
+                  <Icon size={16} />
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 700 }}>{opt.label}</p>
+                    <p style={{ margin: 0, fontSize: 11, opacity: 0.75 }}>{opt.desc}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {status === 'ejecutada' && (
+            <button onClick={() => handleSave()}
+              style={{ background: '#16a34a', color: '#fff', border: 'none',
+                borderRadius: 8, padding: '10px', cursor: 'pointer',
+                fontWeight: 700, fontSize: 13, marginTop: 4 }}>
+              ✓ Guardar como ejecutada
+            </button>
+          )}
+          {value && (
+            <button onClick={() => { onSave(null); onClose(); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 12, color: '#9ca3af', textAlign: 'center', marginTop: 2 }}>
+              × Quitar de este mes
+            </button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Celda de mes ─────────────────────────────────────────────────────
+function MonthCell({ value, onSave, disabled, monthLabel }) {
+  const [open, setOpen] = useState(false);
+  const parsed = parseMonthVal(value);
+  const meta   = MONTH_STATUS_META[parsed.s];
+
+  return (
+    <>
+      <td
+        onClick={!disabled ? () => setOpen(true) : undefined}
+        title={disabled ? '' : parsed.s === 'empty' ? 'Clic para programar'
+          : parsed.s === 'ejecutada' ? `Ejecutada: ${parsed.date}`
+          : parsed.s === 'no_ejecutada' ? 'Sin ejecutar — clic para cambiar'
+          : 'Programada — clic para cambiar'}
+        style={{
+          minWidth: 36, textAlign: 'center', padding: '6px 2px',
+          background: meta.bg,
+          cursor: disabled ? 'default' : 'pointer',
+          transition: 'background 0.12s',
+          borderRight: '1px solid #e5e7eb',
+          userSelect: 'none',
+          fontSize: 11, fontWeight: 700,
+          color: meta.color,
+          position: 'relative',
+        }}
+      >
+        {meta.symbol}
+      </td>
+      {open && (
+        <MonthStatusModal
+          open={open} onClose={() => setOpen(false)}
+          value={value} monthLabel={monthLabel}
+          onSave={val => onSave(val)} />
+      )}
+    </>
   );
 }
 
@@ -713,11 +794,9 @@ export default function BienestarTab() {
                         <MonthCell
                           key={key}
                           value={item[key]}
-                          monthIdx={mi}
-                          item={item}
                           disabled={!canEdit}
-                          onToggle={() => toggleMonth(item.id, key, item[key])}
-                          onEdit={(val) => setMonthValue(item.id, key, val)}
+                          monthLabel={MONTHS_LABEL[mi]}
+                          onSave={(val) => setMonthValue(item.id, key, val)}
                         />
                       ))}
 
@@ -787,16 +866,29 @@ export default function BienestarTab() {
                 </tr>
                 <tr>
                   <td style={{ padding:'7px 20px', fontWeight:700, fontSize:11,
-                    color:'#92400e', background:'#fef9c3' }}>ACTIVIDADES EJECUTADAS</td>
+                    color:'#166534', background:'#dcfce7', width:300 }}>ACTIVIDADES EJECUTADAS</td>
                   {trazabilidad.map((t, i) => (
                     <td key={i} style={{ textAlign:'center', padding:'7px 2px',
-                      fontWeight:700, fontSize:12, background:'#fef9c3',
-                      color: t.ejecutadas > 0 ? '#92400e' : '#9ca3af',
-                      borderLeft:'1px solid #fde68a' }}>
+                      fontWeight:700, fontSize:12, background:'#dcfce7',
+                      color: t.ejecutadas > 0 ? '#166534' : '#9ca3af',
+                      borderLeft:'1px solid #bbf7d0' }}>
                       {t.ejecutadas > 0 ? t.ejecutadas : ''}
                     </td>
                   ))}
-                  <td style={{ background:'#fef9c3' }}/>
+                  <td style={{ background:'#dcfce7' }}/>
+                </tr>
+                <tr>
+                  <td style={{ padding:'7px 20px', fontWeight:700, fontSize:11,
+                    color:'#92400e', background:'#fef3c7' }}>SIN EJECUTAR</td>
+                  {trazabilidad.map((t, i) => (
+                    <td key={i} style={{ textAlign:'center', padding:'7px 2px',
+                      fontWeight:700, fontSize:12, background:'#fef3c7',
+                      color: t.noEjecutadas > 0 ? '#92400e' : '#9ca3af',
+                      borderLeft:'1px solid #fde68a' }}>
+                      {t.noEjecutadas > 0 ? t.noEjecutadas : ''}
+                    </td>
+                  ))}
+                  <td style={{ background:'#fef3c7' }}/>
                 </tr>
                 <tr>
                   <td style={{ padding:'7px 20px', fontWeight:700, fontSize:11,

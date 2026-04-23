@@ -22,7 +22,7 @@ const HIDDEN_MODULES = ['clientes_ventas', 'inventario', 'configuracion'];
 const HIDDEN_SUBMODULES = new Set([
   // ── Mejoramiento Continuo — pendientes ──
   // 'revision_direccion', ← YA IMPLEMENTADO ✅
-  'informes',
+
   'requisitos_legales',
   'auditorias_internas',
   'evaluacion_auditores',
@@ -63,6 +63,7 @@ const SUBMODULE_NAMES = {
   qrsf:                     'QRSF',
   evaluacion_competencias:  'Evaluación de Competencias',
   revision_direccion:       'Revisión por la Dirección',
+  'informes': 'Informes de Gestión',
   // CMI / Planeación Estratégica — activo
   indicadores:              'Indicadores CMI',
   // SST / Bienestar — activos (implementados)

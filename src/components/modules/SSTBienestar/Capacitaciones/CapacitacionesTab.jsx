@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useCapacitaciones } from '@/hooks/useCapacitaciones';
+import { parseMonthVal, buildMonthVal } from '@/hooks/useWorkPlan';
 import { exportCapacitaciones } from '@/utils/exportCapacitaciones';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -18,6 +19,7 @@ import {
   BookOpen, Plus, Download, Trash2, Pencil,
   ChevronDown, Loader2, AlertCircle, CheckCircle2,
   CalendarDays, DollarSign, Users, Clock,
+  XCircle, Calendar,
 } from 'lucide-react';
 
 // ─── Paleta ──────────────────────────────────────────────────────────
@@ -32,26 +34,150 @@ const MONTH_KEYS = [
 const fmtCOP = (v) =>
   v ? `$\u00a0${Number(v).toLocaleString('es-CO')}` : '—';
 
-// ─── Celda de mes toggle ──────────────────────────────────────────────
-function MonthCell({ active, onClick, disabled }) {
+// ─── Estado visual por tipo ───────────────────────────────────────────
+const MONTH_STATUS_META = {
+  empty:        { bg: 'transparent', color: 'transparent', symbol: '·' },
+  programada:   { bg: C.primary,     color: C.mint,        symbol: '●' },
+  ejecutada:    { bg: '#16a34a',     color: '#fff',        symbol: '✓' },
+  no_ejecutada: { bg: '#d97706',     color: '#fff',        symbol: '✗' },
+};
+
+// ─── Modal de estado de mes (Capacitaciones) ──────────────────────────
+function MonthStatusModal({ open, onClose, value, monthLabel, onSave }) {
+  const parsed = parseMonthVal(value);
+  const [status, setStatus] = useState(parsed.s === 'empty' ? 'programada' : parsed.s);
+  const [text,   setText]   = useState(parsed.text);
+  const [date,   setDate]   = useState(parsed.date || new Date().toISOString().slice(0,10));
+
+  const handleOpen = () => {
+    const p = parseMonthVal(value);
+    setStatus(p.s === 'empty' ? 'programada' : p.s);
+    setText(p.text); setDate(p.date || new Date().toISOString().slice(0,10));
+  };
+
+  const handleSave = (s) => {
+    onSave(buildMonthVal(s || status, text, date));
+    onClose();
+  };
+
+  const OPTIONS = [
+    { s: 'programada',   label: 'Programada',  icon: Clock,       bg: C.primary, desc: 'Capacitación planificada para este mes' },
+    { s: 'ejecutada',    label: 'Ejecutada',    icon: CheckCircle2, bg: '#16a34a', desc: 'Capacitación realizada — indica la fecha' },
+    { s: 'no_ejecutada', label: 'Sin ejecutar', icon: XCircle,     bg: '#d97706', desc: 'Capacitación no realizada este mes' },
+  ];
+
   return (
-    <td
-      onClick={!disabled ? onClick : undefined}
-      style={{
-        width: 36, minWidth: 36, textAlign: 'center',
-        padding: '6px 2px',
-        background: active ? C.primary : 'transparent',
-        cursor: disabled ? 'default' : 'pointer',
-        transition: 'background 0.15s',
-        borderRight: '1px solid #e5e7eb',
-        userSelect: 'none',
-      }}
-      title={active ? 'Clic para desactivar' : 'Clic para activar'}
-    >
-      {active && (
-        <span style={{ fontSize: 14, color: C.mint, fontWeight: 700 }}>●</span>
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose(); else handleOpen(); }}>
+      <DialogContent className="max-w-sm p-0" onOpenAutoFocus={handleOpen}>
+        <div style={{ background: C.primary, padding: '16px 20px', borderRadius: '8px 8px 0 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Calendar size={16} color={C.mint} />
+            <h3 style={{ color: '#fff', fontWeight: 700, fontSize: 14, margin: 0 }}>
+              Estado del mes — {monthLabel}
+            </h3>
+          </div>
+        </div>
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: C.primary,
+              textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 4 }}>
+              Descripción (opcional)
+            </label>
+            <input value={text} onChange={e => setText(e.target.value)}
+              placeholder="Ej: Tema de la capacitación..."
+              style={{ width: '100%', padding: '7px 10px', borderRadius: 8,
+                border: '1px solid #e5e7eb', fontSize: 13, outline: 'none' }} />
+          </div>
+          {status === 'ejecutada' && (
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#16a34a',
+                textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 4 }}>
+                Fecha de ejecución
+              </label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                style={{ width: '100%', padding: '7px 10px', borderRadius: 8,
+                  border: '1.5px solid #16a34a', fontSize: 13, outline: 'none' }} />
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 4 }}>
+            {OPTIONS.map(opt => {
+              const Icon = opt.icon;
+              const isSelected = status === opt.s;
+              return (
+                <button key={opt.s}
+                  onClick={() => { setStatus(opt.s); if (opt.s !== 'ejecutada') handleSave(opt.s); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '10px 14px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                    background: isSelected ? opt.bg : '#f9fafb',
+                    color: isSelected ? '#fff' : '#374151',
+                    fontWeight: isSelected ? 700 : 500, fontSize: 13,
+                    boxShadow: isSelected ? `0 2px 8px ${opt.bg}50` : 'none',
+                    transition: 'all 0.12s', textAlign: 'left',
+                  }}>
+                  <Icon size={16} />
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 700 }}>{opt.label}</p>
+                    <p style={{ margin: 0, fontSize: 11, opacity: 0.75 }}>{opt.desc}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {status === 'ejecutada' && (
+            <button onClick={() => handleSave()}
+              style={{ background: '#16a34a', color: '#fff', border: 'none',
+                borderRadius: 8, padding: '10px', cursor: 'pointer',
+                fontWeight: 700, fontSize: 13, marginTop: 4 }}>
+              ✓ Guardar como ejecutada
+            </button>
+          )}
+          {value && (
+            <button onClick={() => { onSave(null); onClose(); }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 12, color: '#9ca3af', textAlign: 'center', marginTop: 2 }}>
+              × Quitar de este mes
+            </button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Celda de mes ─────────────────────────────────────────────────────
+function MonthCell({ value, onSave, disabled, monthLabel }) {
+  const [open, setOpen] = useState(false);
+  const parsed = parseMonthVal(value);
+  const meta   = MONTH_STATUS_META[parsed.s];
+
+  return (
+    <>
+      <td
+        onClick={!disabled ? () => setOpen(true) : undefined}
+        title={disabled ? '' : parsed.s === 'empty' ? 'Clic para programar'
+          : parsed.s === 'ejecutada' ? `Ejecutada: ${parsed.date}`
+          : parsed.s === 'no_ejecutada' ? 'Sin ejecutar — clic para cambiar'
+          : 'Programada — clic para cambiar'}
+        style={{
+          width: 36, minWidth: 36, textAlign: 'center', padding: '6px 2px',
+          background: meta.bg,
+          cursor: disabled ? 'default' : 'pointer',
+          transition: 'background 0.15s',
+          borderRight: '1px solid #e5e7eb',
+          userSelect: 'none', fontSize: 13, fontWeight: 700,
+          color: meta.color,
+        }}
+      >
+        {meta.symbol}
+      </td>
+      {open && (
+        <MonthStatusModal
+          open={open} onClose={() => setOpen(false)}
+          value={value} monthLabel={monthLabel}
+          onSave={val => onSave(val)} />
       )}
-    </td>
+    </>
   );
 }
 
@@ -629,12 +755,13 @@ export default function CapacitacionesTab() {
                       </Td>
 
                       {/* Meses */}
-                      {MONTH_KEYS.map(key => (
+                      {MONTH_KEYS.map((key, mi) => (
                         <MonthCell
                           key={key}
-                          active={!!item[key]}
+                          value={item[key] === true ? 'x' : item[key] || null}
                           disabled={!canEdit}
-                          onClick={() => toggleMonth(item.id, key, !!item[key])}
+                          monthLabel={MONTHS[mi]}
+                          onSave={(val) => updateItem(item.id, { [key]: val })}
                         />
                       ))}
 

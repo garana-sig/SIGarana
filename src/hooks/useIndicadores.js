@@ -217,13 +217,22 @@ export function useIndicadores() {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
+      // Admin y gerencia ven todos; usuarios solo los que tienen a cargo
+      const isPrivileged = profile?.role === 'admin' || profile?.role === 'gerencia';
+
+      let query = supabase
         .from('indicator')
         .select('*')
         .neq('status', 'archived')
         .is('deleted_at', null)
         .order('indicator_type')
         .order('created_at', { ascending: false });
+
+      if (!isPrivileged && profile?.id) {
+        query = query.eq('responsible_id', profile.id);
+      }
+
+      const { data, error: fetchError } = await query;
 
       if (fetchError) throw fetchError;
       if (!data || data.length === 0) { setIndicators([]); return; }

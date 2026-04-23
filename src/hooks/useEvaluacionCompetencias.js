@@ -50,9 +50,15 @@ export const FRECUENCIAS = [
 // ─── Hook principal ───────────────────────────────────────────────────────────
 
 export function useEvaluacionCompetencias() {
-  const { user, profile } = useAuth();
+  const { user, profile, hasPermission } = useAuth();
   const role              = profile?.role;
   const isAdminOrGerencia = role === 'admin' || role === 'gerencia';
+  // Permisos granulares del sistema
+  const canViewEval   = isAdminOrGerencia || hasPermission('auditorias:evaluacion_competencias:view');
+  const canCreateEval = isAdminOrGerencia || hasPermission('auditorias:evaluacion_competencias:create');
+  const canEditEval   = isAdminOrGerencia || hasPermission('auditorias:evaluacion_competencias:edit');
+  const canDeleteEval = isAdminOrGerencia || hasPermission('auditorias:evaluacion_competencias:delete');
+  const canManageEval = isAdminOrGerencia || hasPermission('auditorias:evaluacion_competencias:manage');
 
   const [empleados,        setEmpleados]        = useState([]);
   const [categorias,       setCategorias]       = useState([]);
@@ -177,17 +183,24 @@ export function useEvaluacionCompetencias() {
   const empleadosPermitidos = useMemo(() => {
     // Admin/Gerencia → ven todos
     if (isAdminOrGerencia) return empleados.filter(e => e.is_active);
-    // Evaluador sin departamento asignado → no ve nadie
-    if (misDepartamentos.length === 0) return [];
-    // Evaluador con departamento → solo los suyos
-    return empleados.filter(
-      e => misDepartamentos.includes(e.departamento) && e.is_active
-    );
-  }, [empleados, misDepartamentos, isAdminOrGerencia]);
+    // Evaluador con departamento → ve los suyos
+    if (misDepartamentos.length > 0) {
+      return empleados.filter(
+        e => misDepartamentos.includes(e.departamento) && e.is_active
+      );
+    }
+    // Empleado con cuenta (solo view, sin asignación de evaluador):
+    // ve ÚNICAMENTE su propio registro en ec_empleado
+    if (user?.id && canViewEval) {
+      return empleados.filter(e => e.user_id === user.id && e.is_active);
+    }
+    return [];
+  }, [empleados, misDepartamentos, isAdminOrGerencia, user?.id, canViewEval]);
 
   const canEvaluar = useCallback(
-    (departamento) => isAdminOrGerencia || misDepartamentos.includes(departamento),
-    [isAdminOrGerencia, misDepartamentos]
+    (departamento) =>
+      canCreateEval && (isAdminOrGerencia || misDepartamentos.includes(departamento)),
+    [isAdminOrGerencia, misDepartamentos, canCreateEval]
   );
 
   // Evaluaciones por empleado (count + última)
@@ -459,6 +472,7 @@ export function useEvaluacionCompetencias() {
     configuracion, usuarios, misDepartamentos,
     // estado
     loading, error, isAdminOrGerencia, role,
+    canViewEval, canCreateEval, canEditEval, canDeleteEval, canManageEval,
     // helpers
     canEvaluar,
     // empleados
