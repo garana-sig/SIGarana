@@ -41,11 +41,7 @@ const VALORES = [
     title: 'Lealtad',
     text: 'Fidelidad en las acciones y comportamientos individuales y sociales para ser dueños de la propia voluntad.',
   },
-  {
-    icon: '⭐',
-    title: 'Excelencia',
-    text: 'Búsqueda permanente de la calidad superior en cada prenda, proceso y relación, como expresión de nuestro compromiso con quienes nos eligen.',
-  },
+
 ];
 
 const CIFRAS = [
@@ -827,7 +823,7 @@ const s = {
   valoresSection: { backgroundColor: C.sand },
   valoresGrid: {
     display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-    gap: 20,
+    gap: 60,
   },
   valorCard: {
     padding: '28px 24px', borderRadius: 16,
