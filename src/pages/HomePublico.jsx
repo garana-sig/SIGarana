@@ -79,7 +79,7 @@ export default function HomePublico() {
     setClaveLoading(true);
     setClaveError('');
     try {
-      const typeCode = claveModal === 'satisfaccion' ? 'customer_satisfaction' : 'workplace_climate';
+      const typeCode = claveModal === 'satisfaccion' ? 'customer_satisfaction' : 'work_climate';
       // Buscar el survey_type
       const { data: typeData, error: typeErr } = await supabase
         .from('survey_type').select('id').eq('code', typeCode).single();
