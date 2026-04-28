@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import {
   ArrowLeft, Award, Users, TrendingUp, MessageSquare,
-  BarChart3, RefreshCw, Download, ArrowUpRight, ArrowDownRight, Minus,
+  BarChart3, RefreshCw, Download, ArrowUpRight, ArrowDownRight, Minus, Settings,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { useSurveyResponses, useAllPeriodsStats } from '@/hooks/useSurveys';
 import { exportSatisfaccionClientes } from '@/utils/exportSurveyExcel';
+import SurveyConfigModal from '../SurveyConfigModal';
 
 // ─── Paleta ───────────────────────────────────────────────────────────────────
 const C = { green: '#2e5244', mint: '#6dbd96', olive: '#6f7b2c', bg: '#dedecc' };
@@ -21,12 +22,13 @@ const STATUS_COLORS = { good: '#22c55e', warning: '#eab308', critical: '#ef4444'
 const STATUS_LABELS = { good: 'Bueno', warning: 'Regular', critical: 'Crítico', no_data: 'Sin datos' };
 const SCALE_COLORS  = { 1: '#ef4444', 2: '#f97316', 3: '#eab308', 4: '#84cc16', 5: '#22c55e' };
 
-const META = 4.0; // línea de referencia en gráficas
+const META = 4.0;
 
 export default function SatisfaccionClientesManager({ onBack }) {
   const [selectedPeriodId, setSelectedPeriodId] = useState(null);
   const [activeTab, setActiveTab]               = useState('overview');
   const [downloading, setDownloading]           = useState(false);
+  const [showConfig, setShowConfig]             = useState(false); // ← NUEVO
 
   // ── Datos del período seleccionado ──────────────────────────────────────────
   const {
@@ -36,16 +38,12 @@ export default function SatisfaccionClientesManager({ onBack }) {
   } = useSurveyResponses('customer_satisfaction', selectedPeriodId);
 
   // ── Datos históricos para tendencia ─────────────────────────────────────────
-  const {
-    data: allPeriodsData,
-    loading: trendLoading,
-  } = useAllPeriodsStats('customer_satisfaction');
+  const { data: allPeriodsData, loading: trendLoading } = useAllPeriodsStats('customer_satisfaction');
 
   const activePeriod  = periods.find(p => p.is_active);
   const currentPeriod = periods.find(p => p.id === selectedPeriodId) || activePeriod;
 
   // ── Delta vs período anterior ────────────────────────────────────────────────
-  // Busca el período inmediatamente anterior en los datos históricos
   const currentTrendIdx = allPeriodsData.findIndex(d => d.periodId === currentPeriod?.id);
   const prevTrendData   = currentTrendIdx > 0 ? allPeriodsData[currentTrendIdx - 1] : null;
   const delta           = prevTrendData && overallAverage
@@ -65,17 +63,19 @@ export default function SatisfaccionClientesManager({ onBack }) {
   const distChartData = scaleQuestions.map((q, idx) => {
     const dist = statsByQuestion[q.id]?.distribution || {};
     return {
-      name: `P${idx + 1}`,
-      label: q.question_text,
-      '1': dist[1] || 0, '2': dist[2] || 0, '3': dist[3] || 0,
-      '4': dist[4] || 0, '5': dist[5] || 0,
+      name: `P${idx + 1}`, label: q.question_text,
+      '1': dist[1]||0, '2': dist[2]||0, '3': dist[3]||0, '4': dist[4]||0, '5': dist[5]||0,
     };
   });
 
-  // Top 3 mejor y peor
   const ranked = [...avgChartData].filter(d => d.avg > 0).sort((a, b) => b.avg - a.avg);
   const top3   = ranked.slice(0, 3);
   const bot3   = [...ranked].reverse().slice(0, 3);
+
+  // ── Enlace para clientes ──────────────────────────────────────────────────────
+  const surveyLink = activePeriod
+    ? `${window.location.origin}/encuesta/satisfaccion-cliente?pid=${activePeriod.id}`
+    : null;
 
   // ── Exportar Excel ────────────────────────────────────────────────────────────
   const handleExport = async () => {
@@ -111,6 +111,10 @@ export default function SatisfaccionClientesManager({ onBack }) {
           </p>
         </div>
         <div className="flex gap-2">
+          {/* ── NUEVO: Botón configuración ── */}
+          <Button variant="outline" size="sm" onClick={() => setShowConfig(true)}>
+            <Settings className="h-4 w-4 mr-1" /> Configurar
+          </Button>
           <Button variant="outline" size="sm" onClick={handleExport} disabled={downloading || responses.length === 0}>
             <Download className="h-4 w-4 mr-1" />
             {downloading ? 'Generando...' : 'Exportar Excel'}
@@ -145,8 +149,7 @@ export default function SatisfaccionClientesManager({ onBack }) {
           label="Total respuestas" value={responses.length} color={C.green} />
         <StatCard icon={<Award className="h-5 w-5" />}
           label="Promedio general" value={overallAverage} suffix="/ 5"
-          color={STATUS_COLORS[getStatus(overallAverage)]}
-          delta={delta} />
+          color={STATUS_COLORS[getStatus(overallAverage)]} delta={delta} />
         <StatCard icon={<TrendingUp className="h-5 w-5" />}
           label="% Satisfacción (≥4)" value={`${satisfactionRate}%`}
           color={satisfactionRate >= 70 ? '#22c55e' : satisfactionRate >= 50 ? '#eab308' : '#ef4444'}
@@ -155,7 +158,7 @@ export default function SatisfaccionClientesManager({ onBack }) {
           label="Sugerencias" value={suggestions.length} color={C.olive} />
       </div>
 
-      {/* ── Top 3 / Bottom 3 (solo si hay datos) ── */}
+      {/* ── Top 3 / Bottom 3 ── */}
       {responses.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <RankCard title="✅ Top 3 mejor calificadas" items={top3} color="#22c55e" />
@@ -164,17 +167,26 @@ export default function SatisfaccionClientesManager({ onBack }) {
       )}
 
       {/* ── Enlace formulario ── */}
-      <div className="p-3 rounded-lg border flex items-center gap-3"
-        style={{ backgroundColor: `${C.mint}15`, borderColor: C.mint }}>
-        <span style={{ color: C.green, fontSize: 13 }}>🔗 Enlace para clientes:</span>
-        <code style={{ color: C.green, fontSize: 12, fontWeight: 600 }}>
-          {window.location.origin}/encuesta/satisfaccion-cliente
-        </code>
-        <button style={{ marginLeft: 'auto', fontSize: 12, color: C.mint, fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}
-          onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/encuesta/satisfaccion-cliente`)}>
-          Copiar
-        </button>
-      </div>
+      {surveyLink ? (
+        <div className="p-3 rounded-lg border flex items-center gap-3 flex-wrap"
+          style={{ backgroundColor: `${C.mint}15`, borderColor: C.mint }}>
+          <span style={{ color: C.green, fontSize: 13 }}>🔗 Enlace para clientes:</span>
+          <code style={{ color: C.green, fontSize: 12, fontWeight: 600, wordBreak: 'break-all' }}>
+            {surveyLink}
+          </code>
+          <button
+            style={{ marginLeft: 'auto', fontSize: 12, color: C.mint, fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}
+            onClick={() => navigator.clipboard?.writeText(surveyLink)}>
+            📋 Copiar
+          </button>
+        </div>
+      ) : (
+        <div className="p-3 rounded-lg border" style={{ backgroundColor: '#fff8f0', borderColor: '#f97316' }}>
+          <p style={{ fontSize: 13, color: '#c2410c' }}>
+            ⚠️ No hay un período activo. Ve a <strong>Configurar</strong> para crear o activar uno.
+          </p>
+        </div>
+      )}
 
       {/* ── Tabs ── */}
       <div className="flex gap-1 border-b" style={{ borderColor: '#e5e7eb' }}>
@@ -186,12 +198,10 @@ export default function SatisfaccionClientesManager({ onBack }) {
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             style={{
+              padding: '8px 14px', fontSize: 13, fontWeight: 600,
               color: activeTab === tab.id ? C.green : '#888',
-  background: 'none',
-  border: 'none',
-  borderBottom: activeTab === tab.id 
-    ? `2px solid ${C.green}` 
-    : '2px solid transparent',
+              background: 'none', border: 'none', cursor: 'pointer',
+              borderBottom: activeTab === tab.id ? `2px solid ${C.green}` : '2px solid transparent',
             }}>
             {tab.label}
           </button>
@@ -264,8 +274,7 @@ export default function SatisfaccionClientesManager({ onBack }) {
                                 <span style={{
                                   display: 'inline-block', padding: '2px 10px', borderRadius: 12,
                                   fontSize: 11, fontWeight: 600,
-                                  backgroundColor: `${STATUS_COLORS[status]}20`,
-                                  color: STATUS_COLORS[status],
+                                  backgroundColor: `${STATUS_COLORS[status]}20`, color: STATUS_COLORS[status],
                                 }}>
                                   {STATUS_LABELS[status]}
                                 </span>
@@ -286,13 +295,10 @@ export default function SatisfaccionClientesManager({ onBack }) {
       {/* ── Tab: Tendencia histórica ── */}
       {activeTab === 'trend' && (
         <div className="space-y-4">
-          {trendLoading ? (
-            <LoadingSpinner />
-          ) : allPeriodsData.length < 2 ? (
+          {trendLoading ? <LoadingSpinner /> : allPeriodsData.length < 2 ? (
             <EmptyState message="Se necesitan al menos 2 períodos con respuestas para mostrar la tendencia. Sigue recolectando datos." />
           ) : (
             <>
-              {/* Contexto de lectura */}
               <div className="p-4 rounded-lg" style={{ backgroundColor: `${C.mint}15`, border: `1px solid ${C.mint}40` }}>
                 <p style={{ fontSize: 13, color: C.green, fontWeight: 600, marginBottom: 4 }}>
                   ¿Cómo leer esta gráfica?
@@ -333,7 +339,6 @@ export default function SatisfaccionClientesManager({ onBack }) {
                 </CardContent>
               </Card>
 
-              {/* Tabla de evolución */}
               <Card className="border" style={{ borderColor: '#e5e7eb' }}>
                 <CardHeader>
                   <CardTitle style={{ color: C.green, fontSize: 15 }}>Comparativa entre períodos</CardTitle>
@@ -353,30 +358,25 @@ export default function SatisfaccionClientesManager({ onBack }) {
                       </thead>
                       <tbody>
                         {[...allPeriodsData].reverse().map((d, idx, arr) => {
-                          const prev     = arr[idx + 1];
-                          const diff     = prev && d.avg ? parseFloat((d.avg - prev.avg).toFixed(2)) : null;
-                          const status   = !d.avg ? 'no_data' : d.avg >= 4 ? 'good' : d.avg >= 3 ? 'warning' : 'critical';
+                          const prev   = arr[idx + 1];
+                          const diff   = prev && d.avg ? parseFloat((d.avg - prev.avg).toFixed(2)) : null;
+                          const status = !d.avg ? 'no_data' : d.avg >= 4 ? 'good' : d.avg >= 3 ? 'warning' : 'critical';
                           return (
                             <tr key={d.periodId} style={{ borderTop: '1px solid #f0f0e8', backgroundColor: d.isActive ? `${C.mint}10` : 'transparent' }}>
                               <td style={{ ...td, fontWeight: d.isActive ? 700 : 400, color: d.isActive ? C.green : '#333' }}>
                                 {d.semLabel} {d.isActive && <Badge style={{ fontSize: 10, marginLeft: 6 }}>Activo</Badge>}
                               </td>
                               <td style={{ ...td, textAlign: 'center', color: '#666' }}>{d.count}</td>
-                              <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: STATUS_COLORS[status] }}>
-                                {d.avg ?? '—'}
-                              </td>
+                              <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: STATUS_COLORS[status] }}>{d.avg ?? '—'}</td>
                               <td style={{ ...td, textAlign: 'center', color: '#555' }}>
                                 {d.satisfactionRate !== null ? `${d.satisfactionRate}%` : '—'}
                               </td>
-                              <td style={{ ...td, textAlign: 'center' }}>
-                                <DeltaBadge value={diff} />
-                              </td>
+                              <td style={{ ...td, textAlign: 'center' }}><DeltaBadge value={diff} /></td>
                               <td style={{ ...td, textAlign: 'center' }}>
                                 <span style={{
                                   display: 'inline-block', padding: '2px 10px', borderRadius: 12,
                                   fontSize: 11, fontWeight: 600,
-                                  backgroundColor: `${STATUS_COLORS[status]}20`,
-                                  color: STATUS_COLORS[status],
+                                  backgroundColor: `${STATUS_COLORS[status]}20`, color: STATUS_COLORS[status],
                                 }}>
                                   {STATUS_LABELS[status]}
                                 </span>
@@ -404,11 +404,11 @@ export default function SatisfaccionClientesManager({ onBack }) {
                   Distribución de respuestas por pregunta
                 </CardTitle>
                 <div className="flex gap-3 flex-wrap mt-2">
-                  {[1, 2, 3, 4, 5].map(v => (
+                  {[1,2,3,4,5].map(v => (
                     <div key={v} className="flex items-center gap-1">
                       <div style={{ width: 12, height: 12, borderRadius: 3, backgroundColor: SCALE_COLORS[v] }} />
                       <span style={{ fontSize: 11, color: '#666' }}>
-                        {['', 'Alta Insatisf.', 'Parcial Insatisf.', 'Regular', 'Parcial Satisf.', 'Alta Satisf.'][v]}
+                        {['','Alta Insatisf.','Parcial Insatisf.','Regular','Parcial Satisf.','Alta Satisf.'][v]}
                       </span>
                     </div>
                   ))}
@@ -421,7 +421,7 @@ export default function SatisfaccionClientesManager({ onBack }) {
                     <XAxis type="number" fontSize={11} />
                     <YAxis type="category" dataKey="name" width={32} fontSize={11} />
                     <Tooltip content={<CustomTooltipDist data={distChartData} />} />
-                    {[1, 2, 3, 4, 5].map(v => (
+                    {[1,2,3,4,5].map(v => (
                       <Bar key={v} dataKey={String(v)} stackId="a" fill={SCALE_COLORS[v]} />
                     ))}
                   </BarChart>
@@ -465,12 +465,21 @@ export default function SatisfaccionClientesManager({ onBack }) {
           )}
         </div>
       )}
+
+      {/* ── Modal de configuración ── */}
+      {showConfig && (
+        <SurveyConfigModal
+          surveyTypeCode="customer_satisfaction"
+          surveyTypeName="Satisfacción del Cliente"
+          onClose={() => { setShowConfig(false); reload(); }}
+        />
+      )}
+
     </div>
   );
 }
 
 // ── Sub-componentes ────────────────────────────────────────────────────────────
-
 function StatCard({ icon, label, value, suffix, color, delta, deltaLabel }) {
   return (
     <Card className="border" style={{ borderColor: '#e5e7eb' }}>
@@ -489,9 +498,7 @@ function StatCard({ icon, label, value, suffix, color, delta, deltaLabel }) {
             <span style={{ fontSize: 11, color: '#aaa' }}>vs período anterior</span>
           </div>
         )}
-        {deltaLabel && !delta && (
-          <p style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>{deltaLabel}</p>
-        )}
+        {deltaLabel && !delta && <p style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>{deltaLabel}</p>}
       </CardContent>
     </Card>
   );
@@ -566,7 +573,7 @@ function ErrorState({ message, onRetry }) {
   );
 }
 
-// ── Tooltips personalizados ────────────────────────────────────────────────────
+// ── Tooltips ──────────────────────────────────────────────────────────────────
 function CustomTooltipAvg({ active, payload }) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
@@ -579,7 +586,7 @@ function CustomTooltipAvg({ active, payload }) {
   );
 }
 
-function CustomTooltipTrend({ active, payload, label }) {
+function CustomTooltipTrend({ active, payload }) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
   const status = !d.avg ? 'no_data' : d.avg >= 4 ? 'good' : d.avg >= 3 ? 'warning' : 'critical';
@@ -588,7 +595,7 @@ function CustomTooltipTrend({ active, payload, label }) {
       <p style={{ fontWeight: 700, color: C.green, marginBottom: 6 }}>{d.semLabel}</p>
       <p>Promedio: <strong style={{ color: STATUS_COLORS[status] }}>{d.avg}</strong> / 5</p>
       <p style={{ color: '#555' }}>{d.count} respuestas · {d.satisfactionRate}% satisfacción</p>
-      {d.avg < META && <p style={{ color: '#ef4444', marginTop: 4 }}>↓ {(META - d.avg).toFixed(2)} puntos bajo la meta</p>}
+      {d.avg < META  && <p style={{ color: '#ef4444', marginTop: 4 }}>↓ {(META - d.avg).toFixed(2)} puntos bajo la meta</p>}
       {d.avg >= META && <p style={{ color: '#22c55e', marginTop: 4 }}>✓ Por encima de la meta</p>}
     </div>
   );
@@ -603,7 +610,7 @@ function CustomTooltipDist({ data = [] }) {
         <p style={{ fontWeight: 700, color: C.green, marginBottom: 6 }}>{item?.label}</p>
         {payload.map(p => (
           <p key={p.dataKey} style={{ color: SCALE_COLORS[p.dataKey] }}>
-            {['', 'Alta Insatisf.', 'Parcial Insatisf.', 'Regular', 'Parcial Satisf.', 'Alta Satisf.'][p.dataKey]}:
+            {['','Alta Insatisf.','Parcial Insatisf.','Regular','Parcial Satisf.','Alta Satisf.'][p.dataKey]}:
             <strong> {p.value}</strong> resp.
           </p>
         ))}
@@ -615,5 +622,5 @@ function CustomTooltipDist({ data = [] }) {
 // ── Estilos ────────────────────────────────────────────────────────────────────
 const th = { padding: '10px 14px', fontSize: 12, fontWeight: 600, color: '#555', textAlign: 'center' };
 const td = { padding: '10px 14px' };
-const btnStyle = { padding: '6px 14px', borderRadius: 8, border: '1.5px solid #ddd', backgroundColor: '#fff', color: '#666', fontSize: 12, fontWeight: 600, cursor: 'pointer' };
+const btnStyle      = { padding: '6px 14px', borderRadius: 8, border: '1.5px solid #ddd', backgroundColor: '#fff', color: '#666', fontSize: 12, fontWeight: 600, cursor: 'pointer' };
 const btnActiveStyle = { backgroundColor: '#2e5244', borderColor: '#2e5244', color: '#fff' };

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import {
   ArrowLeft, Smile, Users, TrendingUp, BarChart3,
-  RefreshCw, Download, ArrowUpRight, ArrowDownRight, Minus,
+  RefreshCw, Download, ArrowUpRight, ArrowDownRight, Minus, Settings,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 import { useSurveyResponses, useAllPeriodsStats } from '@/hooks/useSurveys';
 import { exportClimaLaboral } from '@/utils/exportSurveyExcel';
+import SurveyConfigModal from '../SurveyConfigModal';
 
 // ─── Paleta ───────────────────────────────────────────────────────────────────
 const C = { green: '#2e5244', mint: '#6dbd96', olive: '#6f7b2c', bg: '#dedecc' };
@@ -40,6 +41,7 @@ export default function ClimaLaboralManager({ onBack }) {
   const [selectedArea, setSelectedArea]         = useState('all');
   const [activeTab, setActiveTab]               = useState('overview');
   const [downloading, setDownloading]           = useState(false);
+  const [showConfig, setShowConfig]             = useState(false); // ← NUEVO
 
   const {
     responses, answers, questions, periods, loading, error, reload,
@@ -160,6 +162,11 @@ export default function ClimaLaboralManager({ onBack }) {
     }
   };
 
+  // ─── Enlace para empleados ────────────────────────────────────────────────────
+  const surveyLink = activePeriod
+    ? `${window.location.origin}/encuesta/clima-laboral?pid=${activePeriod.id}`
+    : null;
+
   // ─── Loading / Error ──────────────────────────────────────────────────────────
   if (loading) return <LoadingSpinner />;
   if (error)   return <div className="p-6 text-center"><p className="text-red-500 mb-4">Error: {error}</p><Button onClick={reload} variant="outline">Reintentar</Button></div>;
@@ -179,6 +186,10 @@ export default function ClimaLaboralManager({ onBack }) {
           </p>
         </div>
         <div className="flex gap-2">
+          {/* ── NUEVO: Botón configuración ── */}
+          <Button variant="outline" size="sm" onClick={() => setShowConfig(true)}>
+            <Settings className="h-4 w-4 mr-1" /> Configurar
+          </Button>
           <Button variant="outline" size="sm" onClick={handleExport} disabled={downloading || filteredResponses.length === 0}>
             <Download className="h-4 w-4 mr-1" />
             {downloading ? 'Generando...' : 'Exportar Excel'}
@@ -234,14 +245,25 @@ export default function ClimaLaboralManager({ onBack }) {
         </div>
       )}
 
-      {/* ── Enlace ── */}
-      <div className="p-3 rounded-lg border flex items-center gap-3"
-        style={{ backgroundColor: `${C.mint}15`, borderColor: C.mint }}>
-        <span style={{ color: C.green, fontSize: 13 }}>🔗 Enlace para empleados:</span>
-        <code style={{ color: C.green, fontSize: 12, fontWeight: 600 }}>{window.location.origin}/encuesta/clima-laboral</code>
-        <button style={{ marginLeft: 'auto', fontSize: 12, color: C.mint, fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}
-          onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/encuesta/clima-laboral`)}>Copiar</button>
-      </div>
+      {/* ── Enlace para empleados ── */}
+      {surveyLink ? (
+        <div className="p-3 rounded-lg border flex items-center gap-3 flex-wrap"
+          style={{ backgroundColor: `${C.mint}15`, borderColor: C.mint }}>
+          <span style={{ color: C.green, fontSize: 13 }}>🔗 Enlace para empleados:</span>
+          <code style={{ color: C.green, fontSize: 12, fontWeight: 600, wordBreak: 'break-all' }}>{surveyLink}</code>
+          <button
+            style={{ marginLeft: 'auto', fontSize: 12, color: C.mint, fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}
+            onClick={() => navigator.clipboard?.writeText(surveyLink)}>
+            📋 Copiar
+          </button>
+        </div>
+      ) : (
+        <div className="p-3 rounded-lg border" style={{ backgroundColor: '#fff8f0', borderColor: '#f97316' }}>
+          <p style={{ fontSize: 13, color: '#c2410c' }}>
+            ⚠️ No hay un período activo. Ve a <strong>Configurar</strong> para crear o activar uno.
+          </p>
+        </div>
+      )}
 
       {/* ── Tabs ── */}
       <div className="flex gap-1 flex-wrap" style={{ borderBottom: '1px solid #e5e7eb' }}>
@@ -661,6 +683,16 @@ export default function ClimaLaboralManager({ onBack }) {
           )}
         </div>
       )}
+
+      {/* ── Modal de configuración ── */}
+      {showConfig && (
+        <SurveyConfigModal
+          surveyTypeCode="work_climate"
+          surveyTypeName="Clima Laboral"
+          onClose={() => { setShowConfig(false); reload(); }}
+        />
+      )}
+
     </div>
   );
 }
