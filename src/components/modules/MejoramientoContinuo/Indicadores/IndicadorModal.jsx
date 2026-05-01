@@ -516,7 +516,7 @@ export default function IndicadorModal({
                               : <>{m.goal_value ?? '—'} {m.unit || ''}</>}
                           </td>
                           <td style={{ padding:'5px 8px', borderBottom:'1px solid #F3F4F6', fontWeight:600, color: si?.color }}>
-                            {si?.pct != null ? `${si.pct}%` : '—'}
+                            {m.measured_value != null ? `${Math.round(m.measured_value * 100) / 100} ${m.unit || '%'}` : '—'}
                           </td>
                           <td style={{ padding:'5px 8px', borderBottom:'1px solid #F3F4F6' }}>
                             <span style={{
