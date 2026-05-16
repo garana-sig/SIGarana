@@ -2,6 +2,7 @@
 // ✅ v2026-04-07 — evaluacion_competencias habilitado + fix auto-save evaluadores
 // ✅ Accordion controlado (no colapsa al asignar permisos)
 // ✅ loadPermissions silent=true (no desmonta el panel)
+// ✅ Proveedores agregado (catalogo, evaluacion, seleccion)
 
 import { useUserPermissions }      from '@/hooks/useUserPermissions';
 import React from 'react';
@@ -21,13 +22,10 @@ const HIDDEN_MODULES = ['clientes_ventas', 'inventario', 'configuracion'];
 // ── Submódulos ocultos — borrar de aquí cuando implementes cada uno ──
 const HIDDEN_SUBMODULES = new Set([
   // ── Mejoramiento Continuo — pendientes ──
-  // 'revision_direccion', ← YA IMPLEMENTADO ✅
-
   'requisitos_legales',
   'auditorias_internas',
   'evaluacion_auditores',
   'reporte_incidentes',
-  // 'evaluacion_competencias', ← YA IMPLEMENTADO ✅
   // ── Planeación Estratégica — solo indicadores activo ──
   'perspectivas',
   'objetivos',
@@ -39,10 +37,9 @@ const HIDDEN_SUBMODULES = new Set([
   // ── Usuarios — permisos internos ──
   'gestion_usuarios',
   // ── SST / Bienestar — solo NO implementados ──
-  'bienestar_social',   // pendiente
-  'epps',               // pendiente
-  'examenes_medicos',   // pendiente
-  // 'sst' ← implementado ✅
+  'bienestar_social',
+  'epps',
+  'examenes_medicos',
 ]);
 
 // ── Nombres legibles (códigos exactos de BD) ─────────────────────────
@@ -63,20 +60,22 @@ const SUBMODULE_NAMES = {
   qrsf:                     'QRSF',
   evaluacion_competencias:  'Evaluación de Competencias',
   revision_direccion:       'Revisión por la Dirección',
-  'informes': 'Informes de Gestión',
+  'informes':               'Informes de Gestión',
+  // Proveedores — nuevo ✅
+  catalogo:                 'Catálogo de Proveedores',
+  evaluacion:               'Evaluación de Proveedores',
+  seleccion:                'Selección de Proveedores',
   // CMI / Planeación Estratégica — activo
   indicadores:              'Indicadores CMI',
   // SST / Bienestar — activos (implementados)
   capacitaciones:           'Capacitaciones',
   planes_programas:         'Planes y Programas',
   estandares:               'Estándares Mínimos',
-  // SST — planes implementados (código exacto de BD confirmado)
   bienestar:                'Plan de Bienestar',
   convivencia:              'Comité de Convivencia',
   copasst:                  'COPASST',
   sst:                      'Plan SST',
   promocion_prevencion:     'Promoción y Prevención',
-  // SST — pendientes (ocultos, nombrados para cuando se implementen)
   bienestar_social:         'Bienestar Social',
   epps:                     'EPPs',
   examenes_medicos:         'Exámenes Médicos',
@@ -145,17 +144,14 @@ export function UserPermissionsManager({ open, onClose, userId, userName, userRo
     loading: loadingAvailable,
   } = useAvailablePermissions();
 
-  // Accordion controlado — persiste el estado abierto/cerrado entre refreshes
   const [openModules, setOpenModules] = React.useState([]);
 
-  // Toggle individual — panel queda ABIERTO
   const handleToggle = async (code, currentlyHas) => {
     if (savingCode) return;
     if (currentlyHas) await revokePermissions([code]);
     else              await assignPermissions([code]);
   };
 
-  // Filtrar módulos y submódulos ocultos
   const modules = Object.entries(permissionsByModule)
     .filter(([code]) => !HIDDEN_MODULES.includes(code))
     .map(([moduleCode, { module, permissions }]) => {
@@ -165,110 +161,53 @@ export function UserPermissionsManager({ open, onClose, userId, userName, userRo
         if (parsed.type === 'submodule' && HIDDEN_SUBMODULES.has(parsed.submodule)) return false;
         return true;
       });
-      return [moduleCode, { module, permissions: visiblePerms }];
+      return { moduleCode, module, permissions: visiblePerms };
     })
-    .filter(([, { permissions }]) => permissions.length > 0)
-    .sort((a, b) => (a[1].module?.display_order || 99) - (b[1].module?.display_order || 99));
+    .filter(({ permissions }) => permissions.length > 0);
 
-  const totalActive = permissionCodes.length;
-  const isLoading   = loadingUser || loadingAvailable;
-
-  // Abrir todos los módulos al cargar por primera vez
-  React.useEffect(() => {
-    if (!isLoading && openModules.length === 0 && modules.length > 0) {
-      setOpenModules(modules.map(([code]) => code));
-    }
-  }, [isLoading, modules.length]); // eslint-disable-line
+  const isLoading = loadingUser || loadingAvailable;
 
   return (
-    <Sheet open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-lg overflow-y-auto flex flex-col gap-0"
-        style={{ padding: 0 }}
-      >
-        {/* Header fijo */}
-        <SheetHeader
-          className="sticky top-0 z-10 px-5 py-4 border-b flex-shrink-0"
-          style={{ backgroundColor: C.green }}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <SheetTitle className="text-white text-base font-bold leading-tight">
-                Permisos — {userName}
-              </SheetTitle>
-              <p className="text-xs mt-1" style={{ color: '#6dbd96' }}>
-                {userRole === 'gerencia' ? 'Gerencia' : 'Usuario'} · {totalActive} permisos activos
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              className="rounded-lg p-1.5 transition-colors hover:bg-white/10"
-              aria-label="Cerrar"
-            >
-              <X className="h-5 w-5 text-white" />
-            </button>
-          </div>
+    <Sheet open={open} onOpenChange={onClose}>
+      <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetHeader className="pb-4 border-b">
+          <SheetTitle className="flex items-center gap-2" style={{ color: C.green }}>
+            <Shield className="h-5 w-5" style={{ color: C.mint }} />
+            Permisos — {userName}
+          </SheetTitle>
+          {userRole && (
+            <p className="text-xs text-gray-400 mt-1">
+              Rol: <span className="font-semibold capitalize">{userRole}</span>
+              {(userRole === 'admin' || userRole === 'gerencia') && (
+                <span className="ml-2 text-amber-600">· Acceso total automático</span>
+              )}
+            </p>
+          )}
+          {saveError && (
+            <p className="text-xs text-red-500 mt-1">{saveError}</p>
+          )}
         </SheetHeader>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-
-          {/* Admin */}
-          {userRole === 'admin' && (
-            <div className="p-8 text-center">
-              <Shield className="h-14 w-14 mx-auto mb-3" style={{ color: C.mint }} />
-              <h3 className="text-base font-bold mb-1" style={{ color: C.green }}>Administrador</h3>
-              <p className="text-sm text-gray-500">
-                Los administradores tienen acceso completo. No es necesario asignar permisos.
-              </p>
+        <div className="py-4 space-y-3">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin" style={{ color: C.mint }} />
             </div>
-          )}
-
-          {/* Info gerencia */}
-          {userRole === 'gerencia' && (
-            <div
-              className="flex items-start gap-2 p-3 rounded-xl text-xs"
-              style={{ backgroundColor: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}
-            >
-              <Shield className="h-4 w-4 flex-shrink-0 mt-0.5" />
-              <span>
-                Gerencia tiene acceso total automático. Los permisos aquí son adicionales y opcionales.
-              </span>
-            </div>
-          )}
-
-          {/* Error al guardar */}
-          {saveError && (
-            <div
-              className="flex items-start gap-2 p-3 rounded-xl text-xs"
-              style={{ backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}
-            >
-              <span>⚠️ Error al guardar: {saveError}</span>
-            </div>
-          )}
-
-          {/* Loading */}
-          {isLoading && userRole !== 'admin' && (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="h-8 w-8 animate-spin" style={{ color: C.mint }} />
-            </div>
-          )}
-
-          {/* Acordeón de módulos */}
-          {!isLoading && userRole !== 'admin' && (
+          ) : (
             <Accordion
               type="multiple"
               value={openModules}
               onValueChange={setOpenModules}
               className="space-y-2"
             >
-              {modules.map(([moduleCode, { module, permissions }]) => {
+              {modules.map(({ moduleCode, module, permissions }) => {
+                const activeCount = permissions.filter(p => permissionCodes.includes(p.code)).length;
 
-                const moduleViewPerm = permissions.find(p => {
+                const moduleViewPerm   = permissions.find(p => {
                   const parsed = parsePermission(p.code);
                   return parsed?.type === 'module' && parsed?.action === 'view';
                 });
+                const moduleViewActive = moduleViewPerm ? permissionCodes.includes(moduleViewPerm.code) : false;
 
                 const submoduleMap = {};
                 permissions.forEach(p => {
@@ -279,11 +218,6 @@ export function UserPermissionsManager({ open, onClose, userId, userName, userRo
                   }
                 });
 
-                const moduleViewActive = moduleViewPerm
-                  ? permissionCodes.includes(moduleViewPerm.code)
-                  : false;
-
-                const activeCount   = permissions.filter(p => permissionCodes.includes(p.code)).length;
                 const hasSubmodules = Object.keys(submoduleMap).length > 0;
 
                 return (
@@ -310,8 +244,6 @@ export function UserPermissionsManager({ open, onClose, userId, userName, userRo
                     </AccordionTrigger>
 
                     <AccordionContent className="px-4 pb-4 pt-1 space-y-3">
-
-                      {/* Permiso ver módulo */}
                       {moduleViewPerm && (
                         <div
                           className="flex items-center justify-between p-3 rounded-xl"
@@ -344,7 +276,6 @@ export function UserPermissionsManager({ open, onClose, userId, userName, userRo
                         </div>
                       )}
 
-                      {/* Submódulos */}
                       {hasSubmodules && (
                         <div className="space-y-2">
                           <p className="text-xs font-bold uppercase tracking-wider text-gray-400 px-1">
@@ -435,7 +366,6 @@ export function UserPermissionsManager({ open, onClose, userId, userName, userRo
                           </Accordion>
                         </div>
                       )}
-
                     </AccordionContent>
                   </AccordionItem>
                 );
