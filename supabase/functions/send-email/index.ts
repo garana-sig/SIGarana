@@ -32,6 +32,8 @@ interface EmailRequest {
     | "accion_mejora_creacion"
     | "accion_mejora_cierre_definitivo"
     | "accion_mejora_seguimiento_pendiente"
+    // ── Actas de Reunión ──────────────────────────────────────────────
+    | "acta_compromiso_asignacion"
     | "evaluacion_retroalimentacion"
     // ── Informes de Gestión ──────────────────────────────────────────
     | "informe_enviado"
@@ -56,6 +58,11 @@ interface EmailRequest {
     proposed_date?: string;
     closure_type?: string;
     created_by_name?: string;
+    // Actas de reunión — compromisos
+    activity?: string;
+    due_date?: string;
+    meeting_date?: string;
+    objective?: string;
     // Evaluación de Competencias
     empleado_nombre?: string;
     empleado_cargo?: string;
@@ -266,6 +273,36 @@ const getAccionSeguimientoTemplate = (data: EmailRequest): string => {
       <div class="reason-box">${d.closure_reason || "—"}</div>
       <div style="text-align:center;margin-top:28px;">
         <a href="${APP_URL}/mejoramiento-continuo" class="btn">Ver Acción de Mejora</a>
+      </div>
+    </div>`);
+};
+
+// ══════════════════════════════════════════════════════════════════════
+// TEMPLATE — ACTAS DE REUNIÓN (COMPROMISOS)
+// ══════════════════════════════════════════════════════════════════════
+const getActaCompromisoTemplate = (data: EmailRequest): string => {
+  const d = data.data!;
+  return getBaseTemplate("Nuevo Compromiso de Acta de Reunión", `
+    <div class="content">
+      <div class="title">📝 Nuevo Compromiso Asignado</div>
+      <div class="message">
+        En la reunión registrada en el acta <strong>${d.consecutive}</strong> quedaste
+        asignado como responsable de un compromiso. Por favor revisa los detalles
+        y realiza el seguimiento antes de la fecha límite.
+      </div>
+      <div class="info-box">
+        <div class="info-row"><div class="info-label">Acta:</div><div class="info-value"><strong>${d.consecutive}</strong></div></div>
+        ${d.meeting_date ? `<div class="info-row"><div class="info-label">Fecha reunión:</div><div class="info-value">${d.meeting_date}</div></div>` : ""}
+        ${d.objective ? `<div class="info-row"><div class="info-label">Objetivo:</div><div class="info-value">${d.objective}</div></div>` : ""}
+        <div class="info-row"><div class="info-label">Responsable:</div><div class="info-value">${d.responsible_name}</div></div>
+        <div class="info-row"><div class="info-label">Elaborado por:</div><div class="info-value">${d.created_by_name || "—"}</div></div>
+        <div class="info-row"><div class="info-label">Fecha límite:</div><div class="info-value"><strong>${d.due_date}</strong></div></div>
+      </div>
+      <div class="divider"></div>
+      <p style="font-size:13px;font-weight:700;color:#2e5244;margin-bottom:8px;">📋 Compromiso:</p>
+      <div class="reason-box">${d.activity || "Sin descripción"}</div>
+      <div style="text-align:center;margin-top:28px;">
+        <a href="${APP_URL}/mejoramiento-continuo" class="btn">Ver Acta</a>
       </div>
     </div>`);
 };
@@ -520,6 +557,7 @@ serve(async (req) => {
     // Clasificar el tipo para validación del payload
     const isDocType    = ["pending", "approved", "rejected"].includes(type);
     const isAccionType = type.startsWith("accion_mejora");
+    const isActaType   = type.startsWith("acta_");
     const isEvalType   = type === "evaluacion_retroalimentacion";
     const isInformeType = type.startsWith("informe_");
 
@@ -529,7 +567,7 @@ serve(async (req) => {
         { status: 400, headers: JSON_HEADERS }
       );
     }
-    if ((isAccionType || isEvalType || isInformeType) && !data) {
+    if ((isAccionType || isActaType || isEvalType || isInformeType) && !data) {
       return new Response(
         JSON.stringify({ error: "Falta el campo data para este tipo de email" }),
         { status: 400, headers: JSON_HEADERS }
@@ -584,6 +622,12 @@ serve(async (req) => {
       case "accion_mejora_seguimiento_pendiente":
         subject = `🕐 Seguimiento pendiente — Acción de Mejora: ${data!.consecutive}`;
         html = getAccionSeguimientoTemplate({ type, to, data });
+        break;
+
+      // ── Actas de Reunión ──────────────────────────────────────────────
+      case "acta_compromiso_asignacion":
+        subject = `📝 Nuevo compromiso asignado — Acta ${data!.consecutive}`;
+        html = getActaCompromisoTemplate({ type, to, data });
         break;
 
       // ── Evaluación de Competencias ──────────────────────────────────

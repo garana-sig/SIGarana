@@ -185,6 +185,135 @@ export function useActas() {
   };
 
   // ============================================================================
+  // 📧 NOTIFICACIONES EMAIL — COMPROMISOS DE ACTA
+  // ============================================================================
+
+  // Envía el correo a UN responsable de UN compromiso.
+  // Silencioso: un fallo aquí nunca debe romper el guardado del acta.
+  const notifyCommitmentEmail = async ({ consecutive, meeting_date, objective, created_by_name, commitment }) => {
+    try {
+      const { data: responsibleProfile, error: profileError } = await supabase
+        .from('profile')
+        .select('email, full_name')
+        .eq('id', commitment.responsible_id)
+        .single();
+
+      if (profileError || !responsibleProfile?.email) {
+        console.warn('⚠️ No se pudo obtener email del responsable:', commitment.responsible_id);
+        return;
+      }
+
+      await supabase.functions.invoke('send-email', {
+        body: {
+          type: 'acta_compromiso_asignacion',
+          to: responsibleProfile.email,
+          data: {
+            consecutive,
+            meeting_date: meeting_date
+              ? new Date(meeting_date + 'T00:00:00').toLocaleDateString('es-CO')
+              : '',
+            objective: objective || '',
+            created_by_name: created_by_name || '',
+            responsible_name: responsibleProfile.full_name || responsibleProfile.email,
+            activity: commitment.activity,
+            due_date: commitment.due_date
+              ? new Date(commitment.due_date + 'T00:00:00').toLocaleDateString('es-CO')
+              : commitment.due_date,
+          }
+        }
+      });
+
+      console.log('📧 Email de compromiso enviado a:', responsibleProfile.email);
+    } catch (err) {
+      console.error('❌ Error enviando email de compromiso (no bloquea el guardado):', err);
+    }
+  };
+
+  // Notifica una lista de compromisos NUEVOS de una misma acta (un correo por compromiso)
+  const notifyNewCommitments = async (acta, commitmentsToNotify) => {
+    if (!commitmentsToNotify || commitmentsToNotify.length === 0) return;
+
+    let createdByName = '';
+    try {
+      const { data: creatorProfile } = await supabase
+        .from('profile')
+        .select('full_name')
+        .eq('id', acta.created_by)
+        .single();
+      createdByName = creatorProfile?.full_name || '';
+    } catch {
+      // No bloquea el envío si falla obtener el nombre del creador
+    }
+
+    for (const commitment of commitmentsToNotify) {
+      await notifyCommitmentEmail({
+        consecutive: acta.consecutive,
+        meeting_date: acta.meeting_date,
+        objective: acta.objective,
+        created_by_name: createdByName,
+        commitment,
+      });
+    }
+  };
+
+  // ============================================================================
+  // 📧 BACKFILL — Notificar compromisos PENDIENTES de actas ya existentes
+  // Uso: una sola vez, desde un botón de administración.
+  // ============================================================================
+  const notifyPendingCommitmentsBackfill = async () => {
+    console.log('📧 Iniciando backfill de notificaciones de compromisos pendientes...');
+
+    const { data: pendingCommitments, error: fetchError } = await supabase
+      .from('acta_commitment')
+      .select('activity, responsible_id, due_date, acta(consecutive, meeting_date, objective, created_by, status)')
+      .eq('status', 'pending');
+
+    if (fetchError) {
+      console.error('❌ Error obteniendo compromisos pendientes:', fetchError);
+      throw fetchError;
+    }
+
+    const total = pendingCommitments?.length || 0;
+    if (total === 0) {
+      return { sent: 0, failed: 0, total: 0 };
+    }
+
+    const creatorNameCache = {};
+    let sent = 0;
+    let failed = 0;
+
+    for (const c of pendingCommitments) {
+      if (!c.acta) continue; // acta borrada o inaccesible
+
+      try {
+        if (!creatorNameCache[c.acta.created_by]) {
+          const { data: creatorProfile } = await supabase
+            .from('profile')
+            .select('full_name')
+            .eq('id', c.acta.created_by)
+            .single();
+          creatorNameCache[c.acta.created_by] = creatorProfile?.full_name || '';
+        }
+
+        await notifyCommitmentEmail({
+          consecutive: c.acta.consecutive,
+          meeting_date: c.acta.meeting_date,
+          objective: c.acta.objective,
+          created_by_name: creatorNameCache[c.acta.created_by],
+          commitment: c,
+        });
+        sent++;
+      } catch (err) {
+        console.error('❌ Falló notificación backfill para compromiso:', c, err);
+        failed++;
+      }
+    }
+
+    console.log(`✅ Backfill terminado: ${sent} enviados, ${failed} fallidos, ${total} total`);
+    return { sent, failed, total };
+  };
+
+  // ============================================================================
   // CREATE ACTA ✅ CORREGIDO
   // ============================================================================
   const createActa = async (actaData) => {
@@ -246,6 +375,9 @@ export function useActas() {
 
         if (commitmentsError) throw commitmentsError;
         console.log(`✅ ${commitments.length} compromisos agregados`);
+
+        // 📧 Notificar a los responsables (todos son nuevos en una acta recién creada)
+        await notifyNewCommitments(newActa, commitments);
       }
 
       await fetchActas();
@@ -311,12 +443,40 @@ export function useActas() {
 
       // 5️⃣ Actualizar compromisos
       if (commitments !== undefined) {
+        // Obtener compromisos actuales ANTES de borrarlos, para saber cuáles son nuevos
+        const { data: oldCommitments } = await supabase
+          .from('acta_commitment')
+          .select('activity, responsible_id, due_date')
+          .eq('acta_id', id);
+
+        const isSameCommitment = (a, b) =>
+          a.activity === b.activity &&
+          a.responsible_id === b.responsible_id &&
+          a.due_date === b.due_date;
+
+        const newlyAddedCommitments = commitments.filter(
+          c => !(oldCommitments || []).some(old => isSameCommitment(old, c))
+        );
+
         await supabase.from('acta_commitment').delete().eq('acta_id', id);
         if (commitments.length > 0) {
           const { error } = await supabase
             .from('acta_commitment')
             .insert(commitments.map(c => ({ ...c, acta_id: id })));
           if (error) throw error;
+        }
+
+        // 📧 Notificar solo a los responsables de compromisos REALMENTE nuevos
+        if (newlyAddedCommitments.length > 0) {
+          const { data: actaInfo } = await supabase
+            .from('acta')
+            .select('consecutive, meeting_date, objective, created_by')
+            .eq('id', id)
+            .single();
+
+          if (actaInfo) {
+            await notifyNewCommitments(actaInfo, newlyAddedCommitments);
+          }
         }
       }
 
@@ -366,5 +526,6 @@ export function useActas() {
     uploadPhotos,
     deletePhoto,
     loadPhotoUrls,
+    notifyPendingCommitmentsBackfill,
   };
 }

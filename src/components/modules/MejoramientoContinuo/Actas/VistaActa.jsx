@@ -35,6 +35,15 @@ import {
 import { useActas } from '@/hooks/useActas';
 import { supabase } from '@/lib/supabase';
 
+// ✅ Evita el bug de "fecha -1 día": new Date('YYYY-MM-DD') se interpreta como
+// medianoche UTC, y en Colombia (UTC-5) eso cae en el día anterior al mostrarlo
+// con toLocaleDateString(). Esta función arma la fecha en hora LOCAL directamente.
+const parseLocalDate = (dateString) => {
+  if (!dateString) return null;
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
 export default function VistaActa({ actaId, isOpen, onClose, onDeleted }) {
   const { fetchActaById } = useActas();
   const [acta, setActa] = useState(null);
@@ -352,7 +361,7 @@ export default function VistaActa({ actaId, isOpen, onClose, onDeleted }) {
                       <div className="flex items-center gap-2 text-gray-900">
                         <Calendar className="h-4 w-4 text-gray-400" />
                         <span className="font-medium">
-                          {new Date(acta.meeting_date).toLocaleDateString('es-CO', {
+                          {parseLocalDate(acta.meeting_date).toLocaleDateString('es-CO', {
                             weekday: 'long',
                             year: 'numeric',
                             month: 'long',
@@ -487,8 +496,9 @@ export default function VistaActa({ actaId, isOpen, onClose, onDeleted }) {
                         </TableHeader>
                         <TableBody>
                           {acta.commitments.map((commitment, index) => {
-                            const dueDate = new Date(commitment.due_date);
+                            const dueDate = parseLocalDate(commitment.due_date);
                             const today = new Date();
+                            today.setHours(0, 0, 0, 0);
                             const isOverdue = dueDate < today && commitment.status !== 'completed';
                             
                             return (

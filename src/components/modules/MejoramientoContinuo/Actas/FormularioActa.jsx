@@ -48,6 +48,13 @@ const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/web
 const MAX_PHOTO_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_PHOTOS = 20;
 
+// ═══════════════════════════════════════════════════════
+// ✨ AUTOGUARDADO — Borrador local (localStorage)
+// ═══════════════════════════════════════════════════════
+const DRAFT_STORAGE_PREFIX = 'garana_acta_draft_';
+const AUTOSAVE_DEBOUNCE_MS = 2000;
+const getDraftKey = (actaId) => `${DRAFT_STORAGE_PREFIX}${actaId || 'new'}`;
+
 export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) {
   const { user } = useAuth();
 
@@ -88,6 +95,13 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [usuarios, setUsuarios] = useState([]);
   const [loadingUsuarios, setLoadingUsuarios] = useState(false);
+
+  // ✨ AUTOGUARDADO
+  const [showRecoveryBanner, setShowRecoveryBanner] = useState(false);
+  const [pendingDraft, setPendingDraft] = useState(null);
+  const [lastSavedAt, setLastSavedAt] = useState(null);
+  const autosaveTimeoutRef = useRef(null);
+  const isInitialLoad = useRef(true);
 
   // Cargar usuarios
   useEffect(() => {
@@ -148,6 +162,162 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
       }
     }
   }, [actaToEdit]);
+
+  // ═══════════════════════════════════════════════════════
+  // ✨ AUTOGUARDADO — Helpers de sincronización con Supabase (multi-dispositivo)
+  // ═══════════════════════════════════════════════════════
+  const fetchServerDraft = async (actaId) => {
+    if (!user?.id) return null;
+    try {
+      let query = supabase.from('acta_draft').select('*').eq('user_id', user.id);
+      query = actaId ? query.eq('acta_id', actaId) : query.is('acta_id', null);
+      const { data, error } = await query.maybeSingle();
+      if (error) {
+        console.error('Error consultando borrador en Supabase:', error);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      // Sin conexión u otro error de red: no bloquea, simplemente no hay borrador remoto
+      console.error('Error de red consultando borrador remoto:', err);
+      return null;
+    }
+  };
+
+  const saveDraftToServer = async (actaId, draftPayload) => {
+    if (!user?.id) return;
+    try {
+      let query = supabase.from('acta_draft').select('id').eq('user_id', user.id);
+      query = actaId ? query.eq('acta_id', actaId) : query.is('acta_id', null);
+      const { data: existing } = await query.maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from('acta_draft')
+          .update({ draft_data: draftPayload })
+          .eq('id', existing.id);
+      } else {
+        await supabase
+          .from('acta_draft')
+          .insert({ user_id: user.id, acta_id: actaId || null, draft_data: draftPayload });
+      }
+    } catch (err) {
+      // Silencioso: si falla la sincronización remota, el borrador local sigue protegiendo
+      console.error('Error sincronizando borrador con Supabase (localStorage sigue activo):', err);
+    }
+  };
+
+  const discardServerDraft = async (actaId) => {
+    if (!user?.id) return;
+    try {
+      let query = supabase.from('acta_draft').delete().eq('user_id', user.id);
+      query = actaId ? query.eq('acta_id', actaId) : query.is('acta_id', null);
+      await query;
+    } catch (err) {
+      console.error('Error descartando borrador remoto:', err);
+    }
+  };
+
+  // ═══════════════════════════════════════════════════════
+  // ✨ AUTOGUARDADO — Detectar borrador existente al abrir el formulario
+  // Revisa Supabase (fuente de verdad multi-dispositivo) y localStorage
+  // (respaldo instantáneo si no hay internet), y ofrece el más reciente.
+  // ═══════════════════════════════════════════════════════
+  useEffect(() => {
+    const checkForDraft = async () => {
+      const draftKey = getDraftKey(actaToEdit?.id);
+      let localDraft = null;
+      let serverDraft = null;
+
+      try {
+        const raw = localStorage.getItem(draftKey);
+        if (raw) localDraft = JSON.parse(raw);
+      } catch (err) {
+        console.error('Error leyendo borrador local:', err);
+      }
+
+      const serverRow = await fetchServerDraft(actaToEdit?.id);
+      if (serverRow?.draft_data) {
+        serverDraft = { ...serverRow.draft_data, savedAt: serverRow.updated_at };
+      }
+
+      // Elegir el más reciente entre local y remoto
+      let candidate = null;
+      if (localDraft && serverDraft) {
+        candidate = new Date(serverDraft.savedAt) >= new Date(localDraft.savedAt) ? serverDraft : localDraft;
+      } else {
+        candidate = serverDraft || localDraft;
+      }
+
+      const hasContent = candidate?.formData && (
+        candidate.formData.objective?.trim() ||
+        candidate.formData.agenda?.trim() ||
+        candidate.formData.development?.trim() ||
+        (candidate.commitments || []).some(c => c.activity?.trim()) ||
+        (candidate.attendees || []).some(a => a.name?.trim())
+      );
+
+      if (hasContent) {
+        setPendingDraft(candidate);
+        setShowRecoveryBanner(true);
+      }
+    };
+
+    checkForDraft();
+    // Solo se ejecuta una vez al abrir el formulario
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ═══════════════════════════════════════════════════════
+  // ✨ AUTOGUARDADO — Guardar borrador con debounce mientras se escribe
+  // Se guarda en localStorage (instantáneo) Y en Supabase (multi-dispositivo).
+  // NO incluye fotos: los archivos no se pueden serializar así.
+  // ═══════════════════════════════════════════════════════
+  useEffect(() => {
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      return;
+    }
+
+    if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
+
+    autosaveTimeoutRef.current = setTimeout(async () => {
+      const draftPayload = {
+        formData,
+        attendees,
+        commitments,
+        savedAt: new Date().toISOString(),
+      };
+
+      try {
+        const draftKey = getDraftKey(actaToEdit?.id);
+        localStorage.setItem(draftKey, JSON.stringify(draftPayload));
+      } catch (err) {
+        console.error('Error autoguardando borrador local (no afecta tu sesión actual):', err);
+      }
+
+      await saveDraftToServer(actaToEdit?.id, draftPayload);
+      setLastSavedAt(new Date());
+    }, AUTOSAVE_DEBOUNCE_MS);
+
+    return () => clearTimeout(autosaveTimeoutRef.current);
+  }, [formData, attendees, commitments, actaToEdit]);
+
+  // ✨ AUTOGUARDADO — Handlers de recuperación/descarte del borrador
+  const handleRecoverDraft = () => {
+    if (!pendingDraft) return;
+    if (pendingDraft.formData) setFormData(pendingDraft.formData);
+    if (pendingDraft.attendees?.length) setAttendees(pendingDraft.attendees);
+    if (pendingDraft.commitments?.length) setCommitments(pendingDraft.commitments);
+    setShowRecoveryBanner(false);
+  };
+
+  const handleDiscardDraft = async () => {
+    localStorage.removeItem(getDraftKey(actaToEdit?.id));
+    await discardServerDraft(actaToEdit?.id);
+    setPendingDraft(null);
+    setShowRecoveryBanner(false);
+  };
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -364,6 +534,11 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
       };
 
       await onSave(actaData);
+
+      // ✨ AUTOGUARDADO — Ya se guardó de verdad en la BD, borramos el borrador (local y remoto)
+      if (autosaveTimeoutRef.current) clearTimeout(autosaveTimeoutRef.current);
+      localStorage.removeItem(getDraftKey(actaToEdit?.id));
+      await discardServerDraft(actaToEdit?.id);
     } catch (error) {
       console.error('Error al guardar acta:', error);
       alert('❌ Error: ' + (error.message || 'Error desconocido'));
@@ -376,6 +551,41 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* ✨ AUTOGUARDADO — Banner de recuperación de borrador */}
+      {showRecoveryBanner && (
+        <div
+          className="p-4 rounded-lg border-2 flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row"
+          style={{ borderColor: C.mint, backgroundColor: '#f0f7f4' }}
+        >
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: C.olive }} />
+            <div>
+              <p className="text-sm font-semibold" style={{ color: C.green }}>
+                Encontramos un borrador sin guardar de esta acta
+              </p>
+              <p className="text-xs text-gray-600 mt-0.5">
+                {pendingDraft?.savedAt
+                  ? `Autoguardado el ${new Date(pendingDraft.savedAt).toLocaleString('es-CO')}`
+                  : 'Guardado automáticamente'}
+                {' '}(disponible desde cualquier dispositivo) — las fotos no quedan incluidas. ¿Deseas recuperarlo?
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <Button type="button" size="sm" variant="outline" onClick={handleDiscardDraft}>
+              Descartar
+            </Button>
+            <Button
+              type="button" size="sm"
+              style={{ backgroundColor: C.green }} className="text-white"
+              onClick={handleRecoverDraft}
+            >
+              Recuperar borrador
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -385,6 +595,12 @@ export default function FormularioActa({ actaToEdit = null, onCancel, onSave }) 
           <p className="text-sm mt-1" style={{ color: C.olive }}>
             {actaToEdit ? `Consecutivo: ${actaToEdit.consecutive}` : 'El consecutivo se generará automáticamente'}
           </p>
+          {lastSavedAt && (
+            <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+              <Save className="h-3 w-3" />
+              Borrador autoguardado {lastSavedAt.toLocaleTimeString('es-CO')}
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>

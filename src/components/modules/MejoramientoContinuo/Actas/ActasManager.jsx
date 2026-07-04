@@ -15,7 +15,7 @@ import {
 import {
   ArrowLeft, Plus, Eye, Edit, Download, Search, FileText,
   Calendar, MapPin, Users, AlertCircle, Loader2, Archive, Trash2,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Mail,
 } from 'lucide-react';
 
 import FormularioActa from './FormularioActa';
@@ -25,6 +25,15 @@ import { useActasPermissions } from '@/hooks/useActasPermissions';
 import { supabase } from '@/lib/supabase';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+
+// ✅ Evita el bug de "fecha -1 día": new Date('YYYY-MM-DD') se interpreta como
+// medianoche UTC, y en Colombia (UTC-5) eso cae en el día anterior al mostrarlo.
+// Esta función arma la fecha en hora LOCAL directamente desde el string.
+const parseLocalDate = (dateString) => {
+  if (!dateString) return null;
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
 
 // ── Paginación (inline, mismo patrón que RiskMatrixManager) ──────────────────
 function Pagination({ currentPage, totalPages, totalRows, pageSize, onPage, onPageSize }) {
@@ -84,7 +93,8 @@ function Pagination({ currentPage, totalPages, totalRows, pageSize, onPage, onPa
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function ActasManager({ onBack }) {
   const {
-    actas, loading, error, fetchActas, fetchActaById, createActa, updateActa
+    actas, loading, error, fetchActas, fetchActaById, createActa, updateActa,
+    notifyPendingCommitmentsBackfill
   } = useActas();
 
   const {
@@ -98,6 +108,7 @@ export default function ActasManager({ onBack }) {
   const [downloadingId, setDownloadingId] = useState(null);
   const [viewActaId,    setViewActaId]    = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [backfillLoading, setBackfillLoading] = useState(false);
 
   // ── Paginación ────────────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
@@ -233,6 +244,31 @@ export default function ActasManager({ onBack }) {
     } catch (error) { alert('❌ Error al eliminar: ' + error.message); }
   };
 
+  // ── Backfill: notificar compromisos PENDIENTES de actas ya existentes ──────
+  // Botón temporal, solo admin — usar UNA vez y luego se puede retirar.
+  const handleBackfillCommitmentNotifications = async () => {
+    if (!confirm(
+      '📧 Esto enviará un correo a cada responsable de un compromiso PENDIENTE ' +
+      'en TODAS las actas ya existentes (no solo la más reciente).\n\n' +
+      '¿Deseas continuar?'
+    )) return;
+
+    try {
+      setBackfillLoading(true);
+      const result = await notifyPendingCommitmentsBackfill();
+      alert(
+        `✅ Proceso terminado.\n\n` +
+        `Compromisos pendientes encontrados: ${result.total}\n` +
+        `Correos enviados: ${result.sent}\n` +
+        `Fallidos: ${result.failed}`
+      );
+    } catch (error) {
+      alert('❌ Error en el proceso de notificación: ' + error.message);
+    } finally {
+      setBackfillLoading(false);
+    }
+  };
+
   // ── Vista formulario ──────────────────────────────────────────────────────
   if (showForm) {
     return (
@@ -259,9 +295,23 @@ export default function ActasManager({ onBack }) {
             <p className="text-sm mt-1" style={{ color: '#6f7b2c' }}>Gestión de actas y compromisos</p>
           </div>
         </div>
-        <Button onClick={() => setShowForm(true)} style={{ backgroundColor: '#2e5244' }} className="text-white gap-2">
-          <Plus className="h-4 w-4" />Nueva Acta
-        </Button>
+        <div className="flex items-center gap-2">
+          {profile?.role === 'admin' && (
+            <Button
+              onClick={handleBackfillCommitmentNotifications}
+              disabled={backfillLoading}
+              variant="outline"
+              className="gap-2"
+              title="Envía correo a los responsables de compromisos pendientes de TODAS las actas existentes (usar una sola vez)"
+            >
+              {backfillLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+              Notificar compromisos existentes
+            </Button>
+          )}
+          <Button onClick={() => setShowForm(true)} style={{ backgroundColor: '#2e5244' }} className="text-white gap-2">
+            <Plus className="h-4 w-4" />Nueva Acta
+          </Button>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -346,7 +396,7 @@ export default function ActasManager({ onBack }) {
                         <TableCell className="text-xs">
                           <div className="flex items-center gap-1">
                             <Calendar className="h-3 w-3 text-gray-400" />
-                            <span>{new Date(acta.meeting_date).toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit', year:'2-digit' })}</span>
+                            <span>{parseLocalDate(acta.meeting_date).toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit', year:'2-digit' })}</span>
                           </div>
                         </TableCell>
                         <TableCell className="text-xs">
