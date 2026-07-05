@@ -24,6 +24,8 @@ import {
   BookOpen, LayoutDashboard, TrendingUp, Minus, Edit, Trash2,
   DollarSign, Users, Settings, CheckCircle2, AlertTriangle,
   XCircle, Award, Activity,
+  FileText, Download, ShieldCheck, Scale, Heart, Ban, Handshake,
+  Swords, Gem, Building2,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -88,7 +90,14 @@ const TABS = [
   { id: 'perspectivas', label: 'Perspectivas',         icon: BarChart3       },
   { id: 'indicadores',  label: 'Indicadores',          icon: Target          },
   { id: 'plataforma',   label: 'Plataforma',           icon: BookOpen        },
+  { id: 'plan2026',     label: 'Planeación 2026',      icon: FileText        },
 ];
+
+// ─── PDF de Planeación Estratégica 2026 ─────────────────────────────────────
+// Sube el archivo a Supabase Storage → bucket "templates" (raíz), con este
+// nombre exacto, y el botón de descarga funcionará automáticamente.
+const PLAN_2026_PDF_URL =
+  'https://wnsnymxabmxswnpcpvoj.supabase.co/storage/v1/object/public/templates/PLANEACION_ESTRATEGICA_2026.pdf';
 
 // ─── Semáforo ────────────────────────────────────────────────────────────────
 function calcPct(ind) {
@@ -754,6 +763,427 @@ function PlataformaTab() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// TAB 5 — PLANEACIÓN ESTRATÉGICA 2026 (independiente, solo lectura)
+// ═══════════════════════════════════════════════════════════════════
+
+// Datos estáticos extraídos del documento oficial "Planeación Estratégica"
+// Revisado y firmado: 05/02/2026 · Margarita Milena Ramírez (Gerente) ·
+// Aprobado por Lina María Ruiz Guzmán (Subgerente)
+
+const P26_POLITICAS = [
+  {
+    id: 'sig',
+    title: 'Política del Sistema Integrado de Gestión (SIG + BASC)',
+    icon: ShieldCheck,
+    color: G.primary,
+    text: 'INDECON S.A.S integra su Sistema de Gestión de Calidad (ISO 9000), el sistema de gestión de Seguridad y Salud en el Trabajo (Decreto 1072) y los estándares de seguridad BASC. Se compromete con la seguridad de la cadena de suministros, la prevención de actividades ilícitas y la integridad de la información, superando las expectativas de clientes, proveedores y socios.',
+  },
+  {
+    id: 'consumo',
+    title: 'Prevención de Consumo de Tabaco, Alcohol y Sustancias Psicoactivas',
+    icon: Ban,
+    color: '#dc2626',
+    text: 'Prohíbe fumar en instalaciones y anexos, así como el consumo, posesión y venta de sustancias psicoactivas, bebidas alcohólicas y energizantes en los lugares de trabajo. Ningún contratista puede laborar bajo su efecto. Basado en las resoluciones 1075/1992, 4225/1992 y 2646/2008.',
+  },
+  {
+    id: 'calidad_sst',
+    title: 'Política Integral de Calidad y Seguridad y Salud en el Trabajo',
+    icon: Award,
+    color: G.olive,
+    text: 'INDECON confecciona prendas con calidad mediante procesos de mejora continua, reduciendo riesgos laborales y promoviendo la salud en el trabajo, con dirección comprometida con el medio ambiente y el bienestar de sus colaboradores.',
+  },
+  {
+    id: 'genero',
+    title: 'Política de Género y Diversidad',
+    icon: Heart,
+    color: '#be185d',
+    text: 'Compromiso con una cultura organizacional diversa e inclusiva: igualdad de oportunidades, no discriminación, ambiente inclusivo y cero tolerancia al acoso, incluido el acoso sexual, con procedimientos confidenciales para reportar.',
+  },
+  {
+    id: 'desconexion',
+    title: 'Política de Desconexión Laboral',
+    icon: Scale,
+    color: G.mint,
+    text: 'En cumplimiento de la Ley 2191 de 2022, regula el derecho a no tener contacto laboral fuera de la jornada ordinaria, garantizando el disfrute efectivo del tiempo libre, descansos, licencias y vacaciones. Aplica a todos los colaboradores, con excepciones para cargos de dirección y confianza, y situaciones de urgencia manifiesta.',
+  },
+  {
+    id: 'convivencia',
+    title: 'Política de Convivencia',
+    icon: Handshake,
+    color: G.amber,
+    text: 'Establece normas para un ambiente laboral armonioso y respetuoso: trato cordial, cero acoso o violencia, cumplimiento de horarios, uso consciente de recursos y confidencialidad. El incumplimiento puede acarrear amonestaciones, suspensiones o terminación de contrato según la gravedad.',
+  },
+];
+
+const P26_FODA = {
+  debilidades: [
+    'Falta de seguridad de la información',
+    'Falta de conocimiento en el personal administrativo sobre seguridad informática',
+    'Poca seguridad de datos',
+    'Falta de formación auditores ISO 19011',
+    'Falta de un sistema documental para el SIG',
+    'Falta de integralidad de datos de producción, insumos y ventas para toma efectiva de decisiones',
+  ],
+  oportunidades: [
+    'Nuevos mercados: México, España, USA',
+    'Convocatorias del gobierno nacional para mejoramiento e inversión',
+    'Creciente interés en producto como fajas',
+    'Creciente demanda del mercado de trajes de baño',
+    'Implementación de software de producción como Busint',
+    'Participación en macro rueda de las Américas, Colombia Tex, Colombia Moda, Eje Moda y Rioesmoda',
+  ],
+  fortalezas: [
+    'Equipo administrativo altamente capacitado',
+    'Equipo operativo con polivalencia',
+    'Capacidad instalada articulada que permite adaptabilidad a las necesidades del mercado',
+    'Alta satisfacción del cliente',
+    'Marca reconocida en Colombia',
+    'Proactividad de la junta directiva',
+  ],
+  amenazas: [
+    'Tensión financiera a nivel mundial por guerra en Irán/USA/Israel',
+    'Inestabilidad económica de políticas y reformas',
+    'Dependencia de una maquila y un solo cliente en Ecuador para flujo de caja',
+    'Fenómenos naturales: terremoto y maremoto',
+    'Cambios en tratados de libre comercio con Ecuador y arancel que afecte la venta',
+    'Tasa de cambio',
+  ],
+};
+
+const P26_COMPETENCIA = [
+  { nombre: 'Sueño Real',       precio: 3, calidad: 4, variedad: 4, estampacion: 4, redes: 3, puntoVenta: 5, total: 3.8 },
+  { nombre: 'Nikelena',         precio: 5, calidad: 3, variedad: 3, estampacion: 5, redes: 4, puntoVenta: 4, total: 4.0 },
+  { nombre: 'Arena y Mar',      precio: 3, calidad: 3, variedad: 3, estampacion: 3, redes: 3, puntoVenta: 5, total: 3.3 },
+  { nombre: 'Swinware',         precio: 3, calidad: 5, variedad: 5, estampacion: 5, redes: 5, puntoVenta: 5, total: 4.6 },
+  { nombre: 'Tropical/Vastago', precio: 4, calidad: 4, variedad: 4, estampacion: 3, redes: 3, puntoVenta: 5, total: 3.8 },
+  { nombre: 'Safala',           precio: 4, calidad: 4, variedad: 4, estampacion: 4, redes: 4, puntoVenta: 4, total: 4.0 },
+];
+
+const P26_INDICADORES = [
+  { nombre: '% de rentabilidad',                          meta2025: '≥5%',      resultado2025: '6,05',    meta2026: '≥5%'  },
+  { nombre: 'Días de rotación de cartera',                meta2025: '<100 días', resultado2025: '82,25',   meta2026: '<90 días' },
+  { nombre: '% de aumento en ventas TB',                  meta2025: '>10%',     resultado2025: '0,117',   meta2026: '≥2%'  },
+  { nombre: '% Incremento de ingreso x maquila',          meta2025: '≥10%',     resultado2025: '0,1975',  meta2026: '≥10%' },
+  { nombre: '% de satisfacción de clientes',              meta2025: '>80%',     resultado2025: '0,25',    meta2026: '>80%' },
+  { nombre: '% de Eficiencia',                            meta2025: '>75%',     resultado2025: '80,25',   meta2026: '>80%' },
+  { nombre: '% de producto no conforme',                  meta2025: '<2,5%',    resultado2025: '0,2855',  meta2026: '<2,5%' },
+  { nombre: '% de desperdicio',                           meta2025: '<16%',     resultado2025: '4,3125',  meta2026: '<16%' },
+  { nombre: 'N° de acciones de mejora implementadas',     meta2025: '>19',      resultado2025: '0',       meta2026: '>19' },
+  { nombre: '% de ejecución del Plan de dirección y matriz legal', meta2025: '>90%', resultado2025: '0,235', meta2026: '>90%' },
+  { nombre: '% de Confiabilidad de proveedores',          meta2025: '>80%',     resultado2025: '—',       meta2026: '>80%' },
+  { nombre: '% de ejecución del plan de trabajo del SGGT', meta2025: '>80%',    resultado2025: '67,73',   meta2026: '>80%' },
+  { nombre: '% de satisfacción laboral',                  meta2025: '>80%',     resultado2025: '0,467',   meta2026: '>85%' },
+  { nombre: 'Nivel de competencia y desempeño',           meta2025: '>75%',     resultado2025: '—',       meta2026: '>80%' },
+  { nombre: '% de ejecución del plan de capacitación',    meta2025: '>90%',     resultado2025: '108,25%', meta2026: '>90%' },
+  { nombre: 'Índice de accidentalidad',                   meta2025: '<2%',      resultado2025: '0,83',    meta2026: '<1%'  },
+  { nombre: '% de ausentismo',                            meta2025: '<2%',      resultado2025: '2,77',    meta2026: '<2%'  },
+  { nombre: '% de incidentes',                            meta2025: '<5%',      resultado2025: '2,40',    meta2026: '<3%'  },
+];
+
+const P26_ESTRATEGIAS = [
+  'Mantener los inventarios mínimos (30 días de telas) para reducir el riesgo de endeudamiento.',
+  'Aprovechar al 100% las convocatorias del gobierno, alcaldía y cámara de comercio para crecer en productividad, transformación digital y capacitación.',
+  'Generar políticas de protección de la información, con procesos y responsables designados.',
+  'Planificar reportes quincenales de días de cartera para gestión de cobro más asertiva.',
+  'Adoptar un software/ERP que integre insumos, producción y ventas con trazabilidad total.',
+  'Desarrollar una app para control del SIG que prevenga el uso de documentos obsoletos.',
+  'Participar en eventos y ruedas de negocio para comercializar al exterior.',
+  'Implementar estándares BASC para mejorar la seguridad de la cadena de suministros y la posibilidad de exportar.',
+  'Capacitar al personal en seguridad de la información para prevenir ataques cibernéticos.',
+  'Implementar medidas de seguridad en la cadena de suministros, desde insumos hasta despacho.',
+  'Tener rotación más rápida para Medellín y reducir la presencia de Nikelena en el mercado.',
+  'Tener aprobación de tonos según sugerencias del mercado de Medellín para subir las ventas.',
+  'Mantener las redes sociales con información de planta y motivación empresarial.',
+  'Pedir sugerencias a los clientes en tonos y referencias solicitadas, con respuesta más acertada.',
+  'Sacar línea económica sin forro total para bajar costos.',
+];
+
+function competenciaColor(v) {
+  if (v >= 4.5) return '#16a34a';
+  if (v >= 3.5) return G.amber;
+  return '#dc2626';
+}
+
+function Plan2026Section({ title, icon: Icon, color, children, defaultOpenBadge }) {
+  return (
+    <div style={{
+      background: '#fff', borderRadius: 16, overflow: 'hidden',
+      boxShadow: '0 2px 10px rgba(0,0,0,0.06)', border: '1px solid #f0f0ec',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '14px 20px', borderBottom: `3px solid ${color}`,
+        background: `${color}0d`,
+      }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: 9, background: color,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}>
+          <Icon size={16} color="#fff" />
+        </div>
+        <h3 style={{ fontSize: 15, fontWeight: 800, color: G.primary, flex: 1 }}>{title}</h3>
+        {defaultOpenBadge}
+      </div>
+      <div style={{ padding: '18px 20px' }}>{children}</div>
+    </div>
+  );
+}
+
+function Plan2026Tab() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* Hero + descarga PDF */}
+      <div style={{
+        background: `linear-gradient(135deg, ${G.primary} 0%, #3d6b5a 55%, ${G.mint} 100%)`,
+        borderRadius: 16, padding: '28px 32px', color: '#fff',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16,
+      }}>
+        <div>
+          <p style={{ fontSize: 10, opacity: 0.75, letterSpacing: 3, textTransform: 'uppercase', marginBottom: 6 }}>
+            INDECON S.A.S. · Documento oficial
+          </p>
+          <h2 style={{ fontSize: 26, fontWeight: 900, letterSpacing: -0.5, marginBottom: 4 }}>
+            Planeación Estratégica 2026
+          </h2>
+          <p style={{ opacity: 0.85, fontSize: 13 }}>
+            Revisión y análisis de la vigencia anterior · Parámetros definidos para el año 2026
+          </p>
+          <p style={{ opacity: 0.65, fontSize: 12, marginTop: 8 }}>
+            Realizado por Margarita Milena Ramírez (Gerente) · Aprobado por Lina María Ruiz Guzmán (Subgerente) · 05/02/2026
+          </p>
+        </div>
+        <a
+          href={PLAN_2026_PDF_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)',
+            borderRadius: 12, padding: '12px 20px', color: '#fff', fontWeight: 700, fontSize: 13,
+            textDecoration: 'none', flexShrink: 0,
+          }}
+        >
+          <Download size={16} /> Descargar PDF original
+        </a>
+      </div>
+
+      {/* Misión / Visión / Propuesta de valor */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+        {[
+          { title: 'Misión', icon: Target, color: G.primary,
+            text: 'Confeccionar y comercializar trajes de baño cómodos e innovadores, en una empresa consolidada, versátil, competente y con capacidad de adaptación, enfocada en la satisfacción de sus clientes, el bienestar y la seguridad de sus colaboradores, apoyados en la mejora continua de procesos y la competencia laboral.' },
+          { title: 'Visión', icon: Building2, color: G.mint,
+            text: 'INDECON tendrá una rentabilidad sostenible, mediante el posicionamiento de su marca "Garana Art" y mayor participación en el mercado nacional e internacional, con un ambiente extraordinario de trabajo, un equipo humano altamente motivado y una cultura de excelencia operativa que garanticen la fidelización de sus clientes.' },
+          { title: 'Propuesta de Valor', icon: Gem, color: G.olive,
+            text: 'Desarrollar y ofrecer vestidos de baño que se adaptan perfectamente al cuerpo de la mujer, combinando seguridad y comodidad. Empoderamos a nuestras clientas con prendas que realzan su estilo único, garantizando a clientes y distribuidores versatilidad, excelencia en cada diseño y puntualidad en la entrega.' },
+        ].map(item => {
+          const Icon = item.icon;
+          return (
+            <div key={item.title} style={{
+              background: '#fff', borderRadius: 14, padding: '20px 22px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `5px solid ${item.color}`,
+            }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+                <Icon size={18} color={item.color} />
+                <h3 style={{ fontSize: 14, fontWeight: 800, color: item.color }}>{item.title}</h3>
+              </div>
+              <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.75 }}>{item.text}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Valores */}
+      <Plan2026Section title="Valores" icon={Heart} color="#be185d">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+          {[
+            { label: 'Honestidad',     text: 'Congruencia entre lo que se piensa y lo que se hace, generando beneficio común.' },
+            { label: 'Responsabilidad', text: 'Asumir las consecuencias de nuestros actos y cumplir compromisos y obligaciones.' },
+            { label: 'Respeto',        text: 'Reconocer, apreciar y valorar a los demás con reciprocidad de derechos y deberes.' },
+            { label: 'Amor',           text: 'Buscar la felicidad de los demás e inducir bienestar en las relaciones interpersonales.' },
+            { label: 'Lealtad',        text: 'Fidelidad en acciones y comportamientos individuales y sociales.' },
+          ].map(v => (
+            <div key={v.label} style={{ background: '#fdf2f8', borderRadius: 12, padding: '14px 16px' }}>
+              <p style={{ fontSize: 13, fontWeight: 800, color: '#be185d', marginBottom: 4 }}>{v.label}</p>
+              <p style={{ fontSize: 12, color: '#374151', lineHeight: 1.6 }}>{v.text}</p>
+            </div>
+          ))}
+        </div>
+      </Plan2026Section>
+
+      {/* Políticas */}
+      <Plan2026Section title="Revisión de Políticas 2026" icon={ShieldCheck} color={G.primary}
+        defaultOpenBadge={
+          <span style={{ fontSize: 11, fontWeight: 700, color: G.primary, background: `${G.primary}12`, borderRadius: 20, padding: '3px 10px' }}>
+            6 políticas + código de ética
+          </span>
+        }>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+          {P26_POLITICAS.map(pol => {
+            const Icon = pol.icon;
+            return (
+              <div key={pol.id} style={{
+                background: '#fafafa', borderRadius: 12, padding: '14px 16px',
+                borderTop: `3px solid ${pol.color}`,
+              }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8 }}>
+                  <Icon size={15} color={pol.color} style={{ marginTop: 1, flexShrink: 0 }} />
+                  <p style={{ fontSize: 12.5, fontWeight: 800, color: '#1f2937', lineHeight: 1.4 }}>{pol.title}</p>
+                </div>
+                <p style={{ fontSize: 12, color: '#4b5563', lineHeight: 1.65 }}>{pol.text}</p>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 14, background: `${G.mint}12`, borderRadius: 12, padding: '14px 16px', borderLeft: `4px solid ${G.mint}` }}>
+          <p style={{ fontSize: 12.5, fontWeight: 800, color: G.primary, marginBottom: 6 }}>Código de Ética y Conducta</p>
+          <p style={{ fontSize: 12, color: '#374151', lineHeight: 1.7 }}>
+            Durante más de veinte años, INDECON ha confeccionado trajes de baño y prendas con el sello del talento caldense.
+            El Código de Ética eleva los valores de honestidad, responsabilidad, respeto, amor y lealtad a compromisos formales
+            con cada persona de la cadena de valor, incorporando en 2026 los desafíos de la tecnología, la sostenibilidad y la
+            salud mental de los equipos.
+          </p>
+        </div>
+      </Plan2026Section>
+
+      {/* FODA */}
+      <Plan2026Section title="Diagnóstico Estratégico — FODA" icon={Swords} color={G.olive}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+          {[
+            { key: 'debilidades',    label: 'Debilidades',    color: '#dc2626', bg: '#fef2f2' },
+            { key: 'oportunidades',  label: 'Oportunidades',  color: G.mint,    bg: '#f0faf5' },
+            { key: 'fortalezas',     label: 'Fortalezas',     color: G.primary, bg: '#edf3f0' },
+            { key: 'amenazas',       label: 'Amenazas',       color: G.amber,   bg: '#fdf8ee' },
+          ].map(box => (
+            <div key={box.key} style={{ background: box.bg, borderRadius: 12, padding: '14px 16px' }}>
+              <p style={{ fontSize: 13, fontWeight: 800, color: box.color, marginBottom: 10 }}>{box.label}</p>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {P26_FODA[box.key].map((item, i) => (
+                  <li key={i} style={{ display: 'flex', gap: 7, fontSize: 12, color: '#374151', lineHeight: 1.5 }}>
+                    <span style={{ color: box.color, fontWeight: 900 }}>•</span> {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </Plan2026Section>
+
+      {/* Análisis de competencia */}
+      <Plan2026Section title="Análisis de Competencia" icon={Users} color={G.mint}
+        defaultOpenBadge={
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', background: '#fee2e2', borderRadius: 20, padding: '3px 10px' }}>
+            Principal competidor: Nikelena
+          </span>
+        }>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: '#f8fafc' }}>
+                {['Competidor', 'Precio', 'Calidad', 'Variedad', 'Estampación', 'Redes', 'Punto de venta', 'Total'].map(h => (
+                  <th key={h} style={{ padding: '9px 12px', textAlign: h === 'Competidor' ? 'left' : 'center', fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.4 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {P26_COMPETENCIA.map((c, i) => (
+                <tr key={c.nombre} style={{ borderTop: '1px solid #f3f4f6', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                  <td style={{ padding: '9px 12px', fontWeight: 700, color: '#1f2937' }}>{c.nombre}</td>
+                  {['precio', 'calidad', 'variedad', 'estampacion', 'redes', 'puntoVenta'].map(k => (
+                    <td key={k} style={{ padding: '9px 12px', textAlign: 'center', color: '#374151' }}>{c[k]}</td>
+                  ))}
+                  <td style={{ padding: '9px 12px', textAlign: 'center', fontWeight: 800, color: competenciaColor(c.total) }}>{c.total.toFixed(1)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p style={{ fontSize: 11.5, color: '#6b7280', marginTop: 12, lineHeight: 1.6 }}>
+          Escala de 1 (menor) a 5 (mayor). Swinware es el competidor más fuerte en atributos de marca (enfocado en estrato alto),
+          mientras Nikelena compite agresivamente por precio y velocidad de respuesta al mercado de Medellín.
+        </p>
+      </Plan2026Section>
+
+      {/* Indicadores 2025 vs 2026 */}
+      <Plan2026Section title="Cumplimiento de Indicadores · Meta 2026" icon={BarChart3} color={G.primary}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: '#f8fafc' }}>
+                {['Indicador', 'Meta 2025', 'Resultado 2025', 'Meta 2026'].map(h => (
+                  <th key={h} style={{ padding: '9px 12px', textAlign: h === 'Indicador' ? 'left' : 'center', fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.4 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {P26_INDICADORES.map((row, i) => (
+                <tr key={row.nombre} style={{ borderTop: '1px solid #f3f4f6', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                  <td style={{ padding: '9px 12px', color: '#1f2937' }}>{row.nombre}</td>
+                  <td style={{ padding: '9px 12px', textAlign: 'center', color: '#6b7280' }}>{row.meta2025}</td>
+                  <td style={{ padding: '9px 12px', textAlign: 'center', fontWeight: 700, color: G.primary }}>{row.resultado2025}</td>
+                  <td style={{ padding: '9px 12px', textAlign: 'center', fontWeight: 700, color: G.mint }}>{row.meta2026}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Plan2026Section>
+
+      {/* Mapa estratégico — imagen oficial de marca */}
+      <Plan2026Section title="Mapa Estratégico — 8 Objetivos" icon={LayoutDashboard} color={G.amber}>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <img
+            src="/mapa-estrategico-2026.png"
+            alt="Mapa Estratégico Garana Art 2026 — 8 objetivos por perspectiva"
+            style={{
+              width: '100%', maxWidth: 620, height: 'auto',
+              borderRadius: 12, boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+              border: '1px solid #f0f0ec',
+            }}
+          />
+        </div>
+      </Plan2026Section>
+
+      {/* Estrategias */}
+      <Plan2026Section title="Definición de Estrategias 2026" icon={Handshake} color={G.olive}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 10 }}>
+          {P26_ESTRATEGIAS.map((e, i) => (
+            <div key={i} style={{ display: 'flex', gap: 9, fontSize: 12.5, color: '#374151', lineHeight: 1.6 }}>
+              <span style={{
+                flexShrink: 0, width: 20, height: 20, borderRadius: 6, background: `${G.olive}15`,
+                color: G.olive, fontWeight: 800, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>{i + 1}</span>
+              {e}
+            </div>
+          ))}
+        </div>
+      </Plan2026Section>
+
+      {/* Firma */}
+      <div style={{
+        background: '#fff', borderRadius: 14, padding: '18px 22px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', justifyContent: 'space-between',
+        alignItems: 'center', flexWrap: 'wrap', gap: 12,
+      }}>
+        <div>
+          <p style={{ fontSize: 12, fontWeight: 700, color: G.primary }}>Margarita Milena Ramírez Alarcón</p>
+          <p style={{ fontSize: 11, color: '#9ca3af' }}>Gerente · Realizado</p>
+        </div>
+        <div>
+          <p style={{ fontSize: 12, fontWeight: 700, color: G.primary }}>Lina María Ruiz Guzmán</p>
+          <p style={{ fontSize: 11, color: '#9ca3af' }}>Subgerente · Aprobado</p>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <p style={{ fontSize: 11, color: '#9ca3af' }}>Fecha del documento</p>
+          <p style={{ fontSize: 13, fontWeight: 800, color: G.primary }}>5 de febrero de 2026</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL — V2
 // ═══════════════════════════════════════════════════════════════════
 export default function PlaneacionEstrategicaV2() {
@@ -841,6 +1271,7 @@ export default function PlaneacionEstrategicaV2() {
           {activeTab === 'perspectivas' && <PerspTab        indicators={indicators} hook={hook} profiles={profiles} canManage={canManage} canMeasure={canMeasure} />}
           {activeTab === 'indicadores'  && <IndicadoresTab  indicators={indicators} hook={hook} profiles={profiles} canManage={canManage} canMeasure={canMeasure} />}
           {activeTab === 'plataforma'   && <PlataformaTab />}
+          {activeTab === 'plan2026'     && <Plan2026Tab />}
         </>
       )}
     </div>

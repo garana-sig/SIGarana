@@ -256,10 +256,10 @@ export default function ProductoNoConformeManager({ onBack }) {
   const isAdmin    = profile?.role === 'admin';
   const isGerencia = profile?.role === 'gerencia';
 
-  const canCreate = isAdmin || isGerencia || hasPermission('pnc:create');
-  const canEdit   = isAdmin || isGerencia || hasPermission('pnc:edit');
-  const canDelete = isAdmin               || hasPermission('pnc:delete');
-  const canExport = isAdmin || isGerencia || hasPermission('pnc:export');
+  const canCreate = isAdmin || isGerencia || hasPermission('auditorias:producto_no_conforme:create');
+  const canEdit   = isAdmin || isGerencia || hasPermission('auditorias:producto_no_conforme:edit');
+  const canDelete = isAdmin               || hasPermission('auditorias:producto_no_conforme:delete');
+  const canExport = isAdmin || isGerencia || hasPermission('auditorias:producto_no_conforme:export');
 
   const { defectos, referencias, registros, produccion,
           loading, error,
