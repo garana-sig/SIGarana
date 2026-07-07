@@ -1,5 +1,6 @@
 // src/hooks/usePNC.js
 // Hook de datos para el módulo Producto No Conforme
+// ── v2: formulario consolidado (fila por fila), cabecera mensual automática ──
 
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -68,53 +69,69 @@ export function usePNC() {
     }
   }, []);
 
-  // ── Siguiente consecutivo por año (fallback local) ─────────────────────────
-  const nextConsecutivo = useCallback(async (anio) => {
-    // Intentar desde la función DB
+  // ── Siguiente consecutivo de REGISTRO (cabecera) por año ───────────────────
+  const nextConsecutivoRegistro = useCallback(async (anio) => {
     const { data } = await supabase.rpc('pnc_next_consecutivo', { p_anio: anio });
     if (data) return data;
-    // Fallback: calcular desde estado local
     const max = registros
       .filter(r => r.anio === anio)
       .reduce((m, r) => Math.max(m, r.consecutivo_anual), 0);
     return max + 1;
   }, [registros]);
 
-  // ── Crear registro + ítems ─────────────────────────────────────────────────
-  const createRegistro = useCallback(async ({ anio, mes, proceso, items }) => {
-    const consec = await nextConsecutivo(anio);
+  // ── Busca la cabecera (año, mes) en memoria o la crea si no existe ─────────
+  const getOrCreateRegistro = useCallback(async (anio, mes) => {
+    const existente = registros.find(r => r.anio === anio && r.mes === mes);
+    if (existente) return existente;
 
+    const consec = await nextConsecutivoRegistro(anio);
     const { data: reg, error: eReg } = await supabase
       .from('pnc_registro')
-      .insert({ consecutivo_anual: consec, anio, mes, proceso })
+      .insert({ consecutivo_anual: consec, anio, mes, proceso: null })
       .select()
       .single();
-
     if (eReg) throw eReg;
 
-    const itemsToInsert = items.map((it, idx) => buildItemPayload(it, reg.id, idx + 1));
-    const { error: eItems } = await supabase.from('pnc_item').insert(itemsToInsert);
-    if (eItems) throw eItems;
+    const nuevo = { ...reg, pnc_item: [] };
+    setRegistros(prev => [nuevo, ...prev]);
+    return nuevo;
+  }, [registros, nextConsecutivoRegistro]);
 
-    return reg;
-  }, [nextConsecutivo]);
+  // ── Agrega UNA fila (ítem) al consolidado del mes correspondiente ──────────
+  // Si el mes/año todavía no tiene cabecera, la crea automáticamente (invisible
+  // para el usuario). El "N°" (numero_fila) se calcula como el siguiente
+  // dentro de esa cabecera mensual.
+  const addItem = useCallback(async ({ anio, mes, item }) => {
+    const registro   = await getOrCreateRegistro(anio, mes);
+    const numeroFila = (registro.pnc_item || [])
+      .reduce((m, it) => Math.max(m, it.numero_fila), 0) + 1;
 
-  // ── Actualizar registro + ítems ────────────────────────────────────────────
-  const updateRegistro = useCallback(async (id, { mes, proceso, items }) => {
-    const { error: eReg } = await supabase
-      .from('pnc_registro')
-      .update({ mes, proceso })
-      .eq('id', id);
-    if (eReg) throw eReg;
+    const payload = buildItemPayload(item, registro.id, numeroFila);
+    const { data: nuevoItem, error: eItem } = await supabase
+      .from('pnc_item')
+      .insert(payload)
+      .select()
+      .single();
+    if (eItem) throw eItem;
 
-    // Borrar ítems anteriores y reinsertar
-    await supabase.from('pnc_item').delete().eq('registro_id', id);
-    const itemsToInsert = items.map((it, idx) => buildItemPayload(it, id, idx + 1));
-    const { error: eItems } = await supabase.from('pnc_item').insert(itemsToInsert);
-    if (eItems) throw eItems;
+    return { registroId: registro.id, item: nuevoItem };
+  }, [getOrCreateRegistro]);
+
+  // ── Actualiza UNA fila existente (sin tocar la cabecera) ────────────────────
+  const updateItem = useCallback(async (itemId, item, registroId, numeroFila) => {
+    const payload = buildItemPayload(item, registroId, numeroFila);
+    const { error } = await supabase.from('pnc_item').update(payload).eq('id', itemId);
+    if (error) throw error;
   }, []);
 
-  // ── Eliminar registro (en cascada elimina ítems) ───────────────────────────
+  // ── Elimina UNA fila existente (sin afectar el resto del mes) ──────────────
+  const deleteItem = useCallback(async (itemId) => {
+    const { error } = await supabase.from('pnc_item').delete().eq('id', itemId);
+    if (error) throw error;
+  }, []);
+
+  // ── Eliminar una cabecera mensual completa (y en cascada sus ítems) ────────
+  // Se conserva para limpieza administrativa, ya no es el flujo principal.
   const deleteRegistro = useCallback(async (id) => {
     const { error: e } = await supabase.from('pnc_registro').delete().eq('id', id);
     if (e) throw e;
@@ -141,34 +158,37 @@ export function usePNC() {
   return {
     defectos, referencias, registros, produccion,
     loading, error,
-    fetchAll, createRegistro, updateRegistro, deleteRegistro, saveProduccion, deleteProduccion,
+    fetchAll, addItem, updateItem, deleteItem, deleteRegistro,
+    saveProduccion, deleteProduccion,
   };
 }
 
-// ── Construye el payload de un ítem para insertar en BD ───────────────────────
+// ── Construye el payload de un ítem para insertar/actualizar en BD ────────────
 function buildItemPayload(it, registroId, numeroFila) {
   return {
-    registro_id:                   registroId,
-    numero_fila:                   numeroFila,
-    referencia_id:                 it.referencia_obj?.id    || null,
-    referencia_texto:              !it.referencia_obj       ? (it.referencia_texto || null) : null,
-    fecha_reporte:                 it.fecha_reporte         || null,
-    defecto_id:                    it.defecto_obj?.id       || null,
-    defecto_texto:                 !it.defecto_obj          ? (it.defecto_texto || null)    : null,
-    total:                         it.total                 ? parseInt(it.total, 10)        : null,
-    causa_modulo:                  !!it.causa_modulo,
-    causa_operacion:               !!it.causa_operacion,
-    causa_insumo:                  !!it.causa_insumo,
-    causa_corte:                   !!it.causa_corte,
-    causa_sublimacion:             !!it.causa_sublimacion,
-    causa_revision:                !!it.causa_revision,
-    tratamiento_fecha:             it.tratamiento_fecha        || null,
-    tratamiento_descripcion:       it.tratamiento_descripcion  || null,
-    tratamiento_responsable:       it.tratamiento_responsable  || null,
-    clasificacion_correccion:      !!it.clasificacion_correccion,
-    clasificacion_reclasificacion: !!it.clasificacion_reclasificacion,
-    clasificacion_concesion:       !!it.clasificacion_concesion,
-    verificacion_fecha:            it.verificacion_fecha        || null,
-    verificacion_responsable:      it.verificacion_responsable  || null,
+    registro_id:                    registroId,
+    numero_fila:                    numeroFila,
+    referencia_id:                  it.referencia_obj?.id    || null,
+    referencia_texto:               !it.referencia_obj       ? (it.referencia_texto || null) : null,
+    fecha_reporte:                  it.fecha_reporte         || null,
+    defecto_id:                     it.defecto_obj?.id       || null,
+    defecto_texto:                  !it.defecto_obj          ? (it.defecto_texto || null)    : null,
+    total:                          it.total                 ? parseInt(it.total, 10)        : null,
+
+    // ── Campos nuevos del formulario consolidado ─────────────────────────────
+    seccion:                        it.seccion               || null,
+    operacion_origen:               it.operacion_origen      || null,
+    tratamiento_descripcion:        it.tratamiento_descripcion || null, // "¿Cómo se solucionó?"
+    tratamiento_responsable:        it.tratamiento_responsable || null,
+    verificacion_fecha:             it.verificacion_fecha      || null,
+    verificacion_responsable:       it.verificacion_responsable|| null,
+
+    // ── Campos del formato anterior — ya no se usan desde el formulario nuevo.
+    //    Se envían con valor "vacío" solo para no romper el insert si la
+    //    columna es NOT NULL en la tabla. No se leen ni se muestran más.
+    causa_modulo: false, causa_operacion: false, causa_insumo: false,
+    causa_corte:  false, causa_sublimacion: false, causa_revision: false,
+    tratamiento_fecha: null,
+    clasificacion_correccion: false, clasificacion_reclasificacion: false, clasificacion_concesion: false,
   };
 }
