@@ -3,6 +3,9 @@
 // ✅ Sin reloads automáticos
 // ✅ Loading no se queda stuck
 // ✅ must_change_password integrado
+// ✅ FIX: refreshPermissions() + suscripción realtime a user_permission
+//    para que los permisos asignados en caliente se reflejen sin
+//    necesidad de cerrar sesión.
 
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -23,7 +26,7 @@ export const AuthProvider = ({ children }) => {
   const [profile, setProfile] = useState(null);
   const [permissions, setPermissions] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   const loadingUserRef = useRef(false);
   const currentUserIdRef = useRef(null);
   const initializedRef = useRef(false);
@@ -39,7 +42,7 @@ export const AuthProvider = ({ children }) => {
       console.log('⏭️ Already loading for this user, skipping...');
       return;
     }
-    
+
     // 🛡️ GUARD 2: Ya tenemos datos cargados para este usuario
     if (currentUserIdRef.current === authUser?.id && dataLoadedRef.current) {
       console.log('⏭️ Data already loaded for this user, skipping...');
@@ -69,7 +72,7 @@ export const AuthProvider = ({ children }) => {
       const queryWithTimeout = (promise, timeoutMs = 10000) => {
         return Promise.race([
           promise,
-          new Promise((_, reject) => 
+          new Promise((_, reject) =>
             setTimeout(() => reject(new Error(`Query timeout (${timeoutMs}ms)`)), timeoutMs)
           )
         ]);
@@ -101,7 +104,7 @@ export const AuthProvider = ({ children }) => {
             .single(),
           5000
         );
-        
+
         if (deptData) {
           profileData.department = deptData;
           console.log('✅ Department loaded');
@@ -110,34 +113,7 @@ export const AuthProvider = ({ children }) => {
 
       // ⚡ Query 2: Permisos (optimizada con timeout)
       console.log('📡 Loading permissions...');
-      const { data: userPerms, error: permsError } = await queryWithTimeout(
-        supabase
-          .from('user_permission')
-          .select('permission_id')
-          .eq('user_id', authUser.id)
-          .eq('is_active', true),
-        10000
-      );
-
-      if (permsError) throw permsError;
-
-      let permissionCodes = [];
-
-      if (userPerms && userPerms.length > 0) {
-        const permIds = userPerms.map(p => p.permission_id);
-        
-        const { data: perms, error: codesError } = await queryWithTimeout(
-          supabase
-            .from('permission')
-            .select('code')
-            .in('id', permIds),
-          10000
-        );
-
-        if (codesError) throw codesError;
-        
-        permissionCodes = perms?.map(p => p.code) || [];
-      }
+      const permissionCodes = await fetchPermissionCodes(authUser.id, queryWithTimeout);
 
       console.log('✅ Permissions loaded:', permissionCodes.length);
 
@@ -165,7 +141,7 @@ export const AuthProvider = ({ children }) => {
 
     } catch (error) {
       console.error('❌ Error in loadUserData:', error);
-      
+
       // Fallback
       setUser(authUser);
       setProfile({
@@ -181,6 +157,35 @@ export const AuthProvider = ({ children }) => {
     } finally {
       loadingUserRef.current = false;
     }
+  };
+
+  // ==========================================
+  // 🔑 HELPER: traer códigos de permiso de un usuario
+  // (reutilizado por loadUserData Y por refreshPermissions)
+  // ==========================================
+  const fetchPermissionCodes = async (userId, queryWithTimeout = (p) => p) => {
+    const { data: userPerms, error: permsError } = await queryWithTimeout(
+      supabase
+        .from('user_permission')
+        .select('permission_id')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+    );
+
+    if (permsError) throw permsError;
+    if (!userPerms || userPerms.length === 0) return [];
+
+    const permIds = userPerms.map(p => p.permission_id);
+
+    const { data: perms, error: codesError } = await queryWithTimeout(
+      supabase
+        .from('permission')
+        .select('code')
+        .in('id', permIds)
+    );
+
+    if (codesError) throw codesError;
+    return perms?.map(p => p.code) || [];
   };
 
   // ==========================================
@@ -252,6 +257,20 @@ export const AuthProvider = ({ children }) => {
     if (data) setProfile(data);
   };
 
+  // ⭐ NUEVO: re-consulta user_permission + permission para el usuario actual
+  // y actualiza el estado. Llamar tras asignar/revocar permisos, o exponer
+  // un botón "Actualizar mis permisos" en la UI para el propio usuario.
+  const refreshPermissions = async () => {
+    if (!user) return;
+    try {
+      const codes = await fetchPermissionCodes(user.id);
+      setPermissions(codes);
+      console.log('🔄 Permisos refrescados:', codes.length);
+    } catch (error) {
+      console.error('❌ Error refrescando permisos:', error);
+    }
+  };
+
   const clearMustChangePassword = async () => {
     await supabase.from('profile').update({ must_change_password: false }).eq('id', user?.id);
     setProfile(prev => ({ ...prev, must_change_password: false }));
@@ -265,7 +284,7 @@ export const AuthProvider = ({ children }) => {
   const hasAnyPermission = (permissionCodes) => {
     // Admin y Gerencia tienen acceso total
     if (isAdmin || isGerencia) return true;
-    
+
     // Verificar si tiene al menos uno de los permisos
     return permissionCodes.some((code) => hasPermission(code));
   };
@@ -300,7 +319,7 @@ export const AuthProvider = ({ children }) => {
           console.log('ℹ️ No initial session');
           setLoading(false);
         }
-        
+
         initializationComplete = true;
         initializedRef.current = true;
       } catch (error) {
@@ -338,7 +357,7 @@ export const AuthProvider = ({ children }) => {
         setPermissions([]);
         setLoading(false);
       }
-      
+
       // SIGNED_IN - Cargar datos del nuevo usuario
       if (event === 'SIGNED_IN' && session?.user) {
         // 🛡️ GUARD 1: Ya estamos cargando datos
@@ -346,13 +365,13 @@ export const AuthProvider = ({ children }) => {
           console.log('⏭️ Already loading data, skipping SIGNED_IN');
           return;
         }
-        
+
         // 🛡️ GUARD 2: Es el mismo usuario y datos ya cargados
         if (currentUserIdRef.current === session.user.id && dataLoadedRef.current) {
           console.log('⏭️ Same user with data loaded, skipping SIGNED_IN');
           return;
         }
-        
+
         console.log('✅ SIGNED_IN - loading new user data:', session.user.email);
         setLoading(true);
         await loadUserData(session.user);
@@ -376,6 +395,38 @@ export const AuthProvider = ({ children }) => {
   }, []); // Sin dependencias
 
   // ==========================================
+  // 📡 NUEVO: suscripción realtime a user_permission del usuario actual
+  // Requiere habilitar Realtime en la tabla user_permission (Supabase
+  // Dashboard > Database > Replication) para que esto funcione.
+  // Sin esto, el usuario debe cerrar sesión y volver a entrar para
+  // ver un permiso recién asignado.
+  // ==========================================
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`user_permission_changes_${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_permission',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          console.log('🔔 user_permission cambió — refrescando permisos');
+          refreshPermissions();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
+  // ==========================================
   // 📤 PROVIDER VALUE
   // ==========================================
 
@@ -391,6 +442,7 @@ export const AuthProvider = ({ children }) => {
     mustChangePassword,
     clearMustChangePassword,
     refreshProfile,
+    refreshPermissions, // ⭐ NUEVO
     hasPermission,
     hasAnyPermission,
   };

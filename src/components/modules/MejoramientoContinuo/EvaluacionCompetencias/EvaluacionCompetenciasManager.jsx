@@ -1628,10 +1628,11 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
   }
 
   async function handleGuardarEmpleado(data) {
-    setSaving(true);
-    try {
-      if (empFormModal === 'new') await createEmpleado(data);
-      else await updateEmpleado(empFormModal.id, data);
+  setSaving(true);
+  const payload = { ...data, user_id: data.user_id || null }; // '' -> null
+  try {
+    if (empFormModal === 'new') await createEmpleado(payload);
+    else await updateEmpleado(empFormModal.id, payload);
       setEmpFormModal(null);
       showToast(empFormModal === 'new' ? 'Empleado agregado' : 'Empleado actualizado');
     } catch (e) { showToast('Error: ' + e.message, 'err'); }
