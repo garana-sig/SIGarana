@@ -1,4 +1,8 @@
 // src/components/modules/MejoramientoContinuo/MejoramientoContinuo.jsx
+// ✅ FIX: la tarjeta "Proveedores" solo se mostraba con el permiso
+//    'proveedores:evaluacion:view', ignorando catalogo:view y seleccion:view.
+//    Ahora usa 'permissions' (array) + hasAnyPermission, así que basta con
+//    tener CUALQUIERA de los tres permisos de Proveedores para ver el módulo.
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
@@ -117,10 +121,13 @@ const SUBMODULES = [
     gradient: 'linear-gradient(135deg, #6dbd96 0%, #2e5244 100%)',
     badge: 'Gestión', enabled: true,
   },
-  // ── PROVEEDORES — nuevo ───────────────────────────────────────────────
+  // ── PROVEEDORES ─────────────────────────────────────────────────────────
+  // FIX: antes usaba permission: 'proveedores:evaluacion:view' (un solo
+  // permiso), por lo que un usuario con SOLO catalogo:view o seleccion:view
+  // nunca veía la tarjeta. Ahora basta con cualquiera de los tres.
   {
     id: 'proveedores', name: 'Proveedores',
-    permission: 'proveedores:evaluacion:view',
+    permissions: ['proveedores:catalogo:view', 'proveedores:evaluacion:view', 'proveedores:seleccion:view'],
     description: 'Evaluación, selección y catálogo de proveedores',
     icon: Building2, color: '#2e5244',
     gradient: 'linear-gradient(135deg, #2e5244 0%, #6dbd96 100%)',
@@ -212,7 +219,8 @@ function FuturisticCard({ title, description, icon: Icon, color, gradient, badge
 export default function MejoramientoContinuo() {
   const [activeSubmodule, setActiveSubmodule] = useState(null);
   const [configModal, setConfigModal]         = useState(null);
-  const { hasPermission, isAdmin, isGerencia } = useAuth();
+  // FIX: se agrega hasAnyPermission para módulos con más de un permiso de vista
+  const { hasPermission, hasAnyPermission, isAdmin, isGerencia } = useAuth();
 
   if (activeSubmodule === 'actas')
     return <ActasManager onBack={() => setActiveSubmodule(null)} />;
@@ -239,9 +247,12 @@ export default function MejoramientoContinuo() {
   if (activeSubmodule === 'proveedores')
     return <ProveedoresManager onBack={() => setActiveSubmodule(null)} />;
 
+  // FIX: soporta tanto mod.permission (string, la mayoría de módulos) como
+  // mod.permissions (array, ej. Proveedores) usando hasAnyPermission.
   const canAccess = (mod) => {
     if (!mod.enabled) return false;
     if (isAdmin || isGerencia) return true;
+    if (mod.permissions) return hasAnyPermission(mod.permissions);
     return hasPermission(mod.permission);
   };
 
