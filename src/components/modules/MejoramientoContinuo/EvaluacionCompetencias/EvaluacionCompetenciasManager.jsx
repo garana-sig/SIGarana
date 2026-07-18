@@ -1373,8 +1373,8 @@ function ConfigCuestionario({ categorias, createCategoria, toggleCategoria, crea
 // ─── Tabla de empleados ───────────────────────────────────────────────────────
 function TablaEmpleados({
   empleados, evalPorEmpleado, evaluadosEnPeriodoActivo,
-  canEvaluar, isAdminOrGerencia, periodoActivo,
-  onVerPerfil, onEvaluar, onEditarEmpleado,
+  canEvaluar, isAdminOrGerencia, canDeleteEval, periodoActivo,
+  onVerPerfil, onEvaluar, onEditarEmpleado, onEliminarEmpleado, eliminandoId,
   mostrarEstado = true,
 }) {
   return (
@@ -1401,6 +1401,7 @@ function TablaEmpleados({
             const info   = evalPorEmpleado[emp.id] || { count: 0, ultima: null };
             const yaEval = evaluadosEnPeriodoActivo.has(emp.id);
             const puedo  = canEvaluar(emp.departamento);
+            const puedeEliminar = isAdminOrGerencia || canDeleteEval;
             return (
               <tr key={emp.id} className="border-b hover:bg-gray-50"
                 style={{ opacity: emp.is_active ? 1 : 0.5 }}>
@@ -1446,6 +1447,14 @@ function TablaEmpleados({
                       <button onClick={() => onEditarEmpleado(emp)}
                         className="p-1 rounded hover:bg-gray-100 text-gray-400">
                         <Edit3 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {puedeEliminar && onEliminarEmpleado && (
+                      <button onClick={() => onEliminarEmpleado(emp)}
+                        disabled={eliminandoId === emp.id}
+                        className="p-1 rounded hover:bg-red-50 text-red-400 disabled:opacity-40"
+                        title="Eliminar colaborador">
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     )}
                   </div>
@@ -1601,7 +1610,7 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
     configuracion, usuarios,
     loading, isAdminOrGerencia, canEvaluar,
     canCreateEval, canEditEval, canDeleteEval, canManageEval,
-    createEmpleado, updateEmpleado,
+    createEmpleado, updateEmpleado, deleteEmpleado,
     createEvaluacion, deleteEvaluacion, updateEvaluacion,
     addEvaluador, removeEvaluador, loadDetalles,
     createPeriodo, activarPeriodo, togglePeriodo, deletePeriodo,
@@ -1621,6 +1630,7 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
   const [filterDepto,     setFilterDepto]    = useState('');
   const [saving,          setSaving]         = useState(false);
   const [toast,           setToast]          = useState(null);
+  const [eliminandoEmpleado, setEliminandoEmpleado] = useState(null);
 
   function showToast(msg, type = 'ok') {
     setToast({ msg, type });
@@ -1637,6 +1647,33 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
       showToast(empFormModal === 'new' ? 'Empleado agregado' : 'Empleado actualizado');
     } catch (e) { showToast('Error: ' + e.message, 'err'); }
     finally { setSaving(false); }
+  }
+
+  // Elimina un colaborador definitivamente (hard delete en ec_empleado).
+  // Si tiene evaluaciones asociadas la base de datos puede rechazar el borrado
+  // por la relación con ec_evaluacion; en ese caso mostramos un mensaje claro.
+  async function handleEliminarEmpleado(emp) {
+    const confirmado = window.confirm(
+      `¿Eliminar definitivamente a "${emp.nombre_completo}"?\n\n` +
+      `Esta acción no se puede deshacer.`
+    );
+    if (!confirmado) return;
+    setEliminandoEmpleado(emp.id);
+    try {
+      await deleteEmpleado(emp.id);
+      showToast('Colaborador eliminado');
+      if (selEmpleado?.id === emp.id) { setSelEmpleado(null); setView('lista'); }
+    } catch (e) {
+      const esConflictoFK = /foreign key|violates|constraint/i.test(e.message || '');
+      showToast(
+        esConflictoFK
+          ? `No se pudo eliminar: "${emp.nombre_completo}" tiene evaluaciones registradas. Elimina primero su historial o desactívalo desde "Editar".`
+          : 'Error al eliminar: ' + e.message,
+        'err'
+      );
+    } finally {
+      setEliminandoEmpleado(null);
+    }
   }
 
   async function handleGuardarEvaluacion(datos) {
@@ -1829,10 +1866,13 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
               evaluadosEnPeriodoActivo={evaluadosEnPeriodoActivo}
               canEvaluar={canEvaluar}
               isAdminOrGerencia={isAdminOrGerencia}
+              canDeleteEval={canDeleteEval}
               periodoActivo={periodoActivo}
               onVerPerfil={emp => { setSelEmpleado(emp); setView('perfil'); }}
               onEvaluar={emp => { setFormTarget(emp); setView('formulario'); }}
               onEditarEmpleado={emp => setEmpFormModal(emp)}
+              onEliminarEmpleado={handleEliminarEmpleado}
+              eliminandoId={eliminandoEmpleado}
             />
           )}
         </div>
@@ -1907,11 +1947,14 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
                   evaluadosEnPeriodoActivo={evaluadosSel}
                   canEvaluar={canEvaluar}
                   isAdminOrGerencia={isAdminOrGerencia}
+                  canDeleteEval={canDeleteEval}
                   periodoActivo={periodoSel}
                   mostrarEstado={false}
                   onVerPerfil={emp => { setSelEmpleado(emp); setView('perfil'); }}
                   onEvaluar={emp => { setFormTarget(emp); setView('formulario'); }}
                   onEditarEmpleado={emp => setEmpFormModal(emp)}
+                  onEliminarEmpleado={handleEliminarEmpleado}
+                  eliminandoId={eliminandoEmpleado}
                 />
               </>
             ))}

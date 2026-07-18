@@ -257,6 +257,17 @@ export function useEvaluacionCompetencias() {
     return r;
   }, [loadEmpleados]);
 
+  // Elimina definitivamente un colaborador (hard delete).
+  // Nota: si el colaborador tiene evaluaciones asociadas, la base de datos
+  // puede rechazar el borrado por la relación con ec_evaluacion (empleado_id).
+  // En ese caso Supabase devuelve un error de restricción de llave foránea,
+  // que se propaga para que la UI pueda mostrar un mensaje claro al usuario.
+  const deleteEmpleado = useCallback(async (id) => {
+    const { error } = await supabase.from('ec_empleado').delete().eq('id', id);
+    if (error) throw error;
+    await loadEmpleados();
+  }, [loadEmpleados]);
+
   // ── Evaluaciones ──────────────────────────────────────────────────────────
 
   // respuestas: { [preguntaId]: 1-5 }
@@ -476,7 +487,7 @@ export function useEvaluacionCompetencias() {
     // helpers
     canEvaluar,
     // empleados
-    loadEmpleados, createEmpleado, updateEmpleado,
+    loadEmpleados, createEmpleado, updateEmpleado, deleteEmpleado,
     // evaluaciones
     loadEvaluaciones, loadDetalles,
     createEvaluacion, deleteEvaluacion, updateEvaluacion,

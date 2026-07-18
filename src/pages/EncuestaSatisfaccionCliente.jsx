@@ -120,8 +120,7 @@ export default function EncuestaSatisfaccionCliente() {
 
       setStep('success');
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      // Redirigir al home después de 4 segundos
-      setTimeout(() => { window.location.href = '/'; }, 4000);
+      // Se queda en la pantalla de agradecimiento — sin redirección automática
     } catch (err) {
       console.error(err);
       setErrors({ submit: 'Ocurrió un error al enviar. Por favor intenta de nuevo.' });
@@ -167,6 +166,8 @@ export default function EncuestaSatisfaccionCliente() {
       <div style={styles.pageWrapper}>
         <div style={{ ...styles.card, maxWidth: 560 }}>
           <div style={styles.successContainer}>
+            {/* LOGO Garana en la pantalla final */}
+            <img src="/garana1.png" alt="Garana Art" style={styles.successLogo} />
             <div style={styles.successIcon}>✓</div>
             <h2 style={styles.successTitle}>¡Gracias por tu respuesta!</h2>
             <p style={styles.successSubtitle}>
@@ -174,9 +175,6 @@ export default function EncuestaSatisfaccionCliente() {
               cada día para servirte mejor.
             </p>
             <div style={styles.successDivider} />
-            <p style={{ color: '#aaa', fontSize: 12, margin: 0 }}>
-              Serás redirigido en unos segundos...
-            </p>
             <p style={styles.successBrand}>
               <strong>Garana Art</strong> — Mejoramiento Continuo
             </p>
@@ -208,7 +206,7 @@ export default function EncuestaSatisfaccionCliente() {
           Período: <strong>{period?.name}</strong>
         </p>
         <p style={styles.surveyDescription}>
-          Tu opinión nos ayuda a mejorar. 
+          Tu opinión nos ayuda a mejorar.
           <p style={styles.surveyDescription}>Por favor califica cada aspecto del 1 al 5,
           donde <strong>1 = Muy insatisfecho</strong> y <strong>5 = Altamente satisfecho</strong>.
         </p>
@@ -537,6 +535,10 @@ const styles = {
   },
   submitBtnDisabled: { opacity: 0.7, cursor: 'not-allowed' },
   successContainer: { padding: '56px 40px', textAlign: 'center' },
+  // Logo Garana en la pantalla final de agradecimiento
+  successLogo: {
+    height: 72, objectFit: 'contain', margin: '0 auto 20px', display: 'block',
+  },
   successIcon: {
     width: 72, height: 72, borderRadius: '50%',
     background: 'linear-gradient(135deg, #2e5244, #6dbd96)',
