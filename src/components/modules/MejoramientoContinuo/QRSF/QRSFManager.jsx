@@ -428,6 +428,7 @@ function VentasPanel({ tipo, ventas, registros, onSave, onDelete, loading }) {
   const [pObs,  setPObs]  = useState('');
   const [saving, setSaving] = useState(false);
   const [deleting,setDeleting] = useState(null);
+  const [editingId, setEditingId] = useState(null);
 
   const label = tipo === 'qrsf' ? 'QRSF' : 'Devoluciones';
   const color = tipo === 'qrsf' ? C.primary : C.secondary;
@@ -464,15 +465,28 @@ function VentasPanel({ tipo, ventas, registros, onSave, onDelete, loading }) {
     if (!pTotal||parseInt(pTotal)<=0) return;
     setSaving(true);
     try { await onSave({ anio:pAnio, mes:pMes, total_ventas:pTotal, observaciones:pObs });
-      setPTotal(''); setPObs(''); }
+      setPTotal(''); setPObs(''); setEditingId(null); }
     catch(e) { alert(`Error: ${e.message}`); }
     finally { setSaving(false); }
+  };
+
+  const handleEdit = (f) => {
+    setEditingId(f.id);
+    setPAnio(f.anio);
+    setPMes(f.mes);
+    setPTotal(String(f.total_ventas ?? ''));
+    setPObs(f.observaciones || '');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setPTotal(''); setPObs('');
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm('¿Eliminar este registro de ventas?')) return;
     setDeleting(id);
-    try { await onDelete(id); }
+    try { await onDelete(id); if (editingId===id) handleCancelEdit(); }
     finally { setDeleting(null); }
   };
 
@@ -480,15 +494,24 @@ function VentasPanel({ tipo, ventas, registros, onSave, onDelete, loading }) {
     <div className="space-y-4">
       {/* Formulario registrar ventas */}
       <div className="rounded-xl p-4" style={{ background:'#f9f9f5', border:`1px solid ${C.beige}` }}>
-        <p className="text-xs font-bold uppercase mb-3" style={{ color }}>Registrar Ventas Mensuales</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-bold uppercase" style={{ color }}>
+            {editingId ? 'Editando registro de ventas' : 'Registrar Ventas Mensuales'}
+          </p>
+          {editingId && (
+            <button onClick={handleCancelEdit} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
+              <X className="h-3 w-3"/>Cancelar edición
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div>
             <label className="text-xs text-gray-500 block mb-1">Año</label>
-            <Input type="number" min="2020" max="2099" value={pAnio} onChange={e=>setPAnio(parseInt(e.target.value))} className="text-sm"/>
+            <Input type="number" min="2020" max="2099" value={pAnio} onChange={e=>setPAnio(parseInt(e.target.value))} className="text-sm" disabled={!!editingId}/>
           </div>
           <div>
             <label className="text-xs text-gray-500 block mb-1">Mes</label>
-            <select value={pMes} onChange={e=>setPMes(parseInt(e.target.value))} className="w-full p-2 border rounded text-sm">
+            <select value={pMes} onChange={e=>setPMes(parseInt(e.target.value))} className="w-full p-2 border rounded text-sm" disabled={!!editingId}>
               {MESES.map((m,i) => <option key={m} value={i+1}>{m}</option>)}
             </select>
           </div>
@@ -543,14 +566,14 @@ function VentasPanel({ tipo, ventas, registros, onSave, onDelete, loading }) {
             <table style={{ borderCollapse:'collapse', width:'100%', fontSize:11 }}>
               <thead>
                 <tr>
-                  {['Mes','Año','Ventas',tipo==='qrsf'?'QRSF':'Dev. (uds)','%',''].map(h=>(
+                  {['Mes','Año','Ventas',tipo==='qrsf'?'QRSF':'Dev. (uds)','%','Acc.'].map(h=>(
                     <th key={h} style={{ background:color, color:'#fff', padding:'4px 6px', fontWeight:700, fontSize:10, textAlign:'center', borderBottom:`2px solid ${C.accent}` }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filas.map((f,i) => (
-                  <tr key={`${f.anio}-${f.mes}`} style={{ background:i%2===0?'#fff':'#f8fdf9' }}>
+                  <tr key={`${f.anio}-${f.mes}`} style={{ background: editingId===f.id ? '#FFF7E0' : (i%2===0?'#fff':'#f8fdf9') }}>
                     <td style={{ padding:'3px 6px', textAlign:'center', borderBottom:`1px solid ${C.beige}` }}>{MESES[f.mes-1].slice(0,3)}</td>
                     <td style={{ padding:'3px 6px', textAlign:'center', borderBottom:`1px solid ${C.beige}` }}>{f.anio}</td>
                     <td style={{ padding:'3px 6px', textAlign:'center', borderBottom:`1px solid ${C.beige}` }}>{f.total_ventas}</td>
@@ -559,9 +582,14 @@ function VentasPanel({ tipo, ventas, registros, onSave, onDelete, loading }) {
                       {f.pct!==null ? `${f.pct}%` : '—'}
                     </td>
                     <td style={{ padding:'2px 4px', textAlign:'center', borderBottom:`1px solid ${C.beige}` }}>
-                      <button onClick={()=>handleDelete(f.id)} className="p-1 hover:bg-red-50 rounded" disabled={deleting===f.id}>
-                        {deleting===f.id ? <Loader2 style={{ width:11,height:11,color:'#EF4444' }} className="animate-spin"/> : <Trash2 style={{ width:11,height:11,color:'#EF4444' }}/>}
-                      </button>
+                      <div style={{ display:'flex', gap:2, justifyContent:'center' }}>
+                        <button onClick={()=>handleEdit(f)} title="Editar" className="p-1 hover:bg-gray-100 rounded">
+                          <Edit style={{ width:11,height:11,color:'#6B7280' }}/>
+                        </button>
+                        <button onClick={()=>handleDelete(f.id)} title="Eliminar" className="p-1 hover:bg-red-50 rounded" disabled={deleting===f.id}>
+                          {deleting===f.id ? <Loader2 style={{ width:11,height:11,color:'#EF4444' }} className="animate-spin"/> : <Trash2 style={{ width:11,height:11,color:'#EF4444' }}/>}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
