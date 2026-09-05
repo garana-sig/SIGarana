@@ -70,12 +70,37 @@ export default function FormularioCreacion({
   const [success, setSuccess] = useState(false);
   const [codeError, setCodeError] = useState('');
 
+  // 🆕 Control de Archivo (ubicación, tipo de archivo, retención, disposición)
+  // Solo aplica cuando el tipo de documento es Registro (RE) o Formato (FO).
+  // Para Procedimientos, Guías, Manuales e Instructivos debe quedar deshabilitado.
+  const selectedDocType = documentTypes.find(t => t.id === formData.document_type_id);
+  const controlArchivoAplica = ['RE', 'FO'].includes(selectedDocType?.code);
+
   // Efecto para generar código automático
   useEffect(() => {
     if (isNewFormat && formData.document_type_id && formData.process_id) {
       generateNextCode();
     }
   }, [isNewFormat, formData.document_type_id, formData.process_id]);
+
+  // 🆕 Si el tipo de documento cambia a uno donde Control de Archivo NO aplica
+  // (Procedimiento, Guía, Manual, Instructivo), limpiamos esos campos para
+  // que no se guarden valores que el usuario alcanzó a diligenciar antes.
+  useEffect(() => {
+    if (!controlArchivoAplica) {
+      setFormData(prev => ({
+        ...prev,
+        storage_location: '',
+        file_type_magnetic: true,
+        file_type_physical: false,
+        retention_central: '',
+        retention_management: false,
+        disposition_total_conservation: false,
+        disposition_selection: false,
+        disposition_elimination: false,
+      }));
+    }
+  }, [controlArchivoAplica]);
 
   // Generar siguiente código
   const generateNextCode = async () => {
@@ -719,13 +744,36 @@ export default function FormularioCreacion({
         </CardContent>
       </Card>
 
-      {/* Información Adicional del Excel */}
-      <Card className="border-2" style={{ borderColor: '#6f7b2c' }}>
+      {/* Control de Archivo (ubicación, tipo de archivo, retención, disposición) */}
+      {/* 🆕 Solo aplica para Registros (RE) y Formatos (FO). Para los demás */}
+      {/* tipos de documento (PR, GU, MN, IN) queda deshabilitado. */}
+      <Card
+        className="border-2"
+        style={{
+          borderColor: controlArchivoAplica ? '#6f7b2c' : '#d1d5db',
+          opacity: controlArchivoAplica ? 1 : 0.55,
+          backgroundColor: controlArchivoAplica ? 'transparent' : '#f9fafb',
+        }}
+      >
         <CardHeader>
-          <CardTitle style={{ color: '#2e5244' }}>Información Adicional</CardTitle>
-          <CardDescription>Campos del listado maestro</CardDescription>
+          <CardTitle
+            style={{ color: controlArchivoAplica ? '#2e5244' : '#6b7280' }}
+            className="flex items-center gap-2"
+          >
+            Control de Archivo
+            {!controlArchivoAplica && (
+              <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">
+                No aplica
+              </span>
+            )}
+          </CardTitle>
+          <CardDescription>
+            {controlArchivoAplica
+              ? 'Ubicación, retención y disposición final del documento (Listado Maestro).'
+              : 'Este control solo aplica cuando el Tipo de Documento es Registro (RE) o Formato (FO). Selecciona uno de esos tipos arriba para habilitarlo.'}
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4" style={{ pointerEvents: controlArchivoAplica ? 'auto' : 'none' }}>
           {/* Ubicación */}
           <div>
             <Label htmlFor="storage_location">Ubicación de Almacenamiento</Label>
@@ -735,6 +783,7 @@ export default function FormularioCreacion({
               value={formData.storage_location}
               onChange={handleChange}
               placeholder="Ej: Servidor, Archivador A, etc."
+              disabled={!controlArchivoAplica}
             />
           </div>
 
@@ -747,7 +796,8 @@ export default function FormularioCreacion({
                   id="file_type_magnetic"
                   name="file_type_magnetic"
                   checked={formData.file_type_magnetic}
-                  onCheckedChange={(checked) => 
+                  disabled={!controlArchivoAplica}
+                  onCheckedChange={(checked) =>
                     setFormData(prev => ({ ...prev, file_type_magnetic: checked }))
                   }
                 />
@@ -760,7 +810,8 @@ export default function FormularioCreacion({
                   id="file_type_physical"
                   name="file_type_physical"
                   checked={formData.file_type_physical}
-                  onCheckedChange={(checked) => 
+                  disabled={!controlArchivoAplica}
+                  onCheckedChange={(checked) =>
                     setFormData(prev => ({ ...prev, file_type_physical: checked }))
                   }
                 />
@@ -783,6 +834,7 @@ export default function FormularioCreacion({
                 value={formData.retention_central}
                 onChange={handleChange}
                 placeholder="Ej: 5"
+                disabled={!controlArchivoAplica}
               />
             </div>
             <div className="flex items-center space-x-2 mt-6">
@@ -790,7 +842,8 @@ export default function FormularioCreacion({
                 id="retention_management"
                 name="retention_management"
                 checked={formData.retention_management}
-                onCheckedChange={(checked) => 
+                disabled={!controlArchivoAplica}
+                onCheckedChange={(checked) =>
                   setFormData(prev => ({ ...prev, retention_management: checked }))
                 }
               />
@@ -809,7 +862,8 @@ export default function FormularioCreacion({
                   id="disposition_total_conservation"
                   name="disposition_total_conservation"
                   checked={formData.disposition_total_conservation}
-                  onCheckedChange={(checked) => 
+                  disabled={!controlArchivoAplica}
+                  onCheckedChange={(checked) =>
                     setFormData(prev => ({ ...prev, disposition_total_conservation: checked }))
                   }
                 />
@@ -822,7 +876,8 @@ export default function FormularioCreacion({
                   id="disposition_selection"
                   name="disposition_selection"
                   checked={formData.disposition_selection}
-                  onCheckedChange={(checked) => 
+                  disabled={!controlArchivoAplica}
+                  onCheckedChange={(checked) =>
                     setFormData(prev => ({ ...prev, disposition_selection: checked }))
                   }
                 />
@@ -835,7 +890,8 @@ export default function FormularioCreacion({
                   id="disposition_elimination"
                   name="disposition_elimination"
                   checked={formData.disposition_elimination}
-                  onCheckedChange={(checked) => 
+                  disabled={!controlArchivoAplica}
+                  onCheckedChange={(checked) =>
                     setFormData(prev => ({ ...prev, disposition_elimination: checked }))
                   }
                 />

@@ -10,7 +10,22 @@ import {
   Star,
   Heart,
   Users,
+  BookOpen,
+  ClipboardCheck,
+  ArrowRight,
+  ScrollText,
+  X,
+  ExternalLink,
+  Loader2,
+  Inbox,
+  ListChecks,
+  Send,
+  ClipboardCheck as CheckIcon,
+  Wrench,
 } from 'lucide-react';
+import { CARACTERIZACION_PROCESOS, DOC_TYPE_LABELS } from '@/data/caracterizacionProcesos';
+import { useDocuments, useProcesses } from '@/hooks/useDocuments';
+import DocumentViewerModal from './GestionDocumental/DocumentViewerModal';
 
 // Paleta Garana
 const C = {
@@ -45,6 +60,43 @@ const ALL_MODULES = [
   { key: 'satisfaccion',    label: 'Satisfacción Clientes', icon: Star,         color: '#d97706', desc: 'Encuestas y resultados' },
   { key: 'clima',           label: 'Clima Laboral',         icon: Heart,        color: '#be185d', desc: 'Bienestar del equipo' },
   { key: 'usuarios',        label: 'Gestión Usuarios',      icon: Users,        color: C.olive,  desc: 'Administración del sistema' },
+];
+
+// 🆕 Accesos rápidos que reemplazan la fila de "Números de Impacto"
+const ACCESOS_RAPIDOS = [
+  {
+    key: 'manuales',
+    label: 'Manuales',
+    desc: 'Manuales de calidad, funciones y procesos',
+    icon: BookOpen,
+    color: C.green,
+  },
+  {
+    key: 'planesProgramas',
+    label: 'Planes y Programas',
+    desc: 'Documentos de consulta institucional',
+    icon: ClipboardCheck,
+    color: C.olive,
+  },
+  {
+    key: 'politicas',
+    label: 'Políticas',
+    desc: 'Políticas institucionales del SIG',
+    icon: ScrollText,
+    color: '#b45309',
+  },
+];
+
+// 🆕 Posición (en % del contenedor) de cada proceso sobre
+// Estructura_de_proceso.jpg — coordenadas tomadas directamente de la imagen.
+const PROCESO_HOTSPOTS = [
+  { code: 'DP', left: 51,   top: 27.3, w: 19, h: 14.3, shape: 'diamond' },
+  { code: 'GS', left: 76,   top: 27.3, w: 19, h: 14.3, shape: 'diamond' },
+  { code: 'GC', left: 64,   top: 39.3, w: 13, h: 10,   shape: 'circle' },
+  { code: 'GR', left: 54.5, top: 56,   w: 19, h: 14.5, shape: 'circle' },
+  { code: 'GP', left: 75.5, top: 55,   w: 13, h: 10,   shape: 'circle' },
+  { code: 'GH', left: 51,   top: 75.8, w: 19, h: 14.3, shape: 'diamond' },
+  { code: 'GF', left: 77,   top: 75.8, w: 19, h: 14.3, shape: 'diamond' },
 ];
 
 const VALORES = [
@@ -91,9 +143,243 @@ const IMPACTOS = [
   },
 ];
 
+// ─────────────────────────────────────────────────────────────────
+// 🆕 Bloque de una sección de la caracterización, en formato "celda de tabla"
+function CelTabla({ titulo, icon: Icon, items, vacio = 'No aplica / no definido.' }) {
+  return (
+    <div style={{ padding: 14, borderRight: `1px solid ${C.sand}`, borderBottom: `1px solid ${C.sand}` }}>
+      <div className="flex items-center gap-1.5 mb-2">
+        {Icon && <Icon size={13} style={{ color: C.mint }} />}
+        <p style={{ fontSize: 10.5, fontWeight: 700, color: C.green, textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+          {titulo}
+        </p>
+      </div>
+      {items && items.length ? (
+        <ul className="space-y-1.5">
+          {items.map((item, i) => (
+            <li key={i} className="flex items-start gap-1.5">
+              <div className="mt-1.5 w-1 h-1 rounded-full flex-shrink-0" style={{ background: C.mint }} />
+              <span style={{ fontSize: 12, color: '#374151', lineHeight: 1.5 }}>{item}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p style={{ fontSize: 11.5, color: '#b0b0a5', fontStyle: 'italic', margin: 0 }}>{vacio}</p>
+      )}
+    </div>
+  );
+}
+
+// 🆕 Modal de Caracterización de Proceso — versión completa (todo el contenido del
+// documento oficial, en formato tabla) + documentos asociados EN VIVO desde
+// Gestión Documental (Supabase), agrupados por tipo y clicables.
+function CaracterizacionModal({ code, onClose }) {
+  const p = CARACTERIZACION_PROCESOS[code];
+  const { processes } = useProcesses();
+  const processRow = processes.find((pr) => pr.code === code);
+  const { documents, loading: loadingDocs } = useDocuments({ processId: processRow?.id });
+  const [docViewer, setDocViewer] = useState(null);
+
+  if (!p) return null;
+
+  // Solo documentos publicados (vigentes) del proceso, agrupados por tipo
+  const publicados = (documents || []).filter((d) => d.status === 'published');
+  const porTipo = {};
+  publicados.forEach((d) => {
+    const tCode = d.document_type?.code;
+    if (!tCode) return;
+    if (!porTipo[tCode]) porTipo[tCode] = [];
+    porTipo[tCode].push(d);
+  });
+  const tiposConDocs = Object.keys(porTipo).filter((t) => DOC_TYPE_LABELS[t]);
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
+        style={{ background: 'rgba(20,28,24,0.6)' }}
+        onClick={onClose}
+      >
+        <div
+          className="w-full rounded-2xl overflow-hidden"
+          style={{
+            background: 'white',
+            maxWidth: 980,
+            maxHeight: '94vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="relative p-5" style={{ background: C.green, flexShrink: 0 }}>
+            <button
+              onClick={onClose}
+              className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center"
+              style={{ background: 'rgba(255,255,255,0.2)', color: 'white' }}
+            >
+              <X size={16} />
+            </button>
+            <p style={{ color: C.mint, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
+              {p.area} · Código {code}
+            </p>
+            <h3 style={{ color: 'white', fontFamily: 'Georgia, serif', fontSize: 20, fontWeight: 700, margin: '4px 0 0' }}>
+              {p.nombre}
+            </h3>
+            <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12, margin: '4px 0 0' }}>
+              Responsable: {p.responsable}
+            </p>
+          </div>
+
+          {/* Cuerpo scrolleable */}
+          <div className="overflow-y-auto" style={{ flex: 1 }}>
+            {/* Objetivo / Alcance */}
+            <div className="p-5" style={{ borderBottom: `1px solid ${C.sand}`, background: '#faf9f5' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <p style={{ fontSize: 10.5, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px' }}>
+                    Objetivo
+                  </p>
+                  <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.55, margin: 0 }}>{p.objetivo}</p>
+                </div>
+                <div>
+                  <p style={{ fontSize: 10.5, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px' }}>
+                    Alcance
+                  </p>
+                  <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.55, margin: 0 }}>{p.alcance}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Tabla 1: Entradas | Actividades PHVA | Salidas */}
+            <div
+              className="grid grid-cols-1 sm:grid-cols-3"
+              style={{ borderTop: `1px solid ${C.sand}` }}
+            >
+              <CelTabla titulo="Entradas" icon={Inbox} items={p.entradas} />
+
+              {/* Columna de actividades: 4 sub-bloques PHVA */}
+              <div style={{ borderRight: `1px solid ${C.sand}`, borderBottom: `1px solid ${C.sand}` }}>
+                <div className="flex items-center gap-1.5 px-3.5 pt-3.5 mb-1">
+                  <ListChecks size={13} style={{ color: C.mint }} />
+                  <p style={{ fontSize: 10.5, fontWeight: 700, color: C.green, textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+                    Actividades (PHVA)
+                  </p>
+                </div>
+                {[
+                  ['Planear', p.actividades?.planear],
+                  ['Hacer', p.actividades?.hacer],
+                  ['Verificar', p.actividades?.verificar],
+                  ['Actuar', p.actividades?.actuar],
+                ].map(([label, items]) => (
+                  <div key={label} className="px-3.5 pb-2.5">
+                    <p style={{ fontSize: 10.5, fontWeight: 700, color: C.olive, margin: '6px 0 4px' }}>{label}</p>
+                    {items && items.length ? (
+                      <ul className="space-y-1.5">
+                        {items.map((item, i) => (
+                          <li key={i} className="flex items-start gap-1.5">
+                            <div className="mt-1.5 w-1 h-1 rounded-full flex-shrink-0" style={{ background: C.mint }} />
+                            <span style={{ fontSize: 12, color: '#374151', lineHeight: 1.5 }}>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p style={{ fontSize: 11.5, color: '#b0b0a5', fontStyle: 'italic', margin: 0 }}>No definido.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <CelTabla titulo="Salidas" icon={Send} items={p.salidas} />
+            </div>
+
+            {/* Tabla 2: Requisitos | Seguimiento y Medición | Recursos */}
+            <div className="grid grid-cols-1 sm:grid-cols-3">
+              <CelTabla titulo="Requisitos" icon={CheckIcon} items={p.requisitos} />
+              <CelTabla
+                titulo="Seguimiento y Medición"
+                icon={BarChart3}
+                items={p.seguimientoMedicion}
+                vacio="El documento oficial no define indicadores para este proceso."
+              />
+              <CelTabla titulo="Recursos" icon={Wrench} items={p.recursos} />
+            </div>
+
+            {/* Documentos asociados — EN VIVO desde Gestión Documental */}
+            <div className="p-5" style={{ borderTop: `1px solid ${C.sand}` }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px' }}>
+                Documentos asociados (Gestión Documental)
+              </p>
+
+              {loadingDocs && (
+                <div className="flex items-center gap-2 py-2">
+                  <Loader2 size={14} className="animate-spin" style={{ color: C.mint }} />
+                  <span style={{ fontSize: 12, color: '#9ca3af' }}>Cargando documentos vigentes…</span>
+                </div>
+              )}
+
+              {!loadingDocs && tiposConDocs.length === 0 && (
+                <p style={{ fontSize: 12, color: '#b0b0a5', fontStyle: 'italic', margin: 0 }}>
+                  Aún no hay documentos publicados en Gestión Documental para este proceso.
+                </p>
+              )}
+
+              {!loadingDocs && tiposConDocs.length > 0 && (
+                <div className="space-y-3">
+                  {tiposConDocs.map((tCode) => (
+                    <div key={tCode}>
+                      <p style={{ fontSize: 11, fontWeight: 600, color: C.green, margin: '0 0 6px' }}>
+                        {DOC_TYPE_LABELS[tCode].emoji} {DOC_TYPE_LABELS[tCode].label}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {porTipo[tCode].map((doc) => (
+                          <button
+                            key={doc.id}
+                            onClick={() => setDocViewer(doc)}
+                            className="flex items-center gap-1.5 transition-colors"
+                            style={{
+                              fontSize: 11.5, fontWeight: 500, padding: '5px 10px', borderRadius: 8,
+                              background: '#f2f1e9', border: `1px solid ${C.sand}`, color: '#374151',
+                              cursor: 'pointer',
+                            }}
+                            title={doc.name}
+                          >
+                            <span style={{ color: C.green, fontWeight: 700 }}>{doc.code}</span>
+                            <span>{doc.name}</span>
+                            <ExternalLink size={11} style={{ color: C.mint }} />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="px-5 py-3 border-t" style={{ borderColor: C.sand, flexShrink: 0 }}>
+            <p style={{ fontSize: 11, color: '#9ca3af', margin: 0 }}>
+              📄 Contenido tomado de "Caracterización de Procesos 2026". Los documentos se sincronizan en vivo con Gestión Documental.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <DocumentViewerModal
+        document={docViewer}
+        isOpen={!!docViewer}
+        onClose={() => setDocViewer(null)}
+      />
+    </>
+  );
+}
+
 export default function Home({ onModuleChange }) {
   const { user } = useAuth();
   const [visible, setVisible] = useState(false);
+  // 🆕 Caracterización de proceso: qué proceso está abierto en el modal
+  const [procesoActivo, setProcesoActivo] = useState(null);
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 80);
@@ -187,34 +473,42 @@ export default function Home({ onModuleChange }) {
         </div>
       </div>
 
-      {/* ─── NÚMEROS DE IMPACTO ──────────────────────────── */}
-      <div
-        className="mx-6 -mt-3 rounded-2xl p-1 mb-6"
-        style={{ background: C.green, boxShadow: '0 8px 32px rgba(46,82,68,0.25)' }}
-      >
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-0">
-          {[
-            { num: '20', label: 'Años en el mercado', suffix: '' },
-            { num: '60 ', label: 'Colaboradores', suffix: '+' },
-            { num: '10K', label: 'Unidades / mes', suffix: '' },
-            { num: '80', label: 'Clientes Mayoristas', suffix: '+' },
-          ].map((s, i) => (
-            <div
-              key={i}
-              className="flex flex-col items-center justify-center py-4 px-2"
+      {/* ─── ACCESOS RÁPIDOS (antes: Números de Impacto) ─── */}
+      <div className="mx-6 -mt-3 mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {ACCESOS_RAPIDOS.map((acceso) => {
+          const Icon = acceso.icon;
+          return (
+            <button
+              key={acceso.key}
+              onClick={() => onModuleChange && onModuleChange(acceso.key)}
+              className="group flex items-center gap-4 rounded-2xl p-4 text-left transition-transform"
               style={{
-                borderRight: i < 3 ? '1px solid rgba(255,255,255,0.12)' : 'none',
+                background: C.green,
+                boxShadow: '0 8px 32px rgba(46,82,68,0.25)',
               }}
             >
-              <span style={{ color: C.mint, fontSize: 26, fontFamily: 'Georgia, serif', fontWeight: 700, lineHeight: 1 }}>
-                {s.num}<span style={{ fontSize: 16 }}>{s.suffix}</span>
-              </span>
-              <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 4, textAlign: 'center', letterSpacing: '0.03em' }}>
-                {s.label}
-              </span>
-            </div>
-          ))}
-        </div>
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: `${acceso.color}30`, border: `1px solid ${C.mint}40` }}
+              >
+                <Icon size={22} style={{ color: C.mint }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p style={{ color: 'white', fontSize: 15, fontFamily: 'Georgia, serif', fontWeight: 700 }}>
+                  {acceso.label}
+                </p>
+                <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11.5, marginTop: 2 }}>
+                  {acceso.desc}
+                </p>
+              </div>
+              <ArrowRight
+                size={18}
+                className="flex-shrink-0 transition-transform group-hover:translate-x-1"
+                style={{ color: C.mint }}
+              />
+            </button>
+          );
+        })}
       </div>
 
       <div className="px-6 space-y-6 pb-10">
@@ -229,24 +523,69 @@ export default function Home({ onModuleChange }) {
           </div>
 
           <div
-            className="rounded-2xl overflow-hidden flex items-center justify-center p-6"
+            className="rounded-2xl overflow-hidden p-6"
             style={{
               background: 'white',
               border: `1px solid ${C.sand}`,
               boxShadow: '0 2px 12px rgba(46,82,68,0.06)',
             }}
           >
-            <img
-              src="/Estructura_de_proceso.jpg"
-              alt="Sistema Integrado de Gestión - Garana Art"
-              style={{
-                maxWidth: '100%',
-                height: 'auto',
-                display: 'block',
-              }}
-            />
+            {/* 🆕 Imagen original + zonas clicables por proceso (sin modificar la imagen) */}
+            <div style={{ position: 'relative', width: '100%' }}>
+              <img
+                src="/Estructura_de_proceso.jpg"
+                alt="Sistema Integrado de Gestión - Garana Art"
+                style={{ width: '100%', height: 'auto', display: 'block' }}
+              />
+              {PROCESO_HOTSPOTS.map((h) => (
+                <button
+                  key={h.code}
+                  onClick={() => setProcesoActivo(h.code)}
+                  aria-label={`Ver caracterización de ${CARACTERIZACION_PROCESOS[h.code]?.nombre || h.code}`}
+                  title={`Ver caracterización de ${CARACTERIZACION_PROCESOS[h.code]?.nombre || h.code}`}
+                  style={{
+                    position: 'absolute',
+                    left: `${h.left}%`,
+                    top: `${h.top}%`,
+                    width: `${h.w}%`,
+                    height: `${h.h}%`,
+                    transform: 'translate(-50%, -50%)',
+                    background: 'transparent',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    borderRadius: h.shape === 'circle' ? '50%' : 16,
+                  }}
+                  className="group"
+                >
+                  <span
+                    className="block w-full h-full transition-all"
+                    style={{
+                      borderRadius: h.shape === 'circle' ? '50%' : 16,
+                      transform: h.shape === 'diamond' ? 'rotate(45deg)' : 'none',
+                    }}
+                  />
+                  <span
+                    className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{
+                      borderRadius: h.shape === 'circle' ? '50%' : 16,
+                      transform: h.shape === 'diamond' ? 'rotate(45deg)' : 'none',
+                      boxShadow: `0 0 0 3px rgba(255,255,255,0.85), 0 0 0 6px ${C.mint}55`,
+                    }}
+                  />
+                </button>
+              ))}
+            </div>
+            <p style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', marginTop: 10 }}>
+              Haz clic sobre cualquier proceso del diagrama para ver su caracterización.
+            </p>
           </div>
         </section>
+
+        {/* 🆕 Modal de Caracterización de Proceso (completo, tipo tabla, con documentos en vivo) */}
+        {procesoActivo && CARACTERIZACION_PROCESOS[procesoActivo] && (
+          <CaracterizacionModal code={procesoActivo} onClose={() => setProcesoActivo(null)} />
+        )}
 
         {/* ─── MISIÓN & VISIÓN ──────────────────────────── */}
        

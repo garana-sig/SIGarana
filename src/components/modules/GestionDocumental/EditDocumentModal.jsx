@@ -83,6 +83,11 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
 
   if (!isOpen || !document) return null;
 
+  // 🆕 Control de Archivo (ubicación, tipo de archivo, retención, disposición)
+  // Solo aplica cuando el documento es un Registro (RE) o Formato (FO).
+  // El tipo de documento no se edita aquí, así que basta con leerlo del documento.
+  const controlArchivoAplica = ['RE', 'FO'].includes(document?.document_type?.code);
+
   // Detectar si hubo cambios en metadatos (EXCLUYENDO nombre)
   const hasMetadataChanges = () => {
     return (
@@ -530,6 +535,38 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                 </p>
               </div>
 
+            </div>
+          </div>
+
+          {/* Sección 3: Control de Archivo */}
+          {/* 🆕 Solo aplica para Registros (RE) y Formatos (FO). Para los demás */}
+          {/* tipos de documento (PR, GU, MN, IN) queda deshabilitado. */}
+          <div
+            className="border-2 rounded-lg p-4"
+            style={{
+              borderColor: controlArchivoAplica ? '#6f7b2c' : '#e5e7eb',
+              opacity: controlArchivoAplica ? 1 : 0.55,
+              backgroundColor: controlArchivoAplica ? 'transparent' : '#f9fafb',
+            }}
+          >
+            <h3
+              className="text-lg font-bold mb-1 flex items-center gap-2"
+              style={{ color: controlArchivoAplica ? '#2e5244' : '#6b7280' }}
+            >
+              🗂️ Control de Archivo
+              {!controlArchivoAplica && (
+                <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">
+                  No aplica
+                </span>
+              )}
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">
+              {controlArchivoAplica
+                ? 'Ubicación, retención y disposición final del documento (Listado Maestro).'
+                : `Este control solo aplica a Registros (RE) y Formatos (FO). Este documento es de tipo "${document?.document_type?.name || document?.document_type?.code || 'desconocido'}", así que queda deshabilitado.`}
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ pointerEvents: controlArchivoAplica ? 'auto' : 'none' }}>
               {/* Ubicación */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -539,8 +576,8 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                   type="text"
                   value={formData.storage_location}
                   onChange={(e) => setFormData({ ...formData, storage_location: e.target.value })}
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  disabled={loading}
+                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  disabled={loading || !controlArchivoAplica}
                   placeholder="Ej: Archivo central, Oficina SST..."
                 />
               </div>
@@ -555,8 +592,8 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                   min="0"
                   value={formData.retention_central}
                   onChange={(e) => setFormData({ ...formData, retention_central: e.target.value })}
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  disabled={loading}
+                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  disabled={loading || !controlArchivoAplica}
                   placeholder="Ej: 5, 10..."
                 />
               </div>
@@ -569,7 +606,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                     checked={formData.file_type_magnetic}
                     onChange={(e) => setFormData({ ...formData, file_type_magnetic: e.target.checked })}
                     className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                    disabled={loading}
+                    disabled={loading || !controlArchivoAplica}
                   />
                   <span>Magnético</span>
                 </label>
@@ -580,7 +617,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                     checked={formData.file_type_physical}
                     onChange={(e) => setFormData({ ...formData, file_type_physical: e.target.checked })}
                     className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                    disabled={loading}
+                    disabled={loading || !controlArchivoAplica}
                   />
                   <span>Físico</span>
                 </label>
@@ -591,7 +628,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                     checked={formData.retention_management}
                     onChange={(e) => setFormData({ ...formData, retention_management: e.target.checked })}
                     className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                    disabled={loading}
+                    disabled={loading || !controlArchivoAplica}
                   />
                   <span>Retención gestión</span>
                 </label>
@@ -602,7 +639,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                     checked={formData.disposition_total_conservation}
                     onChange={(e) => setFormData({ ...formData, disposition_total_conservation: e.target.checked })}
                     className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                    disabled={loading}
+                    disabled={loading || !controlArchivoAplica}
                   />
                   <span>Conservación total</span>
                 </label>
@@ -613,7 +650,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                     checked={formData.disposition_selection}
                     onChange={(e) => setFormData({ ...formData, disposition_selection: e.target.checked })}
                     className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                    disabled={loading}
+                    disabled={loading || !controlArchivoAplica}
                   />
                   <span>Selección</span>
                 </label>
@@ -624,7 +661,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                     checked={formData.disposition_elimination}
                     onChange={(e) => setFormData({ ...formData, disposition_elimination: e.target.checked })}
                     className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                    disabled={loading}
+                    disabled={loading || !controlArchivoAplica}
                   />
                   <span>Eliminación</span>
                 </label>

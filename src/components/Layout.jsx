@@ -224,8 +224,16 @@ export default function Layout({ children, currentModule, onModuleChange }) {
   const role       = ROLES[profile?.role] || ROLES.usuario;
   const displayName = profile?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'Usuario';
 
+  // 🆕 Nombres de módulos que no viven en el sidebar (accesos desde Home)
+  const EXTRA_MODULE_NAMES = {
+    usuarios: 'Gestión de Usuarios',
+    manuales: 'Manuales',
+    planesProgramas: 'Planes y Programas',
+    politicas: 'Políticas',
+  };
   const moduleName = MODULES.find(m => m.id === currentModule)?.name
-    || (currentModule === 'usuarios' ? 'Gestión de Usuarios' : 'Inicio');
+    || EXTRA_MODULE_NAMES[currentModule]
+    || 'Inicio';
 
   return (
     <div className="min-h-screen flex" style={{ backgroundColor: C.sand }}>

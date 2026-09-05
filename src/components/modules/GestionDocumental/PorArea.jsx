@@ -16,7 +16,7 @@ const PROCESS_CONFIG = {
   'GP': { shortName: 'Producción',    color: '#2e5244', gradient: 'from-[#2e5244] to-[#1a3028]', image: 'https://images.unsplash.com/photo-1565008576549-57569a49371d?w=400&h=300&fit=crop' },
   'GR': { shortName: 'Proveedores',   color: '#6dbd96', gradient: 'from-[#6dbd96] to-[#4a9c73]', image: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=400&h=300&fit=crop' },
   'GH': { shortName: 'Talento Humano',color: '#6f7b2c', gradient: 'from-[#6f7b2c] to-[#4d541e]', image: 'https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=400&h=300&fit=crop' },
-  'GA': { shortName: 'Administrativa',color: '#2e5244', gradient: 'from-[#2e5244] to-[#1a3028]', image: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=400&h=300&fit=crop' },
+  'GF': { shortName: 'Admin. y Financiera', color: '#2e5244', gradient: 'from-[#2e5244] to-[#1a3028]', image: '...' },
 };
 
 const DOC_CATEGORIES = [
@@ -84,15 +84,28 @@ export default function PorArea() {
   };
 
   // ── DocumentCard ─────────────────────────────────────────────────────────
+  // 🆕 Toda la tarjeta es clicable y abre el documento directamente (antes
+  // solo funcionaba el ícono pequeño del ojo). Los botones internos usan
+  // stopPropagation para no disparar el click de la tarjeta dos veces.
   const DocumentCard = ({ doc }) => {
     const pd = processArray.find(p => p.id === doc.process_id);
+    const openable = Boolean(doc.file_path);
     return (
       <motion.div
-        className="group flex items-center gap-2 p-2 rounded-lg border bg-white hover:shadow-md transition-all"
+        className={`group flex items-center gap-2 p-2 rounded-lg border bg-white hover:shadow-md transition-all ${
+          openable ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'
+        }`}
         style={{ borderColor: pd?.color || '#6dbd96' }}
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        whileHover={{ scale: 1.01 }}
+        whileHover={{ scale: openable ? 1.01 : 1 }}
+        onClick={() => openable && handleViewDocument(doc)}
+        role="button"
+        tabIndex={openable ? 0 : -1}
+        onKeyDown={(e) => {
+          if (openable && (e.key === 'Enter' || e.key === ' ')) handleViewDocument(doc);
+        }}
+        title={openable ? `Abrir ${doc.name}` : 'Archivo no disponible'}
       >
         <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
           style={{ backgroundColor: `${pd?.color}20` }}>
@@ -106,11 +119,13 @@ export default function PorArea() {
           <p className="text-xs font-medium text-gray-900 truncate">{doc.name}</p>
         </div>
         <div className="flex gap-1 flex-shrink-0">
-          <Button variant="ghost" size="sm" onClick={() => handleViewDocument(doc)}
+          <Button variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); handleViewDocument(doc); }}
             disabled={!doc.file_path} className="h-7 w-7 p-0">
             <Eye className="h-3 w-3" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => handleDownload(doc)}
+          <Button variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); handleDownload(doc); }}
             disabled={downloading === doc.id || !doc.file_path} className="h-7 w-7 p-0">
             {downloading === doc.id
               ? <Loader2 className="h-3 w-3 animate-spin" />

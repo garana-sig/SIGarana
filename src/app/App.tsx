@@ -9,6 +9,7 @@ import PlaneacionEstrategica from '@/components/modules/PlaneacionEstrategica';
 import MejoramientoContinuo from '@/components/modules/MejoramientoContinuo';
 import SegBienestar from '@/components/modules/SegBienestar';
 import GestionUsuarios from '@/components/modules/GestionUsuarios';
+import EnConstruccion from '@/components/modules/EnConstruccion';
 
 // ── Páginas públicas ──────────────────────────────────────────────────────────
 import HomePublico               from '../pages/HomePublico';
@@ -65,13 +66,38 @@ function AppContent() {
 
   const renderModule = () => {
     switch (currentModule) {
-      case 'home':                  return <Home />;
+      case 'home':                  return <Home onModuleChange={setCurrentModule} />;
       case 'gestionDocumental':     return <GestionDocumental />;
       case 'planeacionEstrategica': return <PlaneacionEstrategica />;
       case 'mejoramientoContinuo':  return <MejoramientoContinuo />;
       case 'segBienestar':          return <SegBienestar />;
       case 'usuarios':              return <GestionUsuarios />;
-      default:                      return <Home />;
+      // 🆕 Accesos nuevos desde Home — por ahora en construcción
+      case 'manuales':
+        return (
+          <EnConstruccion
+            title="Manuales"
+            subtitle="Aquí encontrarás los manuales de calidad, funciones y procesos de Garana Art. Esta sección está en construcción."
+            onModuleChange={setCurrentModule}
+          />
+        );
+      case 'planesProgramas':
+        return (
+          <EnConstruccion
+            title="Planes y Programas"
+            subtitle="Documentos de consulta institucional (planes y programas). Esta sección está en construcción."
+            onModuleChange={setCurrentModule}
+          />
+        );
+      case 'politicas':
+        return (
+          <EnConstruccion
+            title="Políticas"
+            subtitle="Políticas institucionales del Sistema de Gestión Integrado. Esta sección está en construcción."
+            onModuleChange={setCurrentModule}
+          />
+        );
+      default:                      return <Home onModuleChange={setCurrentModule} />;
     }
   };
 
