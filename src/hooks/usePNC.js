@@ -1,6 +1,7 @@
 // src/hooks/usePNC.js
 // Hook de datos para el módulo Producto No Conforme
 // ── v2: formulario consolidado (fila por fila), cabecera mensual automática ──
+// ── v3: CRUD de catálogo de Referencias (crear/editar/eliminar) ──────────────
 
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -155,11 +156,81 @@ export function usePNC() {
     if (e) throw e;
   }, []);
 
+  // ══════════════════════════════════════════════════════════════════════════
+  //  CRUD — Catálogo de Referencias (pnc_referencia)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // Convierte un error de Postgres/PostgREST en un mensaje entendible.
+  // 23503 = violación de FK (la referencia está en uso en pnc_item o dev_registro).
+  const friendlyReferenciaError = (e) => {
+    if (e?.code === '23503') {
+      return 'Esta referencia está en uso en registros de Producto No Conforme o Devoluciones, no se puede eliminar.';
+    }
+    return e?.message || 'Error inesperado.';
+  };
+
+  const createReferencia = useCallback(async ({ ref, categoria }) => {
+    try {
+      const refTrim = (ref || '').trim();
+      if (!refTrim) return { success: false, error: 'La referencia no puede estar vacía.' };
+
+      const { data, error: e } = await supabase
+        .from('pnc_referencia')
+        .insert({ ref: refTrim, categoria: (categoria || '').trim() || null })
+        .select()
+        .single();
+      if (e) throw e;
+
+      setReferencias(prev =>
+        [...prev, data].sort((a, b) => a.ref.localeCompare(b.ref, 'es', { numeric: true }))
+      );
+      return { success: true, data };
+    } catch (e) {
+      return { success: false, error: friendlyReferenciaError(e) };
+    }
+  }, []);
+
+  const updateReferencia = useCallback(async (id, { ref, categoria }) => {
+    try {
+      const refTrim = (ref || '').trim();
+      if (!refTrim) return { success: false, error: 'La referencia no puede estar vacía.' };
+
+      const { data, error: e } = await supabase
+        .from('pnc_referencia')
+        .update({ ref: refTrim, categoria: (categoria || '').trim() || null })
+        .eq('id', id)
+        .select()
+        .single();
+      if (e) throw e;
+
+      setReferencias(prev =>
+        prev.map(r => (r.id === id ? data : r))
+            .sort((a, b) => a.ref.localeCompare(b.ref, 'es', { numeric: true }))
+      );
+      return { success: true, data };
+    } catch (e) {
+      return { success: false, error: friendlyReferenciaError(e) };
+    }
+  }, []);
+
+  const deleteReferencia = useCallback(async (id) => {
+    try {
+      const { error: e } = await supabase.from('pnc_referencia').delete().eq('id', id);
+      if (e) throw e;
+
+      setReferencias(prev => prev.filter(r => r.id !== id));
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: friendlyReferenciaError(e) };
+    }
+  }, []);
+
   return {
     defectos, referencias, registros, produccion,
     loading, error,
     fetchAll, addItem, updateItem, deleteItem, deleteRegistro,
     saveProduccion, deleteProduccion,
+    createReferencia, updateReferencia, deleteReferencia,
   };
 }
 

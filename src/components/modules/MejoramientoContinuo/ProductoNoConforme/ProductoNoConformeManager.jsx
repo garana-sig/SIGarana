@@ -1,5 +1,6 @@
 // src/components/modules/MejoramientoContinuo/ProductoNoConforme/ProductoNoConformeManager.jsx
 // v3 — Formulario consolidado (fila por fila) sobre el formato RE-GS-06 modificado
+// v3.1 — CRUD de Referencias (crear / editar / eliminar) en el modal de catálogo
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
@@ -209,6 +210,8 @@ const emptyForm = () => ({
   verificacion_fecha: '', verificacion_responsable: '',
 });
 
+const emptyRefForm = () => ({ id: null, ref: '', categoria: '' });
+
 // ═════════════════════════════════════════════════════════════════════════════
 //  COMPONENTE PRINCIPAL
 // ═════════════════════════════════════════════════════════════════════════════
@@ -224,7 +227,8 @@ export default function ProductoNoConformeManager({ onBack }) {
 
   const { defectos, referencias, registros, produccion,
           loading, error,
-          fetchAll, addItem, updateItem, deleteItem, saveProduccion, deleteProduccion } = usePNC();
+          fetchAll, addItem, updateItem, deleteItem, saveProduccion, deleteProduccion,
+          createReferencia, updateReferencia, deleteReferencia } = usePNC();
 
   const [tab,        setTab]        = useState('registros');
   const [actionMsg,  setActionMsg]  = useState(null);
@@ -237,6 +241,12 @@ export default function ProductoNoConformeManager({ onBack }) {
 
   const [catalogModal,  setCatalogModal]  = useState({ open: false, tipo: null });
   const [catalogSearch, setCatalogSearch] = useState('');
+
+  // ── Estado del CRUD de Referencias (dentro del modal de catálogo) ──────────
+  const [refFormOpen,   setRefFormOpen]   = useState(false);
+  const [refForm,       setRefForm]       = useState(emptyRefForm());
+  const [savingRef,     setSavingRef]     = useState(false);
+  const [deletingRefId, setDeletingRefId] = useState(null);
 
   const [form, setForm] = useState(emptyForm());
 
@@ -430,6 +440,52 @@ export default function ProductoNoConformeManager({ onBack }) {
     return [];
   }, [catalogModal, catalogSearch, referencias, defectos]);
 
+  // ══════════════════════════════════════════════════════════════════════════
+  //  CRUD — Catálogo de Referencias
+  // ══════════════════════════════════════════════════════════════════════════
+  const openNewRef = () => { setRefForm(emptyRefForm()); setRefFormOpen(true); };
+
+  const openEditRef = (item) => {
+    setRefForm({ id: item.id, ref: item.ref || '', categoria: item.categoria || '' });
+    setRefFormOpen(true);
+  };
+
+  const closeRefForm = () => { setRefFormOpen(false); setRefForm(emptyRefForm()); };
+
+  const setRF = (field, value) => setRefForm(prev => ({ ...prev, [field]: value }));
+
+  const handleSaveRef = async () => {
+    if (!refForm.ref.trim()) { showMsg('error', 'La referencia no puede estar vacía.'); return; }
+    setSavingRef(true);
+    try {
+      const payload = { ref: refForm.ref, categoria: refForm.categoria };
+      const r = refForm.id
+        ? await updateReferencia(refForm.id, payload)
+        : await createReferencia(payload);
+
+      if (r.success) {
+        showMsg('success', refForm.id ? '✅ Referencia actualizada.' : '✅ Referencia creada.');
+        closeRefForm();
+      } else {
+        showMsg('error', r.error);
+      }
+    } finally {
+      setSavingRef(false);
+    }
+  };
+
+  const handleDeleteRef = async (item) => {
+    if (!window.confirm(`¿Eliminar la referencia "${item.ref}"?\nEsta acción no se puede deshacer.`)) return;
+    setDeletingRefId(item.id);
+    try {
+      const r = await deleteReferencia(item.id);
+      if (r.success) showMsg('success', `🗑️ Referencia "${item.ref}" eliminada.`);
+      else           showMsg('error', r.error);
+    } finally {
+      setDeletingRefId(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
 
@@ -501,7 +557,7 @@ export default function ProductoNoConformeManager({ onBack }) {
                 <RefreshCw className="h-4 w-4" />
               </Button>
               <Button variant="outline" size="sm"
-                onClick={() => { setCatalogSearch(''); setCatalogModal({ open:true, tipo:'referencias' }); }}
+                onClick={() => { setCatalogSearch(''); closeRefForm(); setCatalogModal({ open:true, tipo:'referencias' }); }}
                 className="border-amber-300 text-amber-700 hover:bg-amber-50">
                 <Eye className="h-4 w-4 mr-1.5" />Referencias
               </Button>
@@ -847,17 +903,56 @@ export default function ProductoNoConformeManager({ onBack }) {
 
       {/* ══════════════════════════════════════════════════════════════════
           MODAL — Catálogos (Referencias / Defectos)
+          Referencias: solo lectura + CRUD (crear/editar/eliminar).
+          Defectos:    se mantiene solo lectura, sin cambios.
       ══════════════════════════════════════════════════════════════════ */}
-      <Dialog open={catalogModal.open} onOpenChange={(o) => setCatalogModal({ open:o, tipo: o ? catalogModal.tipo : null })}>
+      <Dialog open={catalogModal.open} onOpenChange={(o) => { if (!o) closeRefForm(); setCatalogModal({ open:o, tipo: o ? catalogModal.tipo : null }); }}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-bold" style={{ color: C.primary }}>
               {catalogModal.tipo === 'referencias' ? 'Catálogo de Referencias' : 'Tabla de Defectos'}
             </h3>
-            <Button variant="outline" size="sm" onClick={() => downloadCatalogo(catalogModal.tipo)}>
-              <FileSpreadsheet className="h-4 w-4 mr-1" />Descargar
-            </Button>
+            <div className="flex items-center gap-2">
+              {catalogModal.tipo === 'referencias' && canCreate && (
+                <Button variant="outline" size="sm" onClick={openNewRef}
+                  className="border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+                  <Plus className="h-4 w-4 mr-1" />Nueva
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={() => downloadCatalogo(catalogModal.tipo)}>
+                <FileSpreadsheet className="h-4 w-4 mr-1" />Descargar
+              </Button>
+            </div>
           </div>
+
+          {/* ── Formulario inline: crear / editar referencia ──────────────── */}
+          {catalogModal.tipo === 'referencias' && refFormOpen && (
+            <div className="mb-3 p-3 rounded-lg border" style={{ background:'#f0f9f4', borderColor: C.accent }}>
+              <p className="text-xs font-bold mb-2 uppercase" style={{ color: C.primary }}>
+                {refForm.id ? 'Editar Referencia' : 'Nueva Referencia'}
+              </p>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Referencia *</label>
+                  <Input value={refForm.ref} onChange={e => setRF('ref', e.target.value)} placeholder="Ej: 107" className="text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Categoría</label>
+                  <Input value={refForm.categoria} onChange={e => setRF('categoria', e.target.value)} placeholder="Opcional" className="text-sm" />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={closeRefForm} disabled={savingRef}>Cancelar</Button>
+                <Button size="sm" onClick={handleSaveRef} disabled={savingRef}
+                  style={{ backgroundColor: C.primary }} className="text-white">
+                  {savingRef
+                    ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Guardando...</>
+                    : <><Check className="h-3.5 w-3.5 mr-1.5" />{refForm.id ? 'Guardar Cambios' : 'Crear'}</>}
+                </Button>
+              </div>
+            </div>
+          )}
+
           <Input placeholder="Buscar..." value={catalogSearch} onChange={e => setCatalogSearch(e.target.value)} className="mb-3 text-sm" />
           <table className="w-full text-sm">
             <tbody>
@@ -867,8 +962,30 @@ export default function ProductoNoConformeManager({ onBack }) {
                     {catalogModal.tipo === 'referencias' ? item.ref : item.codigo}
                   </td>
                   <td className="py-1.5">{catalogModal.tipo === 'referencias' ? item.categoria : item.nombre}</td>
+                  {catalogModal.tipo === 'referencias' && (canEdit || canDelete) && (
+                    <td className="py-1.5" style={{ width: 60 }}>
+                      <div className="flex items-center justify-end gap-1">
+                        {canEdit && (
+                          <button onClick={() => openEditRef(item)} className="p-1 rounded hover:bg-gray-100" title="Editar">
+                            <Edit className="h-3.5 w-3.5" style={{ color: C.primary }} />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button onClick={() => handleDeleteRef(item)} disabled={deletingRefId === item.id}
+                            className="p-1 rounded hover:bg-red-50" title="Eliminar">
+                            {deletingRefId === item.id
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin text-red-400" />
+                              : <Trash2 className="h-3.5 w-3.5 text-red-400" />}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
+              {catalogData.length === 0 && (
+                <tr><td colSpan={3} className="text-center py-6 text-gray-400">Sin resultados.</td></tr>
+              )}
             </tbody>
           </table>
         </DialogContent>
