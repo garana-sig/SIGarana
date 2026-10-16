@@ -5,9 +5,15 @@
 // 3. Actualiza fecha, escribe datos
 // 4. Exporta con saveAs (file-saver)
 //
-// 🆕 v2 (plantilla con columna RESULTADO):
-//   - Columnas: A..J igual | K = RESULTADO | L = META | M = A QUIÉN SE DIVULGA
-//   - RESULTADO = última medición (valor, unidad y período)
+// 🆕 v3 (plantilla con RESULTADO POR TRIMESTRE):
+//   - Columnas: A..J igual | K = META | L = A QUIÉN SE DIVULGA
+//               M = I TRIM | N = II TRIM | O = III TRIM | P = IV TRIM
+//   - Cada trimestre = PROMEDIO de las mediciones del año en curso cuya
+//     fecha de medición cae en ese trimestre (una por mes: si un mes tiene
+//     mediciones repetidas se toma la más reciente)
+//     · Mensual    → promedio de los 3 meses
+//     · Trimestral → la medición del trimestre
+//     · Semestral  → aparece en II (junio) y IV (diciembre)
 //   - Si hay más indicadores que filas en la plantilla, se insertan filas
 //     con el mismo formato (antes se cortaba en 11 BSC / 18 proceso)
 //   - Se separan las celdas combinadas de la columna G en las filas de datos
@@ -33,43 +39,71 @@ const BSC_FIRST_ROW  = 10; // primera fila de datos BSC
 const BSC_SLOTS      = 11; // filas 10–20
 const PROC_HEADER_GAP = 3; // fila 21 (título) + fila 22 (encabezados) → datos en 23
 const PROC_SLOTS     = 18; // filas 23–40
-const LAST_COL       = 13; // columna M
+const LAST_COL       = 16; // columna P
+const Q_FIRST_COL    = 13; // M = I trimestre … P = IV trimestre
 
-// ─── Formato del RESULTADO ───────────────────────────────────────────────────
+// ─── Resultados por trimestre ────────────────────────────────────────────────
 const formatNumber = (v) =>
   Number(v).toLocaleString('es-CO', { maximumFractionDigits: 2 });
 
-const resultText = (m) => {
-  if (!m || m.measured_value === null || m.measured_value === undefined) return 'Sin medición';
-  const unit = (m.unit || '').trim();
-  const num  = formatNumber(m.measured_value);
-  const value = unit === '%' ? `${num}%` : unit ? `${num} ${unit}` : num;
-  const period = (m.period_label || '').trim();
-  return period ? `${value} (${period})` : value;
+const formatValue = (value, unit) => {
+  const u   = (unit || '').trim();
+  const num = formatNumber(value);
+  return u === '%' ? `${num}%` : u ? `${num} ${u}` : num;
 };
 
-// Última medición por indicador (con unidad), ordenada por fecha y creación
-const fetchLastMeasurements = async (indicatorIds) => {
+/**
+ * Devuelve { [indicator_id]: [q1, q2, q3, q4] } con el texto de cada celda.
+ * Usa measurement_date del año indicado.
+ */
+const fetchQuarterResults = async (indicatorIds, year) => {
   if (!indicatorIds.length) return {};
   const { data, error } = await supabase
     .from('indicator_measurement')
-    .select('indicator_id, measured_value, unit, period_label, measurement_date, created_at')
-    .in('indicator_id', indicatorIds);
+    .select('indicator_id, measured_value, unit, measurement_date, created_at')
+    .in('indicator_id', indicatorIds)
+    .gte('measurement_date', `${year}-01-01`)
+    .lte('measurement_date', `${year}-12-31`);
 
   if (error) {
     console.warn('⚠️ No se pudieron cargar mediciones para el Excel:', error.message);
     return {};
   }
 
-  const sorted = [...(data || [])].sort((a, b) => {
-    const d = new Date(b.measurement_date) - new Date(a.measurement_date);
-    if (d !== 0) return d;
-    return new Date(b.created_at) - new Date(a.created_at);
+  // 1) Una medición por indicador y mes (la más reciente si hay repetidas)
+  const byMonth = {}; // key: indicatorId|mes(1-12)
+  (data || []).forEach(m => {
+    if (m.measured_value === null || m.measured_value === undefined || !m.measurement_date) return;
+    const month = parseInt(m.measurement_date.slice(5, 7), 10);
+    const key = `${m.indicator_id}|${month}`;
+    const prev = byMonth[key];
+    if (!prev || new Date(m.created_at) > new Date(prev.created_at)) byMonth[key] = m;
   });
 
-  const last = {};
-  sorted.forEach(m => { if (!last[m.indicator_id]) last[m.indicator_id] = m; });
-  return last;
+  // 2) Agrupar por trimestre y promediar
+  const acc = {}; // indicatorId → [{sum,count,unit} x4]
+  Object.values(byMonth).forEach(m => {
+    const month = parseInt(m.measurement_date.slice(5, 7), 10);
+    const q = Math.floor((month - 1) / 3); // 0..3
+    if (!acc[m.indicator_id]) acc[m.indicator_id] = [0, 1, 2, 3].map(() => ({ sum: 0, count: 0, unit: '' }));
+    const slot = acc[m.indicator_id][q];
+    slot.sum   += Number(m.measured_value);
+    slot.count += 1;
+    slot.unit   = slot.unit || m.unit || '';
+  });
+
+  const result = {};
+  Object.entries(acc).forEach(([id, quarters]) => {
+    result[id] = quarters.map(q => (q.count ? formatValue(q.sum / q.count, q.unit) : ''));
+  });
+  return result;
+};
+
+// Escribe las 4 columnas de trimestre (M..P) en una fila
+const writeQuarters = (row, quarters) => {
+  for (let q = 0; q < 4; q++) {
+    row.getCell(Q_FIRST_COL + q).value = quarters?.[q] || '';
+  }
 };
 
 // ─── Utilidades de filas / celdas combinadas ─────────────────────────────────
@@ -150,13 +184,9 @@ export const exportIndicadores = async (indicators = []) => {
   const bscRows  = indicators.filter(i => i.indicator_type === 'bsc');
   const procRows = indicators.filter(i => i.indicator_type === 'process');
 
-  // 🆕 Última medición de cada indicador (para RESULTADO)
-  const lastByInd = await fetchLastMeasurements(indicators.map(i => i.id).filter(Boolean));
-  const lastOf = (ind) => lastByInd[ind.id] || (
-    ind.last_measurement_value !== null && ind.last_measurement_value !== undefined
-      ? { measured_value: ind.last_measurement_value, period_label: ind.last_period_label, unit: '' }
-      : null
-  );
+  // 🆕 Resultados por trimestre del año en curso
+  const year = new Date().getFullYear();
+  const quartersByInd = await fetchQuarterResults(indicators.map(i => i.id).filter(Boolean), year);
 
   // 4️⃣ Preparar filas — separar G combinadas y agregar filas si hacen falta
   const bscLast  = BSC_FIRST_ROW + BSC_SLOTS - 1;               // 20
@@ -193,9 +223,9 @@ export const exportIndicadores = async (indicators = []) => {
     row.getCell(8).value  = ind.responsible_name     || '';
     row.getCell(9).value  = freqLabel(ind.frequency);
     row.getCell(10).value = ind.definition           || '';
-    row.getCell(11).value = resultText(lastOf(ind));   // 🆕 K = RESULTADO
-    row.getCell(12).value = ind.goal                 || ''; // L = META
-    row.getCell(13).value = ind.disclosed_to         || ''; // M = A QUIÉN SE DIVULGA
+    row.getCell(11).value = ind.goal                 || ''; // K = META
+    row.getCell(12).value = ind.disclosed_to         || ''; // L = A QUIÉN SE DIVULGA
+    writeQuarters(row, quartersByInd[ind.id]);              // 🆕 M..P = I..IV TRIMESTRE
     row.height = 30;
   });
 
@@ -210,14 +240,13 @@ export const exportIndicadores = async (indicators = []) => {
     row.getCell(8).value  = ind.responsible_name     || '';
     row.getCell(9).value  = freqLabel(ind.frequency);
     row.getCell(10).value = ind.definition           || '';
-    row.getCell(11).value = resultText(lastOf(ind));   // 🆕 K = RESULTADO
-    row.getCell(12).value = ind.goal                 || ''; // L = META
-    row.getCell(13).value = ind.disclosed_to         || ''; // M = A QUIÉN SE DIVULGA
+    row.getCell(11).value = ind.goal                 || ''; // K = META
+    row.getCell(12).value = ind.disclosed_to         || ''; // L = A QUIÉN SE DIVULGA
+    writeQuarters(row, quartersByInd[ind.id]);              // 🆕 M..P = I..IV TRIMESTRE
     row.height = 30;
   });
 
   // 7️⃣ Exportar con saveAs (igual que AccionesMejora)
-  const year   = new Date().getFullYear();
   const buffer = await wb.xlsx.writeBuffer();
   saveAs(
     new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
