@@ -296,8 +296,8 @@ export default function FormularioCreacion({
         .insert({
           code: formData.code,
           name: formData.name,
-          objective: formData.objective || null,
-          scope: formData.scope || null,
+          objective: controlArchivoAplica ? null : (formData.objective || null), // 🆕 FO/RE no llevan objetivo
+          scope: controlArchivoAplica ? null : (formData.scope || null), // 🆕 FO/RE no llevan alcance
           responsible: formData.responsible || null, // ⬅️ NUEVO: Campo responsable
           document_type_id: formData.document_type_id,
           process_id: formData.process_id,
@@ -649,31 +649,36 @@ export default function FormularioCreacion({
             />
           </div>
 
-          {/* Objetivo */}
-          <div>
-            <Label htmlFor="objective">Objetivo</Label>
-            <Textarea
-              id="objective"
-              name="objective"
-              value={formData.objective}
-              onChange={handleChange}
-              placeholder="Objetivo del documento..."
-              rows={2}
-            />
-          </div>
+          {/* 🆕 Objetivo y Alcance: NO aplican para Formatos (FO) ni Registros (RE) */}
+          {!controlArchivoAplica && (
+            <>
+            {/* Objetivo */}
+            <div>
+              <Label htmlFor="objective">Objetivo</Label>
+              <Textarea
+                id="objective"
+                name="objective"
+                value={formData.objective}
+                onChange={handleChange}
+                placeholder="Objetivo del documento..."
+                rows={2}
+              />
+            </div>
 
-          {/* Alcance */}
-          <div>
-            <Label htmlFor="scope">Alcance</Label>
-            <Textarea
-              id="scope"
-              name="scope"
-              value={formData.scope}
-              onChange={handleChange}
-              placeholder="Alcance del documento..."
-              rows={2}
-            />
-          </div>
+            {/* Alcance */}
+            <div>
+              <Label htmlFor="scope">Alcance</Label>
+              <Textarea
+                id="scope"
+                name="scope"
+                value={formData.scope}
+                onChange={handleChange}
+                placeholder="Alcance del documento..."
+                rows={2}
+              />
+            </div>
+            </>
+          )}
 
           {/* Responsable */}
           <div>
@@ -744,7 +749,7 @@ export default function FormularioCreacion({
         </CardContent>
       </Card>
 
-      {/* Control de Archivo (ubicación, tipo de archivo, retención, disposición) */}
+      {/* Control de Archivo (tipo de archivo, ubicación, retención, disposición) */}
       {/* 🆕 Solo aplica para Registros (RE) y Formatos (FO). Para los demás */}
       {/* tipos de documento (PR, GU, MN, IN) queda deshabilitado. */}
       <Card
@@ -769,24 +774,11 @@ export default function FormularioCreacion({
           </CardTitle>
           <CardDescription>
             {controlArchivoAplica
-              ? 'Ubicación, retención y disposición final del documento (Listado Maestro).'
+              ? 'Tipo de archivo, ubicación, retención y disposición final del documento (Listado Maestro).'
               : 'Este control solo aplica cuando el Tipo de Documento es Registro (RE) o Formato (FO). Selecciona uno de esos tipos arriba para habilitarlo.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4" style={{ pointerEvents: controlArchivoAplica ? 'auto' : 'none' }}>
-          {/* Ubicación */}
-          <div>
-            <Label htmlFor="storage_location">Ubicación de Almacenamiento</Label>
-            <Input
-              id="storage_location"
-              name="storage_location"
-              value={formData.storage_location}
-              onChange={handleChange}
-              placeholder="Ej: Servidor, Archivador A, etc."
-              disabled={!controlArchivoAplica}
-            />
-          </div>
-
           {/* Tipo de Archivo */}
           <div className="space-y-2">
             <Label>Tipo de Archivo</Label>
@@ -820,6 +812,19 @@ export default function FormularioCreacion({
                 </Label>
               </div>
             </div>
+          </div>
+
+          {/* Ubicación */}
+          <div>
+            <Label htmlFor="storage_location">Ubicación de Almacenamiento</Label>
+            <Input
+              id="storage_location"
+              name="storage_location"
+              value={formData.storage_location}
+              onChange={handleChange}
+              placeholder="Ej: Servidor, Archivador A, etc."
+              disabled={!controlArchivoAplica}
+            />
           </div>
 
           {/* Retención */}
