@@ -237,8 +237,10 @@ export default function ActasManager({ onBack }) {
   const handleDeleteActa = async (acta) => {
     if (!confirm(`⚠️ ELIMINAR PERMANENTEMENTE\n\nEsta acción NO se puede deshacer.\n¿Está completamente seguro de eliminar el acta ${acta.consecutive}?`)) return;
     try {
-      const { error } = await supabase.from('acta').delete().eq('id', acta.id);
+      // 🆕 .select() devuelve las filas borradas: si RLS lo bloquea, llega vacío (sin error)
+      const { data, error } = await supabase.from('acta').delete().eq('id', acta.id).select('id');
       if (error) throw error;
+      if (!data || data.length === 0) throw new Error('No tienes permiso para eliminar esta acta');
       alert('✅ Acta eliminada permanentemente de la base de datos');
       fetchActas();
     } catch (error) { alert('❌ Error al eliminar: ' + error.message); }
@@ -438,7 +440,7 @@ export default function ActasManager({ onBack }) {
                                 <Archive className="h-3.5 w-3.5" />
                               </Button>
                             )}
-                            {canDeleteActa(profile?.role) && (
+                            {canDeleteActa(acta, user?.id, profile?.role) && ( /* 🆕 propias o admin/gerencia */
                               <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-600 hover:text-red-700" title="Eliminar permanentemente" onClick={() => handleDeleteActa(acta)}>
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>

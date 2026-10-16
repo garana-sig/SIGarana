@@ -487,35 +487,40 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                 </p>
               </div>
 
-              {/* Objetivo */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Objetivo
-                </label>
-                <textarea
-                  value={formData.objective}
-                  onChange={(e) => setFormData({ ...formData, objective: e.target.value })}
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  rows="2"
-                  disabled={loading}
-                  placeholder="Objetivo del documento"
-                />
-              </div>
+              {/* 🆕 Objetivo y Alcance: NO aplican para Formatos (FO) ni Registros (RE) */}
+              {!controlArchivoAplica && (
+                <>
+                {/* Objetivo */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Objetivo
+                  </label>
+                  <textarea
+                    value={formData.objective}
+                    onChange={(e) => setFormData({ ...formData, objective: e.target.value })}
+                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    rows="2"
+                    disabled={loading}
+                    placeholder="Objetivo del documento"
+                  />
+                </div>
 
-              {/* Alcance */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Alcance
-                </label>
-                <textarea
-                  value={formData.scope}
-                  onChange={(e) => setFormData({ ...formData, scope: e.target.value })}
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  rows="2"
-                  disabled={loading}
-                  placeholder="Alcance del documento"
-                />
-              </div>
+                {/* Alcance */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Alcance
+                  </label>
+                  <textarea
+                    value={formData.scope}
+                    onChange={(e) => setFormData({ ...formData, scope: e.target.value })}
+                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    rows="2"
+                    disabled={loading}
+                    placeholder="Alcance del documento"
+                  />
+                </div>
+                </>
+              )}
 
               {/* Responsable - NUEVO */}
               <div>
@@ -562,13 +567,43 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
             </h3>
             <p className="text-xs text-gray-500 mb-4">
               {controlArchivoAplica
-                ? 'Ubicación, retención y disposición final del documento (Listado Maestro).'
+                ? 'Tipo de archivo, ubicación, retención y disposición final del documento (Listado Maestro).'
                 : `Este control solo aplica a Registros (RE) y Formatos (FO). Este documento es de tipo "${document?.document_type?.name || document?.document_type?.code || 'desconocido'}", así que queda deshabilitado.`}
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ pointerEvents: controlArchivoAplica ? 'auto' : 'none' }}>
-              {/* Ubicación */}
-              <div>
+              {/* 1. Tipo de Archivo */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tipo de archivo
+                </label>
+                <div className="flex flex-wrap gap-6">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.file_type_magnetic}
+                      onChange={(e) => setFormData({ ...formData, file_type_magnetic: e.target.checked })}
+                      className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                      disabled={loading || !controlArchivoAplica}
+                    />
+                    <span>Magnético (Digital)</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.file_type_physical}
+                      onChange={(e) => setFormData({ ...formData, file_type_physical: e.target.checked })}
+                      className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                      disabled={loading || !controlArchivoAplica}
+                    />
+                    <span>Físico (Papel)</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* 2. Ubicación */}
+              <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Ubicación de almacenamiento
                 </label>
@@ -582,7 +617,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                 />
               </div>
 
-              {/* Retención central */}
+              {/* 3. Retención */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Retención central (años)
@@ -598,30 +633,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                 />
               </div>
 
-              {/* Checkboxes */}
-              <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-3">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={formData.file_type_magnetic}
-                    onChange={(e) => setFormData({ ...formData, file_type_magnetic: e.target.checked })}
-                    className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                    disabled={loading || !controlArchivoAplica}
-                  />
-                  <span>Magnético</span>
-                </label>
-
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={formData.file_type_physical}
-                    onChange={(e) => setFormData({ ...formData, file_type_physical: e.target.checked })}
-                    className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                    disabled={loading || !controlArchivoAplica}
-                  />
-                  <span>Físico</span>
-                </label>
-
+              <div className="flex items-end pb-2">
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -630,41 +642,49 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                     className="rounded border-gray-300 text-green-600 focus:ring-green-500"
                     disabled={loading || !controlArchivoAplica}
                   />
-                  <span>Retención gestión</span>
+                  <span>Retención en gestión</span>
                 </label>
+              </div>
 
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={formData.disposition_total_conservation}
-                    onChange={(e) => setFormData({ ...formData, disposition_total_conservation: e.target.checked })}
-                    className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                    disabled={loading || !controlArchivoAplica}
-                  />
-                  <span>Conservación total</span>
+              {/* 4. Disposición Final */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Disposición final
                 </label>
+                <div className="flex flex-wrap gap-6">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.disposition_total_conservation}
+                      onChange={(e) => setFormData({ ...formData, disposition_total_conservation: e.target.checked })}
+                      className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                      disabled={loading || !controlArchivoAplica}
+                    />
+                    <span>Conservación total</span>
+                  </label>
 
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={formData.disposition_selection}
-                    onChange={(e) => setFormData({ ...formData, disposition_selection: e.target.checked })}
-                    className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                    disabled={loading || !controlArchivoAplica}
-                  />
-                  <span>Selección</span>
-                </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.disposition_selection}
+                      onChange={(e) => setFormData({ ...formData, disposition_selection: e.target.checked })}
+                      className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                      disabled={loading || !controlArchivoAplica}
+                    />
+                    <span>Selección</span>
+                  </label>
 
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={formData.disposition_elimination}
-                    onChange={(e) => setFormData({ ...formData, disposition_elimination: e.target.checked })}
-                    className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                    disabled={loading || !controlArchivoAplica}
-                  />
-                  <span>Eliminación</span>
-                </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.disposition_elimination}
+                      onChange={(e) => setFormData({ ...formData, disposition_elimination: e.target.checked })}
+                      className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                      disabled={loading || !controlArchivoAplica}
+                    />
+                    <span>Eliminación</span>
+                  </label>
+                </div>
               </div>
             </div>
           </div>
