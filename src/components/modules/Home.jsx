@@ -43,6 +43,8 @@ const getGreeting = () => {
   return 'Buenas noches';
 };
 
+
+
 const formatDate = () => {
   return new Date().toLocaleDateString('es-CO', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
@@ -189,6 +191,7 @@ function CaracterizacionModal({ code, onClose }) {
 
   return (
     <>
+ 
       <div
         className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
         style={{ background: 'rgba(20,28,24,0.6)' }}

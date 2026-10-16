@@ -81,15 +81,6 @@ export function hoyISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// 'DD/MM/AA' o 'DD/MM/AAAA' (app de sistemas) → 'AAAA-MM-DD'
-function ddmmaaToISO(s) {
-  if (!s) return null;
-  const m = String(s).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
-  if (!m) return null;
-  const y = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
-  return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
-}
-
 // ─── Compresión de foto en el navegador (máx 1280px, JPEG 0.8) ────
 async function comprimirImagen(fileOrBlob, maxLado = 1280, calidad = 0.8) {
   const url = URL.createObjectURL(fileOrBlob);
@@ -109,15 +100,6 @@ async function comprimirImagen(fileOrBlob, maxLado = 1280, calidad = 0.8) {
   } finally {
     URL.revokeObjectURL(url);
   }
-}
-
-function dataUrlToBlob(dataUrl) {
-  const [head, b64] = dataUrl.split(',');
-  const mime = head.match(/data:(.*?);/)?.[1] || 'image/jpeg';
-  const bin = atob(b64);
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return new Blob([arr], { type: mime });
 }
 
 function friendlyError(e) {
@@ -346,81 +328,22 @@ export function useMantenimiento(tipo) {
     }
   }, []);
 
-  // ══════════════════════════════════════════════════════════════════
-  //  IMPORTAR garana_datos.json (app de sistemas) — solo computadores
-  //  Las claves de licencia NO se importan: se conserva solo el texto
-  //  antes de " / " (ej. "Kaspersky / 4NP1X-..." → "Kaspersky").
-  // ══════════════════════════════════════════════════════════════════
-  const importarJSON = useCallback(async (json) => {
-    const resumen = { creados: 0, omitidos: [], mantenimientos: 0, errores: [] };
-    if (tipo !== 'computador') {
-      resumen.errores.push('La importación solo aplica a computadores.');
-      return resumen;
-    }
-    const pcs   = Array.isArray(json?.pcs)   ? json.pcs   : [];
-    const mants = Array.isArray(json?.mants) ? json.mants : [];
-    const existentes = new Set(equipos.map((e) => e.codigo.toUpperCase()));
-    const sinClave = (v) => (v ? String(v).split(' / ')[0].replace(/\/\s*$/, '').trim() : '');
-    const na = (v) => (!v || /^no aplica$/i.test(String(v).trim()) ? '' : String(v).trim());
-
-    for (const pc of pcs) {
-      const codigo = String(pc.nombre || '').trim().toUpperCase();
-      if (!codigo) continue;
-      if (existentes.has(codigo)) { resumen.omitidos.push(codigo); continue; }
-
-      const id = crypto.randomUUID();
-      let fotoPath = null;
-      try {
-        if (pc.foto && String(pc.foto).startsWith('data:image')) {
-          fotoPath = await subirFoto(id, dataUrlToBlob(pc.foto));
-        }
-        const payload = buildEquipoPayload({
-          codigo,
-          tipo_equipo: pc.tipo,
-          serial: pc.serie,
-          area: pc.area,
-          usuario_responsable: pc.usuario,
-          estado: ESTADOS_EQUIPO.includes(pc.estado) ? pc.estado : 'Bueno',
-          fecha_compra: ddmmaaToISO(pc.fcompra),
-          garantia_hasta: ddmmaaToISO(pc.garantia),
-          especificaciones: {
-            so: sinClave(pc.so), procesador: na(pc.proc), ram: na(pc.ram), disco: na(pc.disco),
-            almacenamiento: na(pc.almac), ofimatica: sinClave(pc.ofim), antivirus: sinClave(pc.antivirus),
-            monitor: pc.monitor === 'SI', teclado: pc.teclado === 'SI',
-            mouse: pc.mouse === 'SI', ups: pc.ups === 'SI', otros: na(pc.otros),
-          },
-        });
-        const { error: e } = await supabase.from('mant_equipo')
-          .insert({ id, tipo, ...payload, foto_path: fotoPath });
-        if (e) throw e;
-        resumen.creados++;
-
-        const propios = mants.filter((m) => m.pcId === pc.id);
-        for (const m of propios) {
-          const { error: e2 } = await supabase.from('mant_registro').insert({
-            equipo_id: id,
-            fecha: ddmmaaToISO(m.fecha) || hoyISO(),
-            tipo: TIPOS_MANT.includes(m.tipo) ? m.tipo : 'Preventivo',
-            descripcion: (m.trabajo || '').trim() || '(sin descripción)',
-            tecnico: (m.tecnico || '').trim() || null,
-            estado: ESTADOS_REGISTRO.includes(m.estado) ? m.estado : 'Realizado',
-          });
-          if (!e2) resumen.mantenimientos++;
-        }
-      } catch (e) {
-        if (fotoPath) await borrarFoto(fotoPath);
-        resumen.errores.push(`${codigo}: ${friendlyError(e)}`);
-      }
-    }
-    await fetchAll();
-    return resumen;
-  }, [tipo, equipos, fetchAll]);
+  // ── URLs frescas justo antes de imprimir (las firmadas duran 1 hora) ──
+  const getFotoUrlsFrescas = useCallback(async (lista) => {
+    const paths = (lista || []).map((e) => e.foto_path).filter(Boolean);
+    if (!paths.length) return {};
+    const { data, error: e } = await supabase.storage.from(BUCKET).createSignedUrls(paths, 600);
+    if (e) return fotoUrls;
+    const map = {};
+    (data || []).forEach((x) => { if (x.signedUrl) map[x.path] = x.signedUrl; });
+    return map;
+  }, [fotoUrls]);
 
   return {
     equipos, registros, fotoUrls, loading, error,
     fetchAll,
     createEquipo, updateEquipo, deleteEquipo,
     createRegistro, updateRegistro, deleteRegistro,
-    importarJSON,
+    getFotoUrlsFrescas,
   };
 }

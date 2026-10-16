@@ -6,6 +6,7 @@
 //   Info     → Ficha del equipo + características + historial
 //   Mant     → Ficha de mantenimiento (seleccionar fila → editar/eliminar)
 //   Imprimir → Hoja de vida formato RE-GR-11 (utils/printHojaVidaEquipo)
+//   Excel    → Plantilla oficial RE-GR-11 del bucket templates (utils/exportHojaVidaEquipo)
 //
 // Uso: <MantenimientoEquipos tipo="computador" />   (o "maquinaria")
 // Permisos: mantenimiento:<computadores|maquinaria>:view/create/edit/delete/export
@@ -15,7 +16,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/app/components/ui/dialog';
 import {
   Monitor, Wrench, Printer, ChevronDown, ChevronUp, FileText, Pencil, ArrowLeft,
-  Plus, Trash2, Camera, Loader2, Upload, AlertTriangle, CheckCircle2, X, Search,
+  Plus, Trash2, Camera, Loader2, AlertTriangle, FileSpreadsheet, CheckCircle2, X, Search,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import {
@@ -23,6 +24,7 @@ import {
   fmtFecha, hoyISO,
 } from '@/hooks/useMantenimiento';
 import { printHojasVida } from '@/utils/printHojaVidaEquipo';
+import { exportHojaVidaExcel } from '@/utils/exportHojaVidaEquipo';
 
 // ── Paleta Garana ────────────────────────────────────────────────────
 const C = {
@@ -200,7 +202,7 @@ export default function MantenimientoEquipos({ tipo = 'computador' }) {
   const {
     equipos, registros, fotoUrls, loading, error, fetchAll,
     createEquipo, updateEquipo, deleteEquipo,
-    createRegistro, updateRegistro, deleteRegistro, importarJSON,
+    createRegistro, updateRegistro, deleteRegistro, getFotoUrlsFrescas,
   } = useMantenimiento(tipo);
 
   const [view, setView]         = useState('portada');   // portada | info | mant
@@ -223,10 +225,10 @@ export default function MantenimientoEquipos({ tipo = 'computador' }) {
   const [pickVal, setPickVal]     = useState('');
   const [confirm, setConfirm]     = useState(null);      // { title, text, onYes }
   const [saving, setSaving]       = useState(false);
+  const [exportando, setExportando] = useState(false);
 
   const fotoEqRef   = useRef(null);
   const fotoMantRef = useRef(null);
-  const jsonRef     = useRef(null);
 
   useEffect(() => { if (can.view) fetchAll(); }, [fetchAll]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -258,9 +260,38 @@ export default function MantenimientoEquipos({ tipo = 'computador' }) {
     setView(v); setEquipoId(id); setSelReg(null); setMenuOpen(false); setPick(null);
   };
 
-  const imprimir = (lista) => {
-    const ok = printHojasVida({ equipos: lista, registros, fotoUrls, config: cfg });
-    if (!ok) showMsg('error', 'No se pudo abrir la ventana de impresión. Revisa el bloqueador de ventanas emergentes.');
+  // Abre la ventana ANTES del await (si no, el navegador la bloquea como emergente)
+  const imprimir = async (lista) => {
+    const win = window.open('', '_blank');
+    if (win) win.document.write('<p style="font-family:Georgia;padding:20px;color:#2e5244">Generando hoja de vida…</p>');
+    const urls = await getFotoUrlsFrescas(lista);
+    const ok = printHojasVida({ equipos: lista, registros, fotoUrls: urls, config: cfg, win });
+    if (!ok) {
+      if (win) win.close();
+      showMsg('error', win
+        ? 'No hay información para imprimir.'
+        : 'No se pudo abrir la ventana de impresión. Revisa el bloqueador de ventanas emergentes.');
+    }
+  };
+
+  // Excel sobre la plantilla oficial RE-GR-11 (bucket templates)
+  const descargarExcel = async (eq) => {
+    if (!eq || exportando) return;
+    setExportando(true);
+    try {
+      const urls = await getFotoUrlsFrescas([eq]);
+      await exportHojaVidaExcel({
+        equipo: eq,
+        registros: registros.filter((r) => r.equipo_id === eq.id),
+        fotoUrl: urls[eq.foto_path] || null,
+        config: cfg,
+      });
+      showMsg('success', `Hoja de vida de ${eq.codigo} descargada en Excel.`);
+    } catch (e) {
+      showMsg('error', e.message || 'No se pudo generar el Excel.');
+    } finally {
+      setExportando(false);
+    }
   };
 
   // ── Equipo: abrir / guardar / eliminar ─────────────────────────────
@@ -364,26 +395,6 @@ export default function MantenimientoEquipos({ tipo = 'computador' }) {
     });
   };
 
-  // ── Importar JSON de la app de sistemas ────────────────────────────
-  const onImportJSON = async (e) => {
-    const f = e.target.files?.[0];
-    e.target.value = '';
-    if (!f) return;
-    try {
-      const json = JSON.parse(await f.text());
-      setSaving(true);
-      const r = await importarJSON(json);
-      setSaving(false);
-      const partes = [`${r.creados} equipo(s) importado(s)`, `${r.mantenimientos} mantenimiento(s)`];
-      if (r.omitidos.length) partes.push(`omitidos por código repetido: ${r.omitidos.join(', ')}`);
-      if (r.errores.length) partes.push(`errores: ${r.errores.join(' | ')}`);
-      showMsg(r.errores.length ? 'error' : 'success', partes.join(' · '));
-    } catch {
-      setSaving(false);
-      showMsg('error', 'El archivo no es un JSON válido.');
-    }
-  };
-
   // ══════════════════════════════════════════════════════════════════
   //  VISTAS
   // ══════════════════════════════════════════════════════════════════
@@ -449,10 +460,15 @@ export default function MantenimientoEquipos({ tipo = 'computador' }) {
                       icon={<FileText size={20} />}
                       label="Ver información y mantenimientos"
                       hint={pick === 'todos' ? 'Selecciona un equipo de la lista' : null} />
+                    <PopBtn disabled={!can.export || pick === 'todos' || exportando}
+                      onClick={() => descargarExcel(equipos.find((e) => e.id === pick))}
+                      icon={exportando ? <Loader2 size={20} className="animate-spin" /> : <FileSpreadsheet size={20} />}
+                      label="Descargar Excel"
+                      hint={!can.export ? 'Sin permiso de exportar' : pick === 'todos' ? 'Selecciona un equipo de la lista' : 'Plantilla oficial RE-GR-11'} />
                     <PopBtn disabled={!can.export} onClick={() => imprimir(pick === 'todos' ? equipos : equipos.filter((e) => e.id === pick))}
                       icon={<Printer size={20} />}
                       label="Imprimir o guardar PDF"
-                      hint={!can.export ? 'Sin permiso de exportar' : 'Formato RE-GR-11'} />
+                      hint={!can.export ? 'Sin permiso de exportar' : pick === 'todos' ? 'Todas las hojas de vida' : 'Formato RE-GR-11'} />
                   </div>
                 )}
               </div>
@@ -476,17 +492,6 @@ export default function MantenimientoEquipos({ tipo = 'computador' }) {
             onClick={() => { if (!n) { showMsg('error', 'Primero registra un equipo.'); return; } setPickVal(''); setPickModal(true); }} />
         </div>
 
-        {/* Importar JSON (app de sistemas) */}
-        {can.create && tipo === 'computador' && (
-          <div className="absolute" style={{ right: 16, bottom: 16 }}>
-            <button type="button" onClick={() => jsonRef.current?.click()}
-              className="flex items-center gap-1.5" title="Importar garana_datos.json de la app anterior"
-              style={{ background: 'transparent', border: `1px solid ${C.chipBd}`, color: C.chipTx, borderRadius: 8, padding: '6px 10px', fontSize: 12 }}>
-              <Upload size={14} /> Importar datos (.json)
-            </button>
-            <input ref={jsonRef} type="file" accept="application/json,.json" hidden onChange={onImportJSON} />
-          </div>
-        )}
       </div>
     );
   };
@@ -500,6 +505,7 @@ export default function MantenimientoEquipos({ tipo = 'computador' }) {
         <ViewHeader title={equipo.codigo} subtitle="Información del equipo y mantenimientos">
           {can.edit && <BtnW onClick={() => abrirEquipo(equipo)}><Pencil size={15} />Editar equipo</BtnW>}
           <BtnW onClick={() => irA('mant')}><Wrench size={15} />Ficha Mantenimiento</BtnW>
+          {can.export && <BtnW onClick={() => descargarExcel(equipo)} disabled={exportando}>{exportando ? <Loader2 size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}Excel</BtnW>}
           {can.export && <BtnW onClick={() => imprimir([equipo])}><Printer size={15} />Imprimir</BtnW>}
           <BtnW onClick={() => irA('portada', null)}><ArrowLeft size={15} />Volver</BtnW>
         </ViewHeader>
@@ -564,6 +570,7 @@ export default function MantenimientoEquipos({ tipo = 'computador' }) {
           {can.delete && <BtnW danger disabled={!selReg} onClick={pedirEliminarRegistro} title={!selReg ? 'Selecciona una fila' : ''}><Trash2 size={15} />Eliminar registro</BtnW>}
           {can.edit && <BtnW disabled={!selReg} onClick={() => abrirRegistro(registros.find((r) => r.id === selReg))} title={!selReg ? 'Selecciona una fila' : ''}><Pencil size={15} />Editar registro</BtnW>}
           {can.create && <BtnW onClick={() => abrirRegistro(null)}><Plus size={15} />Nuevo registro</BtnW>}
+          {can.export && <BtnW onClick={() => descargarExcel(equipo)} disabled={exportando}>{exportando ? <Loader2 size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}Excel</BtnW>}
           {can.export && <BtnW onClick={() => imprimir([equipo])}><Printer size={15} />Imprimir</BtnW>}
           <BtnW onClick={() => irA('info')}><ArrowLeft size={15} />Volver</BtnW>
         </ViewHeader>
