@@ -3,6 +3,7 @@ import { X, Upload, FileText, Save, AlertCircle, CheckCircle } from 'lucide-reac
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
 import { useDocumentActions } from '../../../hooks/useDocumentActions';
+import { useDocumentTraceability } from '../../../hooks/useDocumentTraceability'; // 🆕
 
 /**
  * Modal unificado para editar documentos
@@ -11,14 +12,34 @@ import { useDocumentActions } from '../../../hooks/useDocumentActions';
  * 1. Solo editar metadatos (nombre, objetivo, alcance) → UPDATE directo
  * 2. Solo cambiar archivo → Requiere motivo + aprobación
  * 3. Editar metadatos + archivo → Requiere motivo + aprobación
+ *
+ * 🆕 MODO CORRECCIÓN DIRECTA (trazabilidad DESACTIVADA + admin/gerencia):
+ *    Se edita TODO (código, nombre, tipo, proceso, datos) y el archivo se
+ *    reemplaza en el mismo documento: sin versión nueva, motivo ni aprobación.
+ *    El código anterior queda libre para reutilizarse.
+ *    La trazabilidad se activa desde el Listado Maestro (solo admin).
  */
+
+// Mismo formato que el CHECK de la tabla document (document_code_format)
+const CODE_REGEX = /^[A-Z]{2,5}-[A-Z]{1,10}-[0-9]{2,3}$/;
 const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
-  const { user } = useAuth();
+  const { user, isAdmin, isGerencia } = useAuth();
   const { notifyManagers } = useDocumentActions(); // 🆕 AGREGAR ESTA LÍNEA
+  const { traceabilityEnabled, loading: traceabilityLoading } = useDocumentTraceability(); // 🆕
+
+  // 🆕 Corrección directa: solo admin/gerencia y con trazabilidad apagada
+  const directMode = !traceabilityLoading && !traceabilityEnabled && (isAdmin || isGerencia);
+
+  // 🆕 Catálogos para editar tipo y proceso (solo se usan en corrección directa)
+  const [docTypes, setDocTypes] = useState([]);
+  const [processList, setProcessList] = useState([]);
   
   
   // Estados del formulario (valores por defecto para evitar warnings)
   const [formData, setFormData] = useState({
+    code: '',              // 🆕 editable solo en corrección directa
+    document_type_id: '',  // 🆕
+    process_id: '',        // 🆕
     name: '',
     objective: '',
     scope: '',
@@ -48,6 +69,9 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
     if (isOpen && document) {
       console.log('📝 Inicializando formulario con documento:', document.code);
       setFormData({
+        code: document.code || '',
+        document_type_id: document.document_type_id || '',
+        process_id: document.process_id || '',
         name: document.name || '',
         objective: document.objective || '',
         scope: document.scope || '',
@@ -69,6 +93,19 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
     }
   }, [isOpen, document]);
 
+  // 🆕 Cargar tipos y procesos cuando aplica la corrección directa
+  useEffect(() => {
+    if (!isOpen || !directMode) return;
+    (async () => {
+      const [{ data: types }, { data: procs }] = await Promise.all([
+        supabase.from('document_type').select('id, code, name').eq('is_active', true).order('display_order'),
+        supabase.from('process').select('id, code, name').eq('is_active', true).order('display_order'),
+      ]);
+      setDocTypes(types || []);
+      setProcessList(procs || []);
+    })();
+  }, [isOpen, directMode]);
+
   // Limpiar al cerrar
   useEffect(() => {
     if (!isOpen) {
@@ -86,7 +123,19 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
   // 🆕 Control de Archivo (ubicación, tipo de archivo, retención, disposición)
   // Solo aplica cuando el documento es un Registro (RE) o Formato (FO).
   // El tipo de documento no se edita aquí, así que basta con leerlo del documento.
-  const controlArchivoAplica = ['RE', 'FO'].includes(document?.document_type?.code);
+  // 🆕 En corrección directa el tipo se puede cambiar: se usa el seleccionado
+  const selectedTypeCode = directMode
+    ? (docTypes.find(t => t.id === formData.document_type_id)?.code || document?.document_type?.code)
+    : document?.document_type?.code;
+  const controlArchivoAplica = ['RE', 'FO'].includes(selectedTypeCode);
+
+  // 🆕 Cambios de identificación (solo corrección directa)
+  const hasIdentityChanges = () => directMode && (
+    (formData.code || '').trim().toUpperCase() !== (document.code || '') ||
+    formData.name !== (document.name || '') ||
+    formData.document_type_id !== (document.document_type_id || '') ||
+    formData.process_id !== (document.process_id || '')
+  );
 
   // Detectar si hubo cambios en metadatos (EXCLUYENDO nombre)
   const hasMetadataChanges = () => {
@@ -133,7 +182,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
 
       console.log('📎 Archivo seleccionado:', file.name, file.type);
       setNewFile(file);
-      setShowReasonField(true); // Mostrar campo de motivo
+      setShowReasonField(!directMode); // 🆕 En corrección directa no se pide motivo
       setError(null);
     }
   };
@@ -278,6 +327,126 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
     }
   };
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // 🆕 CORRECCIÓN DIRECTA: actualiza el MISMO documento (sin versión nueva)
+  // ─────────────────────────────────────────────────────────────────────────
+  const saveDirectCorrection = async () => {
+    const newCode = (formData.code || '').trim().toUpperCase();
+    const codeChanged = newCode !== document.code;
+
+    if (!formData.name || !formData.name.trim()) throw new Error('El nombre es obligatorio');
+    if (!CODE_REGEX.test(newCode)) {
+      throw new Error('Código inválido. Formato esperado: XX-XX-00 (ej: RE-GS-05)');
+    }
+
+    const typeObj = docTypes.find(t => t.id === formData.document_type_id);
+    const procObj = processList.find(p => p.id === formData.process_id);
+
+    // Código ya usado por OTRO documento
+    if (codeChanged) {
+      const { data: existing, error: exErr } = await supabase
+        .from('document')
+        .select('id')
+        .eq('code', newCode)
+        .neq('id', document.id)
+        .limit(1);
+      if (exErr) throw exErr;
+      if (existing && existing.length > 0) throw new Error(`El código ${newCode} ya existe en otro documento`);
+    }
+
+    // Aviso si el código no coincide con el tipo/proceso elegidos
+    const [codeType, codeProc] = newCode.split('-');
+    if ((typeObj && codeType !== typeObj.code) || (procObj && codeProc !== procObj.code)) {
+      const ok = window.confirm(
+        `⚠️ El código ${newCode} no coincide con el tipo (${typeObj?.code || '?'}) ` +
+        `y/o el proceso (${procObj?.code || '?'}) seleccionados.\n\n¿Guardar de todas formas?`
+      );
+      if (!ok) return false;
+    }
+
+    const ok = window.confirm(
+      `¿Aplicar corrección directa?\n\n` +
+      (codeChanged ? `• Código: ${document.code} → ${newCode} (el anterior queda libre)\n` : '') +
+      (newFile ? `• Se reemplaza el archivo\n` : '') +
+      `• Sin versión nueva ni aprobación (carga inicial)`
+    );
+    if (!ok) return false;
+
+    // Archivo nuevo → se sube con el código/tipo nuevos
+    let filePatch = {};
+    if (newFile) {
+      setUploadProgress(40);
+      const ext = newFile.name.split('.').pop().toLowerCase();
+      const folder = typeObj?.code || selectedTypeCode || 'general';
+      const version = document.version || 1;
+      let path = `${folder}/${newCode}_v${version}.${ext}`;
+
+      let { error: upErr } = await supabase.storage.from('documents')
+        .upload(path, newFile, { cacheControl: '3600', upsert: false });
+
+      // Si ya existe un archivo con ese nombre, se usa uno único (no se sobrescribe)
+      if (upErr && /exist|duplicate/i.test(upErr.message || '')) {
+        path = `${folder}/${newCode}_v${version}_${Date.now()}.${ext}`;
+        ({ error: upErr } = await supabase.storage.from('documents')
+          .upload(path, newFile, { cacheControl: '3600', upsert: false }));
+      }
+      if (upErr) throw new Error(`Error al subir archivo: ${upErr.message}`);
+
+      filePatch = {
+        file_path: path,
+        file_name: newFile.name,
+        file_size: newFile.size,
+        mime_type: newFile.type || null,
+      };
+    }
+
+    setUploadProgress(75);
+    const { data: updated, error: updErr } = await supabase
+      .from('document')
+      .update({
+        code: newCode,
+        name: formData.name.trim(),
+        document_type_id: formData.document_type_id || document.document_type_id,
+        process_id: formData.process_id || document.process_id,
+        objective: formData.objective || null,
+        scope: formData.scope || null,
+        responsible: formData.responsible || null,
+        storage_location: formData.storage_location || null,
+        retention_central: formData.retention_central ? parseInt(formData.retention_central) : null,
+        file_type_magnetic: formData.file_type_magnetic,
+        file_type_physical: formData.file_type_physical,
+        retention_management: formData.retention_management,
+        disposition_total_conservation: formData.disposition_total_conservation,
+        disposition_selection: formData.disposition_selection,
+        disposition_elimination: formData.disposition_elimination,
+        ...filePatch,
+        updated_by: user?.id || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', document.id)
+      .select('id');
+
+    if (updErr) {
+      if (/document_code_version_unique|duplicate key/i.test(updErr.message)) {
+        throw new Error(`El código ${newCode} ya existe`);
+      }
+      if (/document_code_format/i.test(updErr.message)) {
+        throw new Error('El código no cumple el formato XX-XX-00');
+      }
+      throw updErr;
+    }
+    if (!updated || updated.length === 0) throw new Error('No tienes permiso para editar este documento');
+
+    // Borrar el archivo anterior (solo admin puede borrar en Storage; si falla no pasa nada)
+    if (newFile && document.file_path && document.file_path !== filePatch.file_path && isAdmin) {
+      const { error: rmErr } = await supabase.storage.from('documents').remove([document.file_path]);
+      if (rmErr) console.warn('⚠️ No se pudo borrar el archivo anterior:', rmErr.message);
+    }
+
+    setUploadProgress(100);
+    return true;
+  };
+
   // Manejar guardado
   const handleSave = async () => {
     try {
@@ -286,6 +455,21 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
 
       const hasFileChange = newFile !== null;
       const hasMetaChange = hasMetadataChanges();
+
+      // 🆕 CORRECCIÓN DIRECTA
+      if (directMode) {
+        if (!hasFileChange && !hasMetaChange && !hasIdentityChanges()) {
+          setError('No hay cambios para guardar');
+          return;
+        }
+        const done = await saveDirectCorrection();
+        if (done) {
+          alert('✅ Documento corregido correctamente');
+          onSuccess();
+          onClose();
+        }
+        return;
+      }
 
       // Validaciones
       if (!hasFileChange && !hasMetaChange) {
@@ -390,7 +574,23 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
 
         {/* Contenido */}
         <div className="p-6 space-y-6">
+          {/* 🆕 Aviso de corrección directa */}
+          {directMode && (
+            <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4 flex gap-3">
+              <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-amber-900">
+                <p className="font-bold mb-1">Modo corrección directa (carga inicial del sistema)</p>
+                <p>
+                  La trazabilidad de cambios está <strong>desactivada</strong>. Puedes editar código, nombre,
+                  tipo, proceso y reemplazar el archivo. Los cambios se aplican de inmediato,
+                  sin versión nueva ni aprobación. El código anterior queda libre.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Alerta informativa */}
+          {!directMode && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3">
             <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
             <div className="text-sm text-blue-800">
@@ -401,11 +601,12 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
               </ul>
             </div>
           </div>
+          )}
 
           {/* Sección 1: Cambio de Archivo */}
           <div className="border-2 rounded-lg p-4" style={{ borderColor: '#6dbd96' }}>
             <h3 className="text-lg font-bold mb-4" style={{ color: '#2e5244' }}>
-              🔄 Cambiar Archivo
+              🔄 {directMode ? 'Reemplazar Archivo' : 'Cambiar Archivo'}
             </h3>
 
             <div className="space-y-4">
@@ -470,21 +671,77 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Nombre - READ ONLY */}
+              {/* 🆕 Identificación (solo corrección directa) */}
+              {directMode && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Código <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.code}
+                      onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                      className="w-full p-2 border rounded-lg font-mono focus:ring-2 focus:ring-amber-400 focus:border-amber-400"
+                      disabled={loading}
+                      placeholder="Ej: RE-GS-05"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Formato: TIPO-PROCESO-NÚMERO</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de documento</label>
+                    <select
+                      value={formData.document_type_id}
+                      onChange={(e) => setFormData({ ...formData, document_type_id: e.target.value })}
+                      className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-amber-400"
+                      disabled={loading}
+                    >
+                      {docTypes.map(t => (
+                        <option key={t.id} value={t.id}>{t.code} - {t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Proceso</label>
+                    <select
+                      value={formData.process_id}
+                      onChange={(e) => setFormData({ ...formData, process_id: e.target.value })}
+                      className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-amber-400"
+                      disabled={loading}
+                    >
+                      {processList.map(p => (
+                        <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {/* Nombre: editable solo en corrección directa */}
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nombre del documento <span className="text-gray-400">(no editable)</span>
+                  Nombre del documento{' '}
+                  {directMode
+                    ? <span className="text-red-500">*</span>
+                    : <span className="text-gray-400">(no editable)</span>}
                 </label>
                 <input
                   type="text"
                   value={formData.name}
-                  disabled={true}
-                  className="w-full p-2 border rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  disabled={!directMode || loading}
+                  className={`w-full p-2 border rounded-lg ${directMode
+                    ? 'focus:ring-2 focus:ring-amber-400 focus:border-amber-400'
+                    : 'bg-gray-50 text-gray-600 cursor-not-allowed'}`}
                   placeholder="Nombre del documento"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  ℹ️ El nombre del documento no puede modificarse
-                </p>
+                {!directMode && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    ℹ️ El nombre del documento no puede modificarse
+                  </p>
+                )}
               </div>
 
               {/* 🆕 Objetivo y Alcance: NO aplican para Formatos (FO) ni Registros (RE) */}
@@ -733,7 +990,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
               style={{ backgroundColor: '#6dbd96' }}
             >
               <Save className="h-5 w-5" />
-              {loading ? 'Guardando...' : 'Guardar Cambios'}
+              {loading ? 'Guardando...' : directMode ? 'Aplicar corrección' : 'Guardar Cambios'}
             </button>
           </div>
         </div>

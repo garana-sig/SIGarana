@@ -5,6 +5,8 @@ import { useFileDownload } from '@/hooks/useFileDownload';
 import ApprovalModal from './ApprovalModal';
 import EditDocumentModal from './EditDocumentModal';
 import DocumentViewerModal from './DocumentViewerModal';
+import { useAuth } from '@/context/AuthContext';                              // 🆕
+import { useDocumentTraceability } from '@/hooks/useDocumentTraceability';   // 🆕
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -12,7 +14,7 @@ import { Badge } from '@/app/components/ui/badge';
 import {
   FileText, Search, Plus, Eye, Edit, Download,
   Filter, RefreshCw, ChevronDown, ChevronRight, Loader2,
-  ChevronsLeft, ChevronsRight,
+  ChevronsLeft, ChevronsRight, ShieldCheck, ShieldOff,
 } from 'lucide-react';
 
 // ── Opciones de página ────────────────────────────────────────────────────────
@@ -108,6 +110,27 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
   const [documentToEdit,      setDocumentToEdit]      = useState(null);
   const [isViewerModalOpen,   setIsViewerModalOpen]   = useState(false);
   const [documentToView,      setDocumentToView]      = useState(null);
+
+  // 🆕 Trazabilidad de cambios (interruptor solo admin)
+  const { isAdmin, isGerencia } = useAuth();
+  const {
+    traceabilityEnabled, loading: traceabilityLoading, saving: traceabilitySaving, setTraceability,
+  } = useDocumentTraceability();
+
+  const handleToggleTraceability = async () => {
+    const next = !traceabilityEnabled;
+    const msg = next
+      ? '¿ACTIVAR la trazabilidad de cambios?\n\n' +
+        '• Cambiar un archivo creará una nueva versión con motivo y aprobación de gerencia.\n' +
+        '• Código, tipo y proceso quedarán bloqueados en la edición.\n' +
+        '• Se termina el modo de corrección directa (carga inicial).'
+      : '¿DESACTIVAR la trazabilidad de cambios?\n\n' +
+        '• Admin y gerencia podrán corregir directamente código, nombre, tipo, proceso y archivo.\n' +
+        '• Los cambios NO generarán versiones ni requerirán aprobación.';
+    if (!window.confirm(msg)) return;
+    const res = await setTraceability(next);
+    if (!res.success) alert(`❌ ${res.error}`);
+  };
 
   // ── Paginación ────────────────────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useState(1);
@@ -232,9 +255,39 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
               <CardTitle style={{ color: '#2e5244' }}>Listado Maestro de Documentos</CardTitle>
               <p className="text-sm text-gray-600">Vista centralizada del sistema documental SIG</p>
             </div>
-            <Button onClick={onCreateNew} style={{ backgroundColor: '#2e5244' }} className="text-white">
-              <Plus className="h-4 w-4 mr-2" />Nuevo
-            </Button>
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {/* 🆕 Trazabilidad: admin la cambia; gerencia solo ve el estado */}
+              {!traceabilityLoading && isAdmin && (
+                <Button
+                  variant="outline"
+                  onClick={handleToggleTraceability}
+                  disabled={traceabilitySaving}
+                  title="Solo el administrador puede cambiar esta opción"
+                  style={{
+                    borderColor: traceabilityEnabled ? '#6dbd96' : '#f59e0b',
+                    color: traceabilityEnabled ? '#2e5244' : '#92400e',
+                    backgroundColor: traceabilityEnabled ? '#f0fdf4' : '#fffbeb',
+                  }}
+                >
+                  {traceabilitySaving
+                    ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    : traceabilityEnabled
+                      ? <ShieldCheck className="h-4 w-4 mr-2" />
+                      : <ShieldOff className="h-4 w-4 mr-2" />}
+                  Trazabilidad: {traceabilityEnabled ? 'Activada' : 'Desactivada'}
+                </Button>
+              )}
+              {!traceabilityLoading && !isAdmin && isGerencia && !traceabilityEnabled && (
+                <Badge style={{ backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #f59e0b' }}>
+                  Corrección directa activa
+                </Badge>
+              )}
+              {onCreateNew && (
+                <Button onClick={onCreateNew} style={{ backgroundColor: '#2e5244' }} className="text-white">
+                  <Plus className="h-4 w-4 mr-2" />Nuevo
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
 
