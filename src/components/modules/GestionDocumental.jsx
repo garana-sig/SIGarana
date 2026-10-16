@@ -1,5 +1,7 @@
 // src/components/modules/GestionDocumental.jsx
-// ✅ VERSIÓN FINAL - Dashboard futurista + todos los submódulos
+// ✅ Dashboard futurista + todos los submódulos
+// 🆕 Una tarjeta por TIPO de documento (leídos de document_type) +
+//    Listado Maestro, Por Área y Crear Nuevo
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -12,8 +14,7 @@ import ModuleHero from '@/components/ModuleHero';
 import ListadoMaestro from './GestionDocumental/ListadoMaestro';
 import FormularioCreacion from './GestionDocumental/FormularioCreacion';
 import PorArea from './GestionDocumental/PorArea';
-import Procedimientos from './GestionDocumental/Procedimientos';
-import Formatos from './GestionDocumental/Formatos';
+import DocumentosPorTipo, { getDocTypeStyle } from './GestionDocumental/DocumentosPorTipo';
 import { 
   FileText, 
   FolderOpen,
@@ -35,6 +36,8 @@ export default function GestionDocumental() {
   const [documentTypes, setDocumentTypes] = useState([]);
   const [processes, setProcesses] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [typeCounts, setTypeCounts] = useState({});      // 🆕 document_type_id → cantidad
+  const [selectedType, setSelectedType] = useState(null); // 🆕 tipo abierto { code, name }
 
   useEffect(() => {
     loadMasterData();
@@ -62,6 +65,19 @@ export default function GestionDocumental() {
       if (procsError) throw procsError;
       setProcesses(procs || []);
 
+      // 🆕 Cantidad de documentos por tipo (solo la columna necesaria)
+      const { data: docs, error: docsError } = await supabase
+        .from('document')
+        .select('document_type_id');
+
+      if (!docsError) {
+        const counts = {};
+        (docs || []).forEach(d => {
+          if (d.document_type_id) counts[d.document_type_id] = (counts[d.document_type_id] || 0) + 1;
+        });
+        setTypeCounts(counts);
+      }
+
     } catch (err) {
       console.error('Error cargando datos:', err);
     } finally {
@@ -74,8 +90,6 @@ export default function GestionDocumental() {
   const canCreate       = isAdmin || isGerencia || hasPermission('gestion_documental:formatos:create');
   const canViewListado  = isAdmin || isGerencia || hasPermission('gestion_documental:listado_maestro:view');
   const canViewAreas    = isAdmin || isGerencia || hasPermission('gestion_documental:areas:view');
-  const canViewFormatos = isAdmin || isGerencia || hasPermission('gestion_documental:formatos:view');
-  const canViewProcs    = isAdmin || isGerencia || hasPermission('gestion_documental:procedimientos:view');
 
   if (!canView) {
     return (
@@ -96,10 +110,18 @@ export default function GestionDocumental() {
     setActiveView(view);
   };
 
+  // 🆕 Abrir la vista de un tipo de documento
+  const handleTypeClick = (type) => {
+    setSelectedType({ code: type.code, name: type.name });
+    setActiveView('tipo');
+  };
+
   const handleBack = () => {
+    setSelectedType(null);
     setShowSuccessMessage(false);
     setLastCreatedDocument(null);
     setActiveView('dashboard');
+    loadMasterData(); // 🆕 refrescar cantidades por tipo al volver
   };
 
   const handleCreateSuccess = (document) => {
@@ -251,61 +273,17 @@ export default function GestionDocumental() {
               <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-[#6f7b2c] rounded-full blur-3xl opacity-10" />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <FuturisticCard
-                title="Formatos"
-                description="Plantillas y formatos del sistema organizados"
-                icon={ClipboardList}
-                color="#6dbd96"
-                gradient="linear-gradient(135deg, #6dbd96 0%, #2e5244 100%)"
-                badge="FO - GU - RE"
-                onClick={() => handleCardClick('formatos')}
-                delay={0}
-              />
-
-              {canViewListado && (
-                <FuturisticCard
-                  title="Listado Maestro"
-                  description="Control total de documentos del sistema"
-                  icon={FileStack}
-                  color="#2e5244"
-                  gradient="linear-gradient(135deg, #2e5244 0%, #6dbd96 100%)"
-                  badge="Todos los documentos"
-                  onClick={() => handleCardClick('listado')}
-                  delay={0.1}
-                />
-              )}
-
-              {canViewAreas && (
-                <FuturisticCard
-                  title="Por Área"
-                  description="Navegación por procesos y departamentos"
-                  icon={Building2}
-                  color="#6f7b2c"
-                  gradient="linear-gradient(135deg, #6f7b2c 0%, #6dbd96 100%)"
-                  badge="7 Procesos activos"
-                  onClick={() => handleCardClick('areas')}
-                  delay={0.2}
-                />
-              )}
-
-              <FuturisticCard
-                title="Procedimientos"
-                description="Procedimientos operativos organizados"
-                icon={BookOpen}
-                color="#d97706"
-                gradient="linear-gradient(135deg, #d97706 0%, #f59e0b 100%)"
-                badge="Tipo PR"
-                onClick={() => handleCardClick('procedimientos')}
-                delay={0.3}
-              />
-
+            {/* 🆕 Herramientas */}
+            <h3 className="text-sm font-semibold uppercase tracking-wide mb-2" style={{ color: '#2e5244' }}>
+              Herramientas
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
               {canCreate && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.5, delay: 0.4 }}
-                  className="md:col-span-2 lg:col-span-1"
+                  transition={{ duration: 0.5, delay: 0 }}
+                 
                 >
                   <Card 
                     className="relative overflow-hidden border-2 border-dashed cursor-pointer hover:shadow-2xl transition-all group h-full"
@@ -379,12 +357,68 @@ export default function GestionDocumental() {
                   </Card>
                 </motion.div>
               )}
+
+              {canViewListado && (
+                <FuturisticCard
+                  title="Listado Maestro"
+                  description="Control total de documentos del sistema"
+                  icon={FileStack}
+                  color="#2e5244"
+                  gradient="linear-gradient(135deg, #2e5244 0%, #6dbd96 100%)"
+                  badge="Todos los documentos"
+                  onClick={() => handleCardClick('listado')}
+                  delay={0.1}
+                />
+              )}
+
+              {canViewAreas && (
+                <FuturisticCard
+                  title="Por Área"
+                  description="Navegación por procesos y departamentos"
+                  icon={Building2}
+                  color="#6f7b2c"
+                  gradient="linear-gradient(135deg, #6f7b2c 0%, #6dbd96 100%)"
+                  badge={`${processes.length} Procesos activos`}
+                  onClick={() => handleCardClick('areas')}
+                  delay={0.2}
+                />
+              )}
+            </div>
+
+            {/* 🆕 Documentos por tipo */}
+            <h3 className="text-sm font-semibold uppercase tracking-wide mb-2" style={{ color: '#2e5244' }}>
+              Documentos por tipo
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {documentTypes.map((type, i) => {
+                const st = getDocTypeStyle(type.code);
+                const count = typeCounts[type.id] || 0;
+                return (
+                  <FuturisticCard
+                    key={type.id}
+                    title={type.name}
+                    description={st.description}
+                    icon={st.icon}
+                    color={st.color}
+                    gradient={`linear-gradient(135deg, ${st.color} 0%, #2e5244 100%)`}
+                    badge={`${type.code} · ${count} documento${count === 1 ? '' : 's'}`}
+                    onClick={() => handleTypeClick(type)}
+                    delay={i * 0.05}
+                  />
+                );
+              })}
+              {loadingData && documentTypes.length === 0 && (
+                <p className="text-sm text-gray-500">Cargando tipos de documento...</p>
+              )}
             </div>
           </div>
         );
       
-      case 'formatos':
-        return <Formatos />;
+      // 🆕 Vista genérica por tipo de documento
+      case 'tipo':
+        return selectedType
+          ? <DocumentosPorTipo typeCode={selectedType.code} typeName={selectedType.name} />
+          : null;
       
       case 'create':
         return (
@@ -438,9 +472,6 @@ export default function GestionDocumental() {
       
       case 'areas':
         return <PorArea />;
-      
-      case 'procedimientos':
-        return <Procedimientos />;
       
       default:
         return null;
