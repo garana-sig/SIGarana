@@ -2,6 +2,7 @@
 // Hook de datos para el módulo Producto No Conforme
 // ── v2: formulario consolidado (fila por fila), cabecera mensual automática ──
 // ── v3: CRUD de catálogo de Referencias (crear/editar/eliminar) ──────────────
+// ── v3.2: CRUD de Tabla de Defectos (código + descripción) ──────────────────
 
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -13,6 +14,13 @@ const MESES = [
 ];
 
 export { MESES };
+
+// Orden natural de códigos de defecto: D1, D2 ... D10 (no D1, D10, D2)
+function sortDefectos(arr) {
+  return [...arr].sort((a, b) =>
+    String(a.codigo).localeCompare(String(b.codigo), 'es', { numeric: true })
+  );
+}
 
 export function fmtFecha(iso) {
   if (!iso) return '—';
@@ -59,7 +67,7 @@ export function usePNC() {
       if (e3) throw e3;
       if (e4) throw e4;
 
-      setDefectos(defs    || []);
+      setDefectos(sortDefectos(defs || []));
       setReferencias(refs || []);
       setRegistros(regs   || []);
       setProduccion(prod  || []);
@@ -225,12 +233,88 @@ export function usePNC() {
     }
   }, []);
 
+  // ══════════════════════════════════════════════════════════════════════════
+  //  CRUD — Tabla de Defectos (pnc_defecto)
+  //  codigo es UNIQUE en BD · pnc_item.defecto_id tiene FK sin cascada
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const friendlyDefectoError = (e) => {
+    if (e?.code === '23505') return 'Ya existe un defecto con ese código.';
+    if (e?.code === '23503') return 'Este defecto está en uso en filas de Producto No Conforme, no se puede eliminar.';
+    return e?.message || 'Error inesperado.';
+  };
+
+  // Sugiere el siguiente código (D39 si el mayor es D38). Solo sugerencia, editable.
+  const nextCodigoDefecto = useCallback(() => {
+    const max = defectos.reduce((m, d) => {
+      const n = parseInt(String(d.codigo).replace(/\D/g, ''), 10);
+      return Number.isFinite(n) ? Math.max(m, n) : m;
+    }, 0);
+    return `D${max + 1}`;
+  }, [defectos]);
+
+  const createDefecto = useCallback(async ({ codigo, nombre }) => {
+    try {
+      const cod = (codigo || '').trim().toUpperCase();
+      const nom = (nombre || '').trim();
+      if (!cod) return { success: false, error: 'El código no puede estar vacío.' };
+      if (!nom) return { success: false, error: 'La descripción no puede estar vacía.' };
+
+      const { data, error: e } = await supabase
+        .from('pnc_defecto')
+        .insert({ codigo: cod, nombre: nom })
+        .select()
+        .single();
+      if (e) throw e;
+
+      setDefectos(prev => sortDefectos([...prev, data]));
+      return { success: true, data };
+    } catch (e) {
+      return { success: false, error: friendlyDefectoError(e) };
+    }
+  }, []);
+
+  const updateDefecto = useCallback(async (id, { codigo, nombre }) => {
+    try {
+      const cod = (codigo || '').trim().toUpperCase();
+      const nom = (nombre || '').trim();
+      if (!cod) return { success: false, error: 'El código no puede estar vacío.' };
+      if (!nom) return { success: false, error: 'La descripción no puede estar vacía.' };
+
+      const { data, error: e } = await supabase
+        .from('pnc_defecto')
+        .update({ codigo: cod, nombre: nom })
+        .eq('id', id)
+        .select()
+        .single();
+      if (e) throw e;
+
+      setDefectos(prev => sortDefectos(prev.map(d => (d.id === id ? data : d))));
+      return { success: true, data };
+    } catch (e) {
+      return { success: false, error: friendlyDefectoError(e) };
+    }
+  }, []);
+
+  const deleteDefecto = useCallback(async (id) => {
+    try {
+      const { error: e } = await supabase.from('pnc_defecto').delete().eq('id', id);
+      if (e) throw e;
+
+      setDefectos(prev => prev.filter(d => d.id !== id));
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: friendlyDefectoError(e) };
+    }
+  }, []);
+
   return {
     defectos, referencias, registros, produccion,
     loading, error,
     fetchAll, addItem, updateItem, deleteItem, deleteRegistro,
     saveProduccion, deleteProduccion,
     createReferencia, updateReferencia, deleteReferencia,
+    createDefecto, updateDefecto, deleteDefecto, nextCodigoDefecto,
   };
 }
 

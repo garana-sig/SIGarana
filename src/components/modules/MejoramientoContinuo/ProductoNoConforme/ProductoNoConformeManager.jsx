@@ -1,6 +1,8 @@
 // src/components/modules/MejoramientoContinuo/ProductoNoConforme/ProductoNoConformeManager.jsx
 // v3 — Formulario consolidado (fila por fila) sobre el formato RE-GS-06 modificado
 // v3.1 — CRUD de Referencias (crear / editar / eliminar) en el modal de catálogo
+// v3.2 — Modal de Defectos (código + descripción): crear / editar / eliminar
+//        desde "Tabla Defectos" y acceso rápido "+ Nuevo" desde "Agregar Fila"
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
@@ -211,6 +213,7 @@ const emptyForm = () => ({
 });
 
 const emptyRefForm = () => ({ id: null, ref: '', categoria: '' });
+const emptyDefForm = () => ({ id: null, codigo: '', nombre: '' });
 
 // ═════════════════════════════════════════════════════════════════════════════
 //  COMPONENTE PRINCIPAL
@@ -228,7 +231,8 @@ export default function ProductoNoConformeManager({ onBack }) {
   const { defectos, referencias, registros, produccion,
           loading, error,
           fetchAll, addItem, updateItem, deleteItem, saveProduccion, deleteProduccion,
-          createReferencia, updateReferencia, deleteReferencia } = usePNC();
+          createReferencia, updateReferencia, deleteReferencia,
+          createDefecto, updateDefecto, deleteDefecto, nextCodigoDefecto } = usePNC();
 
   const [tab,        setTab]        = useState('registros');
   const [actionMsg,  setActionMsg]  = useState(null);
@@ -247,6 +251,14 @@ export default function ProductoNoConformeManager({ onBack }) {
   const [refForm,       setRefForm]       = useState(emptyRefForm());
   const [savingRef,     setSavingRef]     = useState(false);
   const [deletingRefId, setDeletingRefId] = useState(null);
+
+  // ── Estado del modal de Defectos (código + descripción) ────────────────────
+  const [defModalOpen,  setDefModalOpen]  = useState(false);
+  const [defForm,       setDefForm]       = useState(emptyDefForm());
+  const [defFormError,  setDefFormError]  = useState(null);
+  const [savingDef,     setSavingDef]     = useState(false);
+  const [deletingDefId, setDeletingDefId] = useState(null);
+  const [defFromRow,    setDefFromRow]    = useState(false); // abierto desde "Agregar Fila"
 
   const [form, setForm] = useState(emptyForm());
 
@@ -483,6 +495,72 @@ export default function ProductoNoConformeManager({ onBack }) {
       else           showMsg('error', r.error);
     } finally {
       setDeletingRefId(null);
+    }
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  CRUD — Tabla de Defectos (modal propio)
+  // ══════════════════════════════════════════════════════════════════════════
+  const openNewDef = (fromRow = false) => {
+    setDefForm({ id: null, codigo: nextCodigoDefecto(), nombre: '' });
+    setDefFormError(null);
+    setDefFromRow(fromRow);
+    setDefModalOpen(true);
+  };
+
+  const openEditDef = (item) => {
+    setDefForm({ id: item.id, codigo: item.codigo || '', nombre: item.nombre || '' });
+    setDefFormError(null);
+    setDefFromRow(false);
+    setDefModalOpen(true);
+  };
+
+  const closeDefModal = () => {
+    setDefModalOpen(false);
+    setDefForm(emptyDefForm());
+    setDefFormError(null);
+    setDefFromRow(false);
+  };
+
+  const setDF = (field, value) => setDefForm(prev => ({ ...prev, [field]: value }));
+
+  const handleSaveDef = async () => {
+    if (!defForm.codigo.trim()) { setDefFormError('El código es obligatorio.'); return; }
+    if (!defForm.nombre.trim()) { setDefFormError('La descripción es obligatoria.'); return; }
+    setSavingDef(true);
+    setDefFormError(null);
+    try {
+      const payload = { codigo: defForm.codigo, nombre: defForm.nombre };
+      const r = defForm.id
+        ? await updateDefecto(defForm.id, payload)
+        : await createDefecto(payload);
+
+      if (!r.success) { setDefFormError(r.error); return; }
+
+      // Si se creó desde "Agregar Fila", queda seleccionado en el formulario
+      if (defFromRow && !defForm.id) setF('defecto_obj', r.data);
+
+      // Si la fila en edición tenía este defecto, refresca el objeto mostrado
+      if (defForm.id && form.defecto_obj?.id === defForm.id) setF('defecto_obj', r.data);
+
+      showMsg('success', defForm.id
+        ? `✅ Defecto ${r.data.codigo} actualizado.`
+        : `✅ Defecto ${r.data.codigo} creado.`);
+      closeDefModal();
+    } finally {
+      setSavingDef(false);
+    }
+  };
+
+  const handleDeleteDef = async (item) => {
+    if (!window.confirm(`¿Eliminar el defecto "${item.codigo} — ${item.nombre}"?\nEsta acción no se puede deshacer.`)) return;
+    setDeletingDefId(item.id);
+    try {
+      const r = await deleteDefecto(item.id);
+      if (r.success) showMsg('success', `🗑️ Defecto ${item.codigo} eliminado.`);
+      else           showMsg('error', r.error);
+    } finally {
+      setDeletingDefId(null);
     }
   };
 
@@ -837,7 +915,16 @@ export default function ProductoNoConformeManager({ onBack }) {
                   <Input type="date" value={form.fecha_reporte} onChange={e => setF('fecha_reporte', e.target.value)} className="text-sm" />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="text-xs font-medium text-gray-600 block mb-1">Código del Defecto (autocompleta descripción)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-gray-600">Código del Defecto (autocompleta descripción)</label>
+                    {canCreate && (
+                      <button type="button" onClick={() => openNewDef(true)}
+                        className="text-xs font-semibold flex items-center gap-0.5 hover:underline"
+                        style={{ color: C.primary }}>
+                        <Plus className="h-3 w-3" />Nuevo defecto
+                      </button>
+                    )}
+                  </div>
                   <ComboboxInput value={form.defecto_obj} onChange={v => setF('defecto_obj', v)}
                     options={defectos} placeholder="Busca por código (D1..D38) o nombre" getLabel={d=>d.nombre} getId={d=>d.codigo} />
                 </div>
@@ -904,7 +991,7 @@ export default function ProductoNoConformeManager({ onBack }) {
       {/* ══════════════════════════════════════════════════════════════════
           MODAL — Catálogos (Referencias / Defectos)
           Referencias: solo lectura + CRUD (crear/editar/eliminar).
-          Defectos:    se mantiene solo lectura, sin cambios.
+          Defectos:    CRUD mediante el modal "Nuevo / Editar Defecto".
       ══════════════════════════════════════════════════════════════════ */}
       <Dialog open={catalogModal.open} onOpenChange={(o) => { if (!o) closeRefForm(); setCatalogModal({ open:o, tipo: o ? catalogModal.tipo : null }); }}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
@@ -919,11 +1006,25 @@ export default function ProductoNoConformeManager({ onBack }) {
                   <Plus className="h-4 w-4 mr-1" />Nueva
                 </Button>
               )}
+              {catalogModal.tipo === 'defectos' && canCreate && (
+                <Button variant="outline" size="sm" onClick={() => openNewDef(false)}
+                  className="border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+                  <Plus className="h-4 w-4 mr-1" />Nuevo
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={() => downloadCatalogo(catalogModal.tipo)}>
                 <FileSpreadsheet className="h-4 w-4 mr-1" />Descargar
               </Button>
             </div>
           </div>
+
+          {/* Mensajes visibles también dentro del modal (ej. "defecto en uso") */}
+          {actionMsg && (
+            <Alert variant={actionMsg.type === 'error' ? 'destructive' : 'default'} className="mb-3"
+              style={actionMsg.type === 'success' ? { borderColor: C.accent, background: '#f0f9f4' } : {}}>
+              <AlertDescription className="text-sm">{actionMsg.text}</AlertDescription>
+            </Alert>
+          )}
 
           {/* ── Formulario inline: crear / editar referencia ──────────────── */}
           {catalogModal.tipo === 'referencias' && refFormOpen && (
@@ -981,6 +1082,25 @@ export default function ProductoNoConformeManager({ onBack }) {
                       </div>
                     </td>
                   )}
+                  {catalogModal.tipo === 'defectos' && (canEdit || canDelete) && (
+                    <td className="py-1.5" style={{ width: 60 }}>
+                      <div className="flex items-center justify-end gap-1">
+                        {canEdit && (
+                          <button onClick={() => openEditDef(item)} className="p-1 rounded hover:bg-gray-100" title="Editar">
+                            <Edit className="h-3.5 w-3.5" style={{ color: C.primary }} />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button onClick={() => handleDeleteDef(item)} disabled={deletingDefId === item.id}
+                            className="p-1 rounded hover:bg-red-50" title="Eliminar">
+                            {deletingDefId === item.id
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin text-red-400" />
+                              : <Trash2 className="h-3.5 w-3.5 text-red-400" />}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
               {catalogData.length === 0 && (
@@ -988,6 +1108,69 @@ export default function ProductoNoConformeManager({ onBack }) {
               )}
             </tbody>
           </table>
+        </DialogContent>
+      </Dialog>
+
+      {/* ══════════════════════════════════════════════════════════════════
+          MODAL — Nuevo / Editar Defecto (código + descripción)
+          Se abre desde "Tabla Defectos" o desde "+ Nuevo defecto" en el
+          formulario de fila (en ese caso queda seleccionado al guardar).
+      ══════════════════════════════════════════════════════════════════ */}
+      <Dialog open={defModalOpen} onOpenChange={(o) => { if (!o && !savingDef) closeDefModal(); }}>
+        <DialogContent className="max-w-md p-0">
+          <div className="px-6 py-4 border-b" style={{ borderColor: C.beige, background: XL.colBg }}>
+            <h3 className="font-bold text-base" style={{ color: C.primary }}>
+              {defForm.id ? 'Editar Defecto' : 'Nuevo Defecto'}
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">Tabla de Defectos · Producto No Conforme</p>
+          </div>
+
+          <div className="p-6 space-y-4">
+            {defFormError && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription className="text-sm">{defFormError}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">Código *</label>
+                <Input value={defForm.codigo}
+                  onChange={e => setDF('codigo', e.target.value.toUpperCase())}
+                  placeholder="Ej: D39" className="text-sm font-mono font-bold" autoFocus={!defForm.id} />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-gray-600 block mb-1">Descripción del defecto *</label>
+                <Input value={defForm.nombre}
+                  onChange={e => setDF('nombre', e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleSaveDef(); }}
+                  placeholder="Ej: Costura reventada" className="text-sm" />
+              </div>
+            </div>
+
+            {!defForm.id && (
+              <p className="text-xs text-gray-400">
+                El código se sugiere automáticamente con el siguiente consecutivo; puedes cambiarlo.
+              </p>
+            )}
+            {defForm.id && (
+              <p className="text-xs text-gray-400">
+                Los cambios se reflejan en todas las filas que ya usan este defecto.
+              </p>
+            )}
+          </div>
+
+          <div className="px-6 py-4 border-t flex justify-end gap-3" style={{ borderColor: C.beige, background:'#fafaf8' }}>
+            <Button variant="outline" onClick={closeDefModal} disabled={savingDef} className="border-2 px-5" style={{ borderColor: C.beige }}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveDef} disabled={savingDef} className="px-6 text-white font-semibold" style={{ backgroundColor: C.primary }}>
+              {savingDef
+                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Guardando...</>
+                : <><Check className="h-4 w-4 mr-2" />{defForm.id ? 'Guardar Cambios' : 'Crear Defecto'}</>}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
