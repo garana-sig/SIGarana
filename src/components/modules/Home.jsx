@@ -13,7 +13,6 @@ import {
   BookOpen,
   ClipboardCheck,
   ArrowRight,
-  ScrollText,
   X,
   ExternalLink,
   Loader2,
@@ -74,17 +73,12 @@ const ACCESOS_RAPIDOS = [
   {
     key: 'planesProgramas',
     label: 'Planes y Programas',
-    desc: 'Documentos de consulta institucional',
+    desc: 'Planes SST, Bienestar y Mantenimiento',
     icon: ClipboardCheck,
     color: C.olive,
   },
-  {
-    key: 'politicas',
-    label: 'Políticas',
-    desc: 'Políticas institucionales del SIG',
-    icon: ScrollText,
-    color: '#b45309',
-  },
+  // Políticas: acceso retirado del Home (oct 2026). El componente
+  // Politicas.jsx y su case en App.tsx se conservan por si se reactiva.
 ];
 
 // 🆕 Posición (en % del contenedor) de cada proceso sobre
@@ -474,7 +468,7 @@ export default function Home({ onModuleChange }) {
       </div>
 
       {/* ─── ACCESOS RÁPIDOS (antes: Números de Impacto) ─── */}
-      <div className="mx-6 -mt-3 mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="mx-6 -mt-3 mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
         {ACCESOS_RAPIDOS.map((acceso) => {
           const Icon = acceso.icon;
           return (

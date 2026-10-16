@@ -1,39 +1,31 @@
 // src/components/modules/PlanesProgramas.jsx
 // ═══════════════════════════════════════════════════════════════════
-// Planes y Programas — VISTA DE CONSULTA (acceso desde Home)
-//   1. Catálogo de programas de gestión del SG-SST (Manual MC-DP-01 §6.2.2)
-//   2. Planes de trabajo anuales en SOLO LECTURA, leídos de las mismas
-//      tablas que usa SST y Bienestar (work_plan / training_plan).
-// La edición sigue viviendo en el módulo SST y Bienestar.
-// Si RLS no permite leer un plan al usuario, se muestra vacío (sin error).
+// Planes y Programas (acceso desde Home)
+//   1. Planes SST y Bienestar — SOLO LECTURA, leídos de las mismas tablas
+//      que usa SST y Bienestar (work_plan / training_plan). La edición
+//      sigue viviendo en ese módulo. Si RLS no permite leer, se ve vacío.
+//   2. Planes de Mantenimiento — Computadores y Maquinaria (EDITABLE aquí).
+//      Componente: MantenimientoEquipos.jsx · Hook: useMantenimiento.js
+//      Permisos: mantenimiento:<computadores|maquinaria>:view/create/edit/delete/export
+//      La pestaña solo aparece si el usuario ve al menos uno de los dos.
+// v2 (oct 2026): se retiró el catálogo "Programas de gestión del SG-SST".
+// v3 (oct 2026): Computadores conectado (Supabase mant_equipo / mant_registro).
 // ═══════════════════════════════════════════════════════════════════
 
 import { useState } from 'react';
 import ModuleHero from '@/components/ModuleHero';
+import MantenimientoEquipos from '@/components/modules/MantenimientoEquipos';
+import { useAuth } from '@/context/AuthContext';
 import { useWorkPlan, MONTH_KEYS, parseMonthVal } from '@/hooks/useWorkPlan';
 import { useCapacitaciones } from '@/hooks/useCapacitaciones';
 import {
   ClipboardCheck, BookOpen, Shield, Heart, HardHat, Stethoscope, BarChart3,
   Loader2, Eye, Users, CalendarDays, CheckCircle2, Clock, XCircle, Info,
+  Monitor, Cog, Wrench, Lock,
 } from 'lucide-react';
 
 const C = { green: '#2e5244', mint: '#6dbd96', olive: '#6f7b2c', sand: '#dedecc', dark: '#1a2e25', cream: '#faf9f5' };
 const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-
-// ─── Programas del SG-SST (Manual Integrado de Gestión §6.2.2) ──────
-const PROGRAMAS_SGSST = [
-  { nombre: 'Prevención psicosocial', lema: 'No estrés mal', operador: 'Comité de Convivencia' },
-  { nombre: 'Prevención de salud visual', lema: 'Te veo bien', operador: 'COPASST' },
-  { nombre: 'Prevención de riesgo cardiovascular', lema: 'Corazón Garana', operador: 'COPASST' },
-  { nombre: 'Prevención de desórdenes músculo-esqueléticos', lema: 'La Mueve', operador: null },
-  { nombre: 'Salud pública', lema: 'Contágiate, pero de amor propio', operador: 'Comité de Convivencia' },
-  { nombre: 'Gestión de riesgo biológico', lema: 'Que no te piquen', operador: 'COPASST' },
-  { nombre: 'Gestión de riesgo mecánico', lema: null, operador: null },
-  { nombre: 'Plan estratégico de seguridad vial', lema: 'Muévete seguro', operador: null },
-  { nombre: 'Gestión de riesgo locativo', lema: 'Que nada te toque', operador: null },
-  { nombre: 'Vigilancia epidemiológica — desórdenes músculo-esqueléticos', lema: null, operador: 'Comité de Bienestar Social' },
-  { nombre: 'Vigilancia epidemiológica — riesgo psicosocial', lema: null, operador: 'Comité de Convivencia' },
-];
 
 // ─── Planes de trabajo (mismos 7 de SST y Bienestar) ────────────────
 const PLANES = [
@@ -44,6 +36,26 @@ const PLANES = [
   { id: 'sst', label: 'SST', icon: HardHat, color: '#7e22ce', desc: 'Plan de trabajo anual de Seguridad y Salud en el Trabajo.' },
   { id: 'promocion_prevencion', label: 'Promoción y Prevención', icon: Stethoscope, color: '#0891b2', desc: 'Plan anual de promoción y prevención en salud.' },
   { id: 'gerencia', label: 'Plan de Gerencia', icon: BarChart3, color: C.olive, desc: 'Plan de trabajo SST aprobado por gerencia.' },
+];
+
+// ─── Planes de Mantenimiento (se editan en este módulo) ─────────────
+// tipo = mant_equipo.tipo · perm = prefijo de permisos
+const PLANES_MANT = [
+  {
+    id: 'computadores', tipo: 'computador', perm: 'mantenimiento:computadores',
+    label: 'Computadores', icon: Monitor, color: C.green,
+    desc: 'Hoja de vida (RE-GR-11) y registro de mantenimiento de equipos de cómputo.',
+  },
+  {
+    id: 'maquinaria', tipo: 'maquinaria', perm: 'mantenimiento:maquinaria',
+    label: 'Maquinaria', icon: Cog, color: C.olive,
+    desc: 'Hoja de vida (RE-GR-11) y registro de mantenimiento de la maquinaria de planta.',
+  },
+];
+
+const GRUPOS = [
+  { id: 'sst',  label: 'Planes SST y Bienestar',   icon: HardHat },
+  { id: 'mant', label: 'Planes de Mantenimiento', icon: Wrench },
 ];
 
 function SectionTitle({ children, extra }) {
@@ -194,8 +206,74 @@ function CapacitacionView({ cfg }) {
   return <PlanReadOnly hook={hook} cfg={cfg} titleField="title" respField="instructor" />;
 }
 
+// ─── Bloque de mantenimiento ────────────────────────────────────────
+function MantenimientoView() {
+  const { hasPermission } = useAuth();
+  const visibles = PLANES_MANT.map((p) => ({ ...p, acceso: hasPermission(`${p.perm}:view`) }));
+  const [mantId, setMantId] = useState(() => (visibles.find((p) => p.acceso) || visibles[0]).id);
+  const cfg = visibles.find((p) => p.id === mantId);
+
+  return (
+    <section className="space-y-3">
+      <SectionTitle extra={<span style={{ fontSize: 11, color: '#9ca3af' }}>Formato RE-GR-11 · Preventivo y correctivo</span>}>
+        Planes de mantenimiento
+      </SectionTitle>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {visibles.map((p) => {
+          const I = p.icon;
+          const on = p.id === mantId;
+          return (
+            <button
+              key={p.id}
+              onClick={() => p.acceso && setMantId(p.id)}
+              disabled={!p.acceso}
+              title={!p.acceso ? 'No tienes permiso para este plan' : ''}
+              className="flex items-center gap-3"
+              style={{
+                background: on ? p.color : 'white', border: `2px solid ${on ? p.color : '#e5e7eb'}`,
+                borderRadius: 16, padding: '14px 16px', cursor: p.acceso ? 'pointer' : 'not-allowed', textAlign: 'left',
+                boxShadow: on ? `0 4px 16px ${p.color}30` : '0 1px 4px rgba(0,0,0,0.05)', transition: 'all 0.15s',
+                opacity: p.acceso ? 1 : 0.55,
+              }}
+            >
+              <div style={{
+                width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+                background: on ? 'rgba(255,255,255,0.18)' : `${p.color}15`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {p.acceso ? <I size={20} color={on ? 'white' : p.color} /> : <Lock size={18} color="#9ca3af" />}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontSize: 14, fontWeight: 800, color: on ? 'white' : '#1f2937', margin: 0 }}>{p.label}</p>
+                <p style={{ fontSize: 12, color: on ? 'rgba(255,255,255,0.85)' : '#6b7280', margin: 0, lineHeight: 1.4 }}>{p.desc}</p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {cfg.id === 'computadores' && cfg.acceso && <MantenimientoEquipos key="computador" tipo="computador" />}
+
+      {cfg.id === 'maquinaria' && cfg.acceso && (
+        <div className="flex items-start gap-2" style={{ background: '#fffbeb', border: '1px solid #d9770633', borderRadius: 12, padding: '14px 16px' }}>
+          <Info size={15} style={{ color: '#d97706', marginTop: 2, flexShrink: 0 }} />
+          <p style={{ fontSize: 13, color: '#4b5563', margin: 0, lineHeight: 1.55 }}>
+            El plan de mantenimiento de <strong style={{ color: C.green }}>maquinaria</strong> se habilitará cuando se definan
+            sus campos técnicos. Ya cuenta con tablas, permisos y formato RE-GR-11 listos.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════
 export default function PlanesProgramas() {
+  const { hasPermission } = useAuth();
+  const verMant = PLANES_MANT.some((p) => hasPermission(`${p.perm}:view`));
+  const grupos = GRUPOS.filter((g) => g.id !== 'mant' || verMant);
+  const [grupo, setGrupo] = useState('sst');
   const [planId, setPlanId] = useState('capacitacion');
   const cfg = PLANES.find((p) => p.id === planId);
 
@@ -203,48 +281,36 @@ export default function PlanesProgramas() {
     <div className="p-3 space-y-5">
       <ModuleHero
         title="Planes y Programas"
-        subtitle="Consulta de programas del SG-SST y planes de trabajo anuales · INDECON S.A.S."
+        subtitle="Planes SST, Bienestar y Mantenimiento · INDECON S.A.S."
         icon={ClipboardCheck}
         color={C.olive}
       />
 
+      {/* Selector de grupo */}
+      <div className="inline-flex flex-wrap gap-1 p-1 rounded-xl" style={{ background: C.sand }}>
+        {grupos.map(({ id, label, icon: I }) => {
+          const on = grupo === id;
+          return (
+            <button key={id} onClick={() => setGrupo(id)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+              style={{ background: on ? C.green : 'transparent', color: on ? '#fff' : '#374151' }}>
+              <I size={15} />{label}
+            </button>
+          );
+        })}
+      </div>
+
+      {grupo === 'mant' && verMant && <MantenimientoView />}
+
+      {grupo === 'sst' && (<>
       <div className="flex items-start gap-2" style={{ background: '#f7f8f0', border: `1px solid ${C.olive}30`, borderRadius: 12, padding: '10px 14px' }}>
         <Eye size={15} style={{ color: C.olive, marginTop: 2, flexShrink: 0 }} />
         <p style={{ fontSize: 12.5, color: '#4b5563', margin: 0, lineHeight: 1.55 }}>
-          Vista de consulta. Los planes se actualizan desde el módulo <strong style={{ color: C.green }}>SST y Bienestar</strong> y aquí se ven en tiempo real.
+          Vista de consulta. Estos planes se actualizan desde el módulo <strong style={{ color: C.green }}>SST y Bienestar</strong> y aquí se ven en tiempo real.
         </p>
       </div>
 
-      {/* ─── 1. Programas del SG-SST ─── */}
-      <section className="space-y-3">
-        <SectionTitle extra={<span style={{ fontSize: 11, color: '#9ca3af' }}>Manual Integrado de Gestión · §6.2.2</span>}>
-          Programas de gestión del SG-SST
-        </SectionTitle>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-          {PROGRAMAS_SGSST.map((p, i) => (
-            <div key={i} className="flex gap-3 items-start" style={{ background: 'white', border: `1px solid ${C.sand}`, borderRadius: 14, padding: '12px 14px' }}>
-              <span style={{
-                width: 28, height: 28, borderRadius: 8, background: `${C.mint}22`, color: C.green,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0,
-              }}>{i + 1}</span>
-              <div style={{ minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: C.dark, margin: 0, lineHeight: 1.35 }}>{p.nombre}</p>
-                {p.lema && (
-                  <p style={{ fontSize: 12.5, fontFamily: 'Georgia, serif', fontStyle: 'italic', color: C.olive, margin: '3px 0 0' }}>“{p.lema}”</p>
-                )}
-                <span style={{
-                  display: 'inline-block', marginTop: 6, fontSize: 10.5, fontWeight: 700, borderRadius: 20, padding: '2px 9px',
-                  color: p.operador ? C.green : '#9ca3af', background: p.operador ? `${C.mint}1f` : '#f3f4f6',
-                }}>
-                  {p.operador || 'Operador por definir'}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ─── 2. Planes de trabajo ─── */}
+      {/* ─── Planes de trabajo SST y Bienestar (solo lectura) ─── */}
       <section className="space-y-3">
         <SectionTitle>Planes de trabajo anuales</SectionTitle>
         <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
@@ -288,6 +354,7 @@ export default function PlanesProgramas() {
           {!['capacitacion', 'gerencia'].includes(cfg.id) && <WorkPlanView key={cfg.id} cfg={cfg} />}
         </div>
       </section>
+      </>)}
     </div>
   );
 }

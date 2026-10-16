@@ -3,6 +3,7 @@
 // ✅ Accordion controlado (no colapsa al asignar permisos)
 // ✅ loadPermissions silent=true (no desmonta el panel)
 // ✅ Proveedores agregado (catalogo, evaluacion, seleccion)
+// ✅ v2026-10 — Mantenimiento agregado (computadores, maquinaria)
 
 import { useUserPermissions }      from '@/hooks/useUserPermissions';
 import React from 'react';
@@ -81,6 +82,9 @@ const SUBMODULE_NAMES = {
   examenes_medicos:         'Exámenes Médicos',
   // Usuarios
   permisos:                 'Permisos',
+  // Mantenimiento — nuevo ✅ (oct 2026)
+  computadores:             'Equipos de Cómputo',
+  maquinaria:               'Maquinaria',
 };
 
 const ACTION_NAMES = {
