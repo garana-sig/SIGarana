@@ -1,4 +1,9 @@
 // src/hooks/useEvaluacionCompetencias.js
+// v10 (oct 2026): botón ACTIVO/INACTIVO por colaborador y período
+//   (tabla ec_periodo_inactivo). Los inactivos no cuentan como pendientes
+//   ni en el avance del período. Las evaluaciones NO se modifican.
+//   Si la tabla aún no existe, el módulo funciona igual que antes
+//   (inactivosDisponible = false y el botón no se muestra).
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -67,6 +72,8 @@ export function useEvaluacionCompetencias() {
   const [configuracion,    setConfiguracion]    = useState([]);
   const [usuarios,         setUsuarios]         = useState([]);
   const [misDepartamentos, setMisDepartamentos] = useState([]);
+  const [inactivos,        setInactivos]        = useState([]);   // 🆕 [{ periodo_id, empleado_id }]
+  const [inactivosDisponible, setInactivosDisponible] = useState(false); // 🆕 tabla creada
   const [loading,          setLoading]          = useState(true);
   const [error,            setError]            = useState(null);
 
@@ -138,6 +145,22 @@ export function useEvaluacionCompetencias() {
     setUsuarios(data || []);
   }, []);
 
+  // 🆕 Colaboradores marcados INACTIVOS por período
+  const loadInactivos = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('ec_periodo_inactivo')
+      .select('periodo_id, empleado_id, motivo');
+    if (error) {
+      // Tabla aún no creada (EC_01_PERIODO_INACTIVO.sql) → se oculta la función
+      setInactivosDisponible(false);
+      setInactivos([]);
+      return [];
+    }
+    setInactivosDisponible(true);
+    setInactivos(data || []);
+    return data;
+  }, []);
+
   const loadMisDepartamentos = useCallback(async () => {
     if (!user?.id) return;
     if (isAdminOrGerencia) { setMisDepartamentos(DEPARTAMENTOS); return; }
@@ -156,13 +179,13 @@ export function useEvaluacionCompetencias() {
         await Promise.all([
           loadEmpleados(), loadCategorias(), loadEvaluaciones(),
           loadPeriodos(), loadConfiguracion(), loadUsuarios(),
-          loadMisDepartamentos(),
+          loadMisDepartamentos(), loadInactivos(),
         ]);
       } catch (e) { setError(e.message); }
       finally { setLoading(false); }
     })();
   }, [loadEmpleados, loadCategorias, loadEvaluaciones, loadPeriodos,
-      loadConfiguracion, loadUsuarios, loadMisDepartamentos]);
+      loadConfiguracion, loadUsuarios, loadMisDepartamentos, loadInactivos]);
 
   // ── Computados ────────────────────────────────────────────────────────────
 
@@ -227,6 +250,30 @@ export function useEvaluacionCompetencias() {
     );
   }, [evaluaciones]);
 
+  // 🆕 IDs marcados INACTIVOS para UN período
+  const getInactivosEnPeriodo = useCallback((periodoId) => {
+    if (!periodoId) return new Set();
+    return new Set(inactivos.filter(i => i.periodo_id === periodoId).map(i => i.empleado_id));
+  }, [inactivos]);
+
+  // 🆕 Activar / inactivar un colaborador en un período (no toca evaluaciones)
+  const setInactivoEnPeriodo = useCallback(async (periodoId, empleadoId, inactivar, motivo = null) => {
+    if (inactivar) {
+      const { error } = await supabase
+        .from('ec_periodo_inactivo')
+        .insert({ periodo_id: periodoId, empleado_id: empleadoId, motivo });
+      if (error && error.code !== '23505') throw error; // 23505 = ya estaba inactivo
+    } else {
+      const { error } = await supabase
+        .from('ec_periodo_inactivo')
+        .delete()
+        .eq('periodo_id', periodoId)
+        .eq('empleado_id', empleadoId);
+      if (error) throw error;
+    }
+    await loadInactivos();
+  }, [loadInactivos]);
+
   // Por defecto: período activo más reciente
   const evaluadosEnPeriodoActivo = useMemo(
     () => getEvaluadosEnPeriodo(periodoActivo?.id),
@@ -234,9 +281,14 @@ export function useEvaluacionCompetencias() {
   );
 
   // Pendientes en el período activo por defecto
+  // 🆕 Excluye los marcados inactivos en ese período
+  const inactivosEnPeriodoActivo = useMemo(
+    () => getInactivosEnPeriodo(periodoActivo?.id),
+    [getInactivosEnPeriodo, periodoActivo]
+  );
   const empleadosPendientes = useMemo(() =>
-    empleadosPermitidos.filter(e => !evaluadosEnPeriodoActivo.has(e.id)),
-    [empleadosPermitidos, evaluadosEnPeriodoActivo]
+    empleadosPermitidos.filter(e => !evaluadosEnPeriodoActivo.has(e.id) && !inactivosEnPeriodoActivo.has(e.id)),
+    [empleadosPermitidos, evaluadosEnPeriodoActivo, inactivosEnPeriodoActivo]
   );
 
   // ── Empleados ─────────────────────────────────────────────────────────────
@@ -480,6 +532,7 @@ export function useEvaluacionCompetencias() {
     categorias, evaluaciones, evalPorEmpleado,
     periodos, periodoActivo, periodosActivos,
     evaluadosEnPeriodoActivo, getEvaluadosEnPeriodo,
+    inactivosEnPeriodoActivo, getInactivosEnPeriodo, inactivosDisponible, // 🆕
     configuracion, usuarios, misDepartamentos,
     // estado
     loading, error, isAdminOrGerencia, role,
@@ -494,6 +547,8 @@ export function useEvaluacionCompetencias() {
     // períodos
     loadPeriodos, createPeriodo, updatePeriodo,
     activarPeriodo, togglePeriodo, deletePeriodo,
+    // 🆕 activo / inactivo por período
+    setInactivoEnPeriodo, loadInactivos,
     // evaluadores
     addEvaluador, removeEvaluador,
     // cuestionario

@@ -3,6 +3,24 @@ import React, { useState, useMemo } from 'react';
 import { useDocuments, useDocumentTypes, useProcesses } from '@/hooks/useDocuments';
 import { useFileDownload } from '@/hooks/useFileDownload';
 import ApprovalModal from './ApprovalModal';
+import { exportListadoMaestro } from '@/utils/exportListadoMaestro'; // 🆕 RE-DP-11
+
+// 🆕 Fechas del documento (change_date) sin desfase de zona horaria.
+// Se guardan como fecha "pura" ('2023-02-22 00:00+00'); con new Date() se
+// mostraban un día antes en Colombia (UTC-5). Se toma la parte YYYY-MM-DD.
+// created_at (fecha real de carga al sistema) sí se convierte a hora local.
+const fmtFechaDoc = (changeDate, createdAt) => {
+  try {
+    if (changeDate) {
+      const [y, m, d] = String(changeDate).slice(0, 10).split('-');
+      return `${d}/${m}/${y.slice(2)}`;
+    }
+    if (createdAt) {
+      return new Date(createdAt).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    }
+  } catch { /* fecha inválida */ }
+  return '-';
+};
 import EditDocumentModal from './EditDocumentModal';
 import DocumentViewerModal from './DocumentViewerModal';
 import { useAuth } from '@/context/AuthContext';                              // 🆕
@@ -14,7 +32,7 @@ import { Badge } from '@/app/components/ui/badge';
 import {
   FileText, Search, Plus, Eye, Edit, Download,
   Filter, RefreshCw, ChevronDown, ChevronRight, Loader2,
-  ChevronsLeft, ChevronsRight, ShieldCheck, ShieldOff,
+  ChevronsLeft, ChevronsRight, ShieldCheck, ShieldOff, FileSpreadsheet,
 } from 'lucide-react';
 
 // ── Opciones de página ────────────────────────────────────────────────────────
@@ -147,10 +165,17 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
   const { downloadDocument, downloading } = useFileDownload();
 
   // ── Documentos activos (excluye archivados) ───────────────────────────────
-  const activeDocuments = useMemo(
-    () => documents.filter(doc => doc.status !== 'archived'),
-    [documents]
-  );
+  // 🆕 Orden: por proceso (orden de la tabla process) y dentro de cada proceso
+  // por CÓDIGO en orden natural (GU-DP-01, GU-DP-02 … PR-DP-10), no por fecha.
+  const activeDocuments = useMemo(() => {
+    const ordenProc = new Map(processes.map((p, i) => [p.id, i]));
+    return documents
+      .filter(doc => doc.status !== 'archived')
+      .sort((a, b) =>
+        (ordenProc.get(a.process_id) ?? 999) - (ordenProc.get(b.process_id) ?? 999) ||
+        String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true })
+      );
+  }, [documents, processes]);
 
   // ── Paginación: slice de la lista plana ───────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(activeDocuments.length / pageSize));
@@ -200,6 +225,24 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
   const handleEditSuccess     = ()    => refresh();
 
   const handleOpenViewerModal = (doc) => { setDocumentToView(doc); setIsViewerModalOpen(true); };
+
+  // 🆕 Descarga en el formato oficial RE-DP-11 (plantilla del bucket templates).
+  // Respeta los filtros de pantalla y exporta TODAS las páginas.
+  // Sin filtro de estado → solo documentos vigentes (publicados).
+  const [exportingLM, setExportingLM] = useState(false);
+  const handleExportRE_DP_11 = async () => {
+    const docs = selectedStatus ? activeDocuments : activeDocuments.filter(d => d.status === 'published');
+    if (!docs.length) { alert('No hay documentos para exportar con los filtros actuales.'); return; }
+    setExportingLM(true);
+    try {
+      await exportListadoMaestro({ documentos: docs, procesos: processes });
+    } catch (err) {
+      console.error('❌ Error exportando RE-DP-11:', err);
+      alert(err.message || 'No se pudo generar el Listado Maestro.');
+    } finally {
+      setExportingLM(false);
+    }
+  };
 
   const getStatusBadge = (status) => {
     const configs = {
@@ -282,6 +325,19 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
                   Corrección directa activa
                 </Badge>
               )}
+              {/* 🆕 Descargar RE-DP-11 */}
+              <Button
+                variant="outline"
+                onClick={handleExportRE_DP_11}
+                disabled={exportingLM || loading}
+                title="Descargar el Listado Maestro en el formato RE-DP-11 (respeta los filtros)"
+                style={{ borderColor: '#2e5244', color: '#2e5244' }}
+              >
+                {exportingLM
+                  ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  : <FileSpreadsheet className="h-4 w-4 mr-2" />}
+                Descargar RE-DP-11
+              </Button>
               {onCreateNew && (
                 <Button onClick={onCreateNew} style={{ backgroundColor: '#2e5244' }} className="text-white">
                   <Plus className="h-4 w-4 mr-2" />Nuevo
@@ -429,7 +485,7 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
 
                           {/* NOMBRE */}
                           <td className="p-1 border max-w-[150px]" style={{ borderColor: '#dedecc' }}>
-                            <p className="font-medium text-[10px] truncate" style={{ color: '#2e5244' }}>{doc.name}</p>
+                            <p className="font-medium text-[10px] truncate" style={{ color: '#2e5244' }}>{(doc.name || '').toUpperCase()}</p>
                           </td>
 
                           {/* RESPONSABLE */}
@@ -456,12 +512,7 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
 
                           {/* FECHA */}
                           <td className="p-1 text-center text-[10px] text-gray-600 border" style={{ borderColor: '#dedecc' }}>
-                            {(() => {
-                              try {
-                                const date = doc.change_date || doc.created_at;
-                                return date ? new Date(date).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-';
-                              } catch { return '-'; }
-                            })()}
+                            {fmtFechaDoc(doc.change_date, doc.created_at)}
                           </td>
 
                           {/* RETENCIÓN */}
@@ -484,12 +535,7 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
 
                           {/* CAMBIOS */}
                           <td className="p-1 text-center text-[10px] text-gray-600 border" style={{ borderColor: '#dedecc' }}>
-                            {(() => {
-                              try {
-                                const date = doc.change_date;
-                                return date ? new Date(date).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-';
-                              } catch { return '-'; }
-                            })()}
+                            {doc.change_date ? fmtFechaDoc(doc.change_date) : '-'}
                           </td>
                           <td className="p-1 text-[10px] text-gray-600 border max-w-[100px]" style={{ borderColor: '#dedecc' }}>
                             <span className="truncate block">{doc.change_reason || '-'}</span>

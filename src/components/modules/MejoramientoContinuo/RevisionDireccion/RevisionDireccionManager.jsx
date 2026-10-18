@@ -1,4 +1,16 @@
 // src/components/modules/MejoramientoContinuo/RevisionDireccion/RevisionDireccionManager.jsx
+// ✅ v2 (oct-2026) — conexiones corregidas:
+//   · PNC: se filtra por el MES DEL REGISTRO (pnc_registro.anio/mes), no por
+//     fecha_reporte (había fechas mal digitadas, ej. 82026-02-28). % PNC solo
+//     con los meses que tienen producción cargada; avisa los meses faltantes.
+//   · PNC: "Causas" → Operación de origen (campo actual del módulo PNC v3).
+//     Filtro "Proceso PNC" (pnc_registro.proceso siempre null) → "Sección".
+//   · Acciones de mejora: sin archivadas ni borradas; período por fecha del
+//     hallazgo (date) y no por created_at.
+//   · Top defectos: nombre desde el catálogo pnc_defecto (defecto_texto viene vacío).
+//   · Devoluciones conectadas (dev_registro + dev_ventas_mensual).
+//   · Si alguna consulta falla se muestra un aviso (antes quedaba vacío).
+//   · Fecha final por defecto en hora local (antes UTC).
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -12,7 +24,7 @@ import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, RadialBarChart, RadialBar,
-  ReferenceLine,
+  ReferenceLine, ComposedChart,
 } from 'recharts';
 import ExcelJS    from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -57,7 +69,8 @@ const STATUS_MAP = {
 
 const now      = new Date();
 const defStart = `${now.getFullYear()}-01-01`;
-const defEnd   = now.toISOString().split('T')[0];
+const defEnd   = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+const ymDe     = (iso) => parseInt(iso.substring(0,4))*100 + parseInt(iso.substring(5,7));
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const fmtNum = (n, dec = 1) => (n === null || n === undefined) ? '—' : Number(n).toFixed(dec);
@@ -488,11 +501,12 @@ export default function RevisionDireccionManager({ onBack }) {
   const [loading,   setLoading]   = useState(false);
   const [generated, setGenerated] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [proceso,   setProceso]   = useState('todos');
+  const [proceso,   setProceso]   = useState('todos'); // ahora = sección PNC
+  const [avisos,    setAvisos]    = useState([]);
   const [drillInd,  setDrillInd]  = useState(null);
   const [data, setData] = useState({
     indicators:[], measurements:{}, allMeasurements:{},
-    actions:[], qrsf:[], pnc:[], produccion:[],
+    actions:[], qrsf:[], pnc:[], produccion:[], devoluciones:[], ventasDev:[],
     encuestas:{ satisfaccion:[], clima:[] },
   });
 
@@ -500,7 +514,9 @@ export default function RevisionDireccionManager({ onBack }) {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [indRes, actRes, qrsfRes, pncItemRes, prodRes, encuestasRes] = await Promise.all([
+      const y1 = parseInt(range.start.substring(0,4)), y2 = parseInt(range.end.substring(0,4));
+      const ymIni = ymDe(range.start), ymFin = ymDe(range.end);
+      const [indRes, actRes, qrsfRes, pncItemRes, prodRes, encuestasRes, devRes, devVentasRes] = await Promise.all([
 
         // Indicadores con TODAS sus mediciones (historial completo para modal)
         supabase.from('indicator')
@@ -509,10 +525,11 @@ export default function RevisionDireccionManager({ onBack }) {
           .order('indicator_name'),
 
         // Acciones de mejora del período
+        // (se filtra por fecha del hallazgo en el cliente)
         supabase.from('improvement_action')
-          .select('id,finding_description,status,is_closed,proposed_date,created_at')
-          .gte('created_at', range.start)
-          .lte('created_at', range.end+'T23:59:59'),
+          .select('id,finding_description,status,is_closed,proposed_date,date,created_at')
+          .neq('status','archived')
+          .is('deleted_at', null),
 
         // QRSF del período
         supabase.from('qrsf_registro')
@@ -520,24 +537,25 @@ export default function RevisionDireccionManager({ onBack }) {
           .gte('fecha_recepcion', range.start)
           .lte('fecha_recepcion', range.end),
 
-        // PNC ítems del período
+        // PNC ítems — por el mes del REGISTRO (se acota por mes en el cliente)
         supabase.from('pnc_item')
           .select(`
-            id, total, fecha_reporte, defecto_texto,
+            id, total, fecha_reporte, defecto_texto, defecto_id, seccion, operacion_origen,
+            pnc_defecto:defecto_id(codigo, nombre),
             causa_modulo, causa_operacion, causa_insumo,
             causa_corte, causa_sublimacion, causa_revision,
             clasificacion_correccion, clasificacion_reclasificacion, clasificacion_concesion,
             verificacion_fecha, tratamiento_fecha,
-            registro_id, pnc_registro!inner(proceso, anio, mes)
+            registro_id, pnc_registro!inner(anio, mes)
           `)
-          .gte('fecha_reporte', range.start)
-          .lte('fecha_reporte', range.end),
+          .gte('pnc_registro.anio', y1)
+          .lte('pnc_registro.anio', y2),
 
         // Producción mensual (para % PNC)
         supabase.from('pnc_produccion_mensual')
           .select('anio,mes,total_produccion')
-          .gte('anio', parseInt(range.start.substring(0,4)))
-          .lte('anio', parseInt(range.end.substring(0,4))),
+          .gte('anio', y1)
+          .lte('anio', y2),
 
         // Encuestas — respuestas + answers + período + tipo
         supabase.from('survey_response')
@@ -551,7 +569,35 @@ export default function RevisionDireccionManager({ onBack }) {
           `)
           .gte('submitted_at', range.start)
           .lte('submitted_at', range.end+'T23:59:59'),
+
+        // Devoluciones del período
+        supabase.from('dev_registro')
+          .select('id,fecha_devolucion,total_unidades,reclass_reparacion,reclass_linea,reclass_aprovechamiento,reclass_desecho,resp_fecha')
+          .gte('fecha_devolucion', range.start)
+          .lte('fecha_devolucion', range.end),
+
+        // Ventas mensuales (para % devoluciones)
+        supabase.from('dev_ventas_mensual')
+          .select('anio,mes,total_ventas')
+          .gte('anio', y1)
+          .lte('anio', y2),
       ]);
+
+      // ── Errores de consulta (antes se ignoraban y la sección quedaba vacía)
+      const fuentes = { 'Indicadores':indRes, 'Acciones de mejora':actRes, 'QRSF':qrsfRes, 'PNC':pncItemRes,
+        'Producción PNC':prodRes, 'Encuestas':encuestasRes, 'Devoluciones':devRes, 'Ventas (devoluciones)':devVentasRes };
+      const errs = Object.entries(fuentes).filter(([,r])=>r?.error).map(([k,r])=>`${k}: ${r.error.message}`);
+      errs.forEach(e=>console.error('Revisión por la Dirección —', e));
+
+      // ── Filtros por período en el cliente ─────────────────────────────────
+      const enRangoYM = (a,m) => { const ym=a*100+m; return ym>=ymIni && ym<=ymFin; };
+      const pncPeriodo  = (pncItemRes.data||[]).filter(p=>p.pnc_registro && enRangoYM(p.pnc_registro.anio, p.pnc_registro.mes));
+      const prodPeriodo = (prodRes.data||[]).filter(p=>enRangoYM(p.anio,p.mes));
+      const ventasDevPeriodo = (devVentasRes.data||[]).filter(p=>enRangoYM(p.anio,p.mes));
+      const accionesPeriodo = (actRes.data||[]).filter(a=>{
+        const f = (a.date || a.created_at || '').substring(0,10);
+        return f && f>=range.start && f<=range.end;
+      });
 
       // ── Procesar indicadores ──────────────────────────────────────────────
       const inds = indRes.data || [];
@@ -596,12 +642,15 @@ export default function RevisionDireccionManager({ onBack }) {
         indicators:      inds,
         measurements:    msMap,
         allMeasurements: allMsMap,
-        actions:         actRes.data     || [],
+        actions:         accionesPeriodo,
         qrsf:            qrsfRes.data    || [],
-        pnc:             pncItemRes.data || [],
-        produccion:      prodRes.data    || [],
+        pnc:             pncPeriodo,
+        produccion:      prodPeriodo,
+        devoluciones:    devRes.data     || [],
+        ventasDev:       ventasDevPeriodo,
         encuestas: { satisfaccion, clima },
       });
+      setAvisos(errs);
       setGenerated(true);
     } catch (err) {
       console.error('Error cargando datos:', err);
@@ -611,8 +660,8 @@ export default function RevisionDireccionManager({ onBack }) {
   }, [range]);
 
   // ── PNC filtrado por proceso ──────────────────────────────────────────────
-  const pncFiltrado    = proceso==='todos' ? data.pnc : data.pnc.filter(p=>p.pnc_registro?.proceso===proceso);
-  const procesosUnicos = [...new Set((data.pnc||[]).map(p=>p.pnc_registro?.proceso).filter(Boolean))];
+  const pncFiltrado    = proceso==='todos' ? data.pnc : data.pnc.filter(p=>(p.seccion||'Sin sección')===proceso);
+  const procesosUnicos = [...new Set((data.pnc||[]).map(p=>p.seccion||'Sin sección'))].sort();
 
   // ── Stats CMI ────────────────────────────────────────────────────────────
   const cmiStats = (() => {
@@ -645,24 +694,33 @@ export default function RevisionDireccionManager({ onBack }) {
 
   // ── Stats PNC ────────────────────────────────────────────────────────────
   const pncStats = (() => {
+    const ymK = (a,m) => `${a}-${String(m).padStart(2,'0')}`;
+    const prodByMesMap = {};
+    data.produccion.forEach(p=>{ if(p.total_produccion>0) prodByMesMap[ymK(p.anio,p.mes)] = p.total_produccion; });
     const totalUnidades = pncFiltrado.reduce((s,p)=>s+(p.total||0),0);
-    const totalProd     = data.produccion.reduce((s,p)=>s+(p.total_produccion||0),0);
-    const pctPNC        = totalProd>0?(totalUnidades/totalProd)*100:0;
+    // % PNC solo con meses que tienen producción cargada (antes: todo el año vs. solo meses con PNC)
+    const mesesPNC      = [...new Set(pncFiltrado.map(p=>ymK(p.pnc_registro?.anio,p.pnc_registro?.mes)))].sort();
+    const mesesSinProd  = mesesPNC.filter(k=>!prodByMesMap[k]);
+    const udsConProd    = pncFiltrado.filter(p=>prodByMesMap[ymK(p.pnc_registro?.anio,p.pnc_registro?.mes)]).reduce((s,p)=>s+(p.total||0),0);
+    const totalProd     = mesesPNC.filter(k=>prodByMesMap[k]).reduce((s,k)=>s+prodByMesMap[k],0);
+    const pctPNC        = totalProd>0?(udsConProd/totalProd)*100:0;
     const pctTrat       = pncFiltrado.length>0?Math.round((pncFiltrado.filter(p=>p.tratamiento_fecha).length/pncFiltrado.length)*100):0;
 
     const defFreq = {};
-    pncFiltrado.forEach(p=>{ const k=p.defecto_texto||'Sin clasificar'; defFreq[k]=(defFreq[k]||0)+(p.total||1); });
+    // El módulo PNC guarda el defecto por catálogo (defecto_id); defecto_texto queda vacío
+    const nombreDefecto = (p) => p.pnc_defecto ? `${p.pnc_defecto.codigo} ${p.pnc_defecto.nombre}` : (p.defecto_texto || 'Sin clasificar');
+    pncFiltrado.forEach(p=>{ const k=nombreDefecto(p); defFreq[k]=(defFreq[k]||0)+(p.total||0); });
     const topDefectos = Object.entries(defFreq).sort((a,b)=>b[1]-a[1]).slice(0,7)
-      .map(([name,value])=>({ name:name.length>20?name.substring(0,18)+'…':name, value }));
+      .map(([name,value])=>({ name:name.length>28?name.substring(0,26)+'…':name, full:name, value }));
 
-    const causas = [
-      { name:'Módulo',      value:pncFiltrado.filter(p=>p.causa_modulo).length      },
-      { name:'Operación',   value:pncFiltrado.filter(p=>p.causa_operacion).length   },
-      { name:'Insumo',      value:pncFiltrado.filter(p=>p.causa_insumo).length      },
-      { name:'Corte',       value:pncFiltrado.filter(p=>p.causa_corte).length       },
-      { name:'Sublimación', value:pncFiltrado.filter(p=>p.causa_sublimacion).length },
-      { name:'Revisión',    value:pncFiltrado.filter(p=>p.causa_revision).length    },
-    ].filter(c=>c.value>0).sort((a,b)=>b.value-a.value);
+    // Operación de origen (PNC v3). Si un registro antiguo no la tiene, se usan las causas booleanas.
+    const opFreq = {};
+    const CAUSAS_ANT = [['causa_modulo','Módulo'],['causa_operacion','Operación'],['causa_insumo','Insumo'],['causa_corte','Corte'],['causa_sublimacion','Sublimación'],['causa_revision','Revisión']];
+    pncFiltrado.forEach(p=>{
+      const ks = p.operacion_origen ? [p.operacion_origen] : CAUSAS_ANT.filter(([c])=>p[c]).map(([,l])=>l);
+      (ks.length?ks:['Sin definir']).forEach(k=>{ opFreq[k]=(opFreq[k]||0)+(p.total||1); });
+    });
+    const causas = Object.entries(opFreq).map(([name,value])=>({ name, value })).sort((a,b)=>b.value-a.value).slice(0,8);
 
     const clasificacion = [
       { name:'Corrección',      value:pncFiltrado.filter(p=>p.clasificacion_correccion).length,      color:T.good    },
@@ -672,13 +730,45 @@ export default function RevisionDireccionManager({ onBack }) {
 
     const byMes={}, prodByMes={};
     pncFiltrado.forEach(p=>{ const k=`${p.pnc_registro?.anio}-${String(p.pnc_registro?.mes).padStart(2,'0')}`; byMes[k]=(byMes[k]||0)+(p.total||0); });
-    data.produccion.forEach(p=>{ prodByMes[`${p.anio}-${String(p.mes).padStart(2,'0')}`]=p.total_produccion||0; });
+    Object.assign(prodByMes, prodByMesMap);
     const tendenciaPNC = Object.keys(byMes).sort().map(k=>({
       mes:MESES[parseInt(k.split('-')[1])-1], nc:byMes[k], prod:prodByMes[k]||0,
-      pct:prodByMes[k]>0?parseFloat(((byMes[k]/prodByMes[k])*100).toFixed(2)):0, meta:2.5,
+      pct:prodByMes[k]>0?parseFloat(((byMes[k]/prodByMes[k])*100).toFixed(2)):null, meta:2.5,
     }));
 
-    return { totalUnidades, totalProd, pctPNC, pctTrat, topDefectos, causas, clasificacion, tendenciaPNC };
+    return { totalUnidades, udsConProd, totalProd, pctPNC, pctTrat, topDefectos, causas, clasificacion, tendenciaPNC,
+      mesesSinProd: mesesSinProd.map(k=>`${MESES[parseInt(k.split('-')[1])-1]} ${k.split('-')[0]}`) };
+  })();
+
+  // ── Stats Devoluciones ────────────────────────────────────────────────────
+  const devStats = (() => {
+    const ymK = (a,m) => `${a}-${String(m).padStart(2,'0')}`;
+    const ventas = {}; data.ventasDev.forEach(v=>{ if(v.total_ventas>0) ventas[ymK(v.anio,v.mes)] = v.total_ventas; });
+    const byMes = {};
+    data.devoluciones.forEach(d=>{
+      if(!d.fecha_devolucion) return;
+      const k = d.fecha_devolucion.substring(0,7);
+      byMes[k] = (byMes[k]||0) + (d.total_unidades||0);
+    });
+    const unidades   = data.devoluciones.reduce((s,d)=>s+(d.total_unidades||0),0);
+    const udsConVta  = Object.entries(byMes).filter(([k])=>ventas[k]).reduce((s,[,v])=>s+v,0);
+    const totVentas  = Object.keys(byMes).filter(k=>ventas[k]).reduce((s,k)=>s+ventas[k],0);
+    const pct        = totVentas>0 ? (udsConVta/totVentas)*100 : 0;
+    const respondidas= data.devoluciones.filter(d=>d.resp_fecha).length;
+    const reclass = [
+      { name:'Reparación',     value:data.devoluciones.filter(d=>d.reclass_reparacion).length,      color:T.good    },
+      { name:'Línea',          value:data.devoluciones.filter(d=>d.reclass_linea).length,           color:T.accent  },
+      { name:'Aprovechamiento',value:data.devoluciones.filter(d=>d.reclass_aprovechamiento).length, color:T.warning },
+      { name:'Desecho',        value:data.devoluciones.filter(d=>d.reclass_desecho).length,         color:T.danger  },
+    ].filter(c=>c.value>0);
+    const tendencia = Object.keys(byMes).sort().map(k=>({
+      mes:MESES[parseInt(k.split('-')[1])-1], uds:byMes[k], ventas:ventas[k]||0,
+      pct: ventas[k]>0 ? parseFloat(((byMes[k]/ventas[k])*100).toFixed(2)) : null,
+    }));
+    const mesesSinVentas = Object.keys(byMes).filter(k=>!ventas[k]).sort().map(k=>`${MESES[parseInt(k.split('-')[1])-1]} ${k.split('-')[0]}`);
+    return { registros:data.devoluciones.length, unidades, pct, totVentas, respondidas,
+      pctResp: data.devoluciones.length>0 ? Math.round(respondidas/data.devoluciones.length*100) : 0,
+      reclass, tendencia, mesesSinVentas };
   })();
 
   // ── Stats Encuestas ───────────────────────────────────────────────────────
@@ -721,8 +811,7 @@ export default function RevisionDireccionManager({ onBack }) {
     const byMes={};
     data.qrsf.forEach(q=>{
       if(!q.fecha_recepcion) return;
-      const d=new Date(q.fecha_recepcion);
-      const k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      const k=String(q.fecha_recepcion).substring(0,7);
       if(!byMes[k]) byMes[k]={queja:0,reclamo:0,sugerencia:0,felicitacion:0};
       if(q.tipo in byMes[k]) byMes[k][q.tipo]++;
     });
@@ -732,9 +821,9 @@ export default function RevisionDireccionManager({ onBack }) {
   const tendenciaAcciones = (() => {
     const byMes={};
     data.actions.forEach(a=>{
-      if(!a.created_at) return;
-      const d=new Date(a.created_at);
-      const k=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      const f=(a.date||a.created_at||'').substring(0,7);
+      if(!f) return;
+      const k=f;
       if(!byMes[k]) byMes[k]={abiertas:0,cerradas:0};
       if(a.is_closed===true||a.status==='closed') byMes[k].cerradas++; else byMes[k].abiertas++;
     });
@@ -772,8 +861,12 @@ export default function RevisionDireccionManager({ onBack }) {
       ws1.addRow([qrsfStats.total,qrsfStats.queja,qrsfStats.reclamo,qrsfStats.sugerencia,qrsfStats.felicitacion,qrsfStats.closed,`${qrsfStats.closeRate}%`]); ws1.addRow([]);
 
       ws1.addRow(['PNC']); ws1.getCell(`A${ws1.rowCount}`).font={bold:true,color:{argb:'FF6F7B2C'}};
-      hs(ws1,['Uds NC','Total Prod','% PNC','Meta','','','']);
-      ws1.addRow([pncStats.totalUnidades,pncStats.totalProd,`${fmtNum(pncStats.pctPNC)}%`,'<2,5%','','','']); ws1.addRow([]);
+      hs(ws1,['Uds NC','Total Prod','% PNC','Meta','Meses sin producción','','']);
+      ws1.addRow([pncStats.totalUnidades,pncStats.totalProd,`${fmtNum(pncStats.pctPNC)}%`,'<2,5%',pncStats.mesesSinProd.join(', ')||'—','','']); ws1.addRow([]);
+
+      ws1.addRow(['DEVOLUCIONES']); ws1.getCell(`A${ws1.rowCount}`).font={bold:true,color:{argb:'FF6F7B2C'}};
+      hs(ws1,['Registros','Unidades','Ventas','% Devolución','% Respondidas','Meses sin ventas','']);
+      ws1.addRow([devStats.registros,devStats.unidades,devStats.totVentas,`${fmtNum(devStats.pct)}%`,`${devStats.pctResp}%`,devStats.mesesSinVentas.join(', ')||'—','']); ws1.addRow([]);
 
       ws1.addRow(['ENCUESTAS']); ws1.getCell(`A${ws1.rowCount}`).font={bold:true,color:{argb:'FF6F7B2C'}};
       hs(ws1,['Tipo','Respuestas','Score Promedio','Escala','','','']);
@@ -825,7 +918,7 @@ export default function RevisionDireccionManager({ onBack }) {
         {generated && procesosUnicos.length>0 && (
           <>
             <div style={{ width:1, height:20, backgroundColor:T.border }}/>
-            <span style={{ fontSize:10, color:T.textMuted, fontWeight:700, textTransform:'uppercase' }}>Proceso PNC</span>
+            <span style={{ fontSize:10, color:T.textMuted, fontWeight:700, textTransform:'uppercase' }}>Sección PNC</span>
             <select value={proceso} onChange={e=>setProceso(e.target.value)}
               style={{ backgroundColor:T.panel, border:`1px solid ${T.border}`, borderRadius:5, color:T.text, fontSize:11, padding:'4px 8px', height:28 }}>
               <option value="todos">Todos</option>
@@ -861,6 +954,22 @@ export default function RevisionDireccionManager({ onBack }) {
       {generated && !loading && (
         <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:16 }}>
 
+          {/* ── Avisos de datos ── */}
+          {(avisos.length>0 || pncStats.mesesSinProd.length>0 || devStats.mesesSinVentas.length>0) && (
+            <div style={{ backgroundColor:'rgba(245,158,11,0.08)', border:`1px solid ${T.warning}55`, borderRadius:8, padding:'8px 12px', display:'flex', gap:8, alignItems:'flex-start' }}>
+              <AlertTriangle size={14} style={{ color:T.warning, marginTop:1, flexShrink:0 }}/>
+              <div style={{ fontSize:11, color:T.textDim, lineHeight:1.5 }}>
+                {avisos.map(a=><div key={a} style={{ color:T.danger }}>No se pudo cargar {a}</div>)}
+                {pncStats.mesesSinProd.length>0 && (
+                  <div>PNC: falta la <b>producción mensual</b> de {pncStats.mesesSinProd.join(', ')} — esos meses no entran en el % PNC (cárgala en Producto No Conforme).</div>
+                )}
+                {devStats.mesesSinVentas.length>0 && (
+                  <div>Devoluciones: faltan las <b>ventas mensuales</b> de {devStats.mesesSinVentas.join(', ')} — esos meses no entran en el % de devolución.</div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ── KPI tiles globales ── */}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(185px,1fr))', gap:10 }}>
             <KpiTile icon={TrendingUp}    color={T.menta}   delay={0.04}
@@ -883,6 +992,9 @@ export default function RevisionDireccionManager({ onBack }) {
               title="% Producto No Conforme" value={fmtNum(pncStats.pctPNC)} unit="%"
               sub={`Meta <2,5% · ${pncStats.totalUnidades} uds NC`}
               trend={-(pncStats.pctPNC-2.5)} />
+            <KpiTile icon={Activity}      color={T.orange}  delay={0.17}
+              title="Devoluciones"           value={fmtNum(devStats.pct)} unit="%"
+              sub={`${devStats.unidades} uds · ${devStats.registros} registros`} />
             <KpiTile icon={Star}
               color={scoreColor(encStats.satisfaccion.avg)}
               delay={0.19}
@@ -1081,7 +1193,7 @@ export default function RevisionDireccionManager({ onBack }) {
                 </div>
               )}
             </Panel>
-            <Panel title="Causas Principales" icon={AlertTriangle} color={T.warning} delay={0.21}>
+            <Panel title="Operación de Origen (unidades)" icon={AlertTriangle} color={T.warning} delay={0.21}>
               {pncStats.causas.length===0 ? (
                 <p style={{ textAlign:'center', color:T.textMuted, fontSize:12, padding:'40px 0' }}>Sin datos</p>
               ) : (
@@ -1092,7 +1204,7 @@ export default function RevisionDireccionManager({ onBack }) {
                       <XAxis type="number" style={{ fontSize:9 }} tick={{ fill:T.textMuted }} allowDecimals={false}/>
                       <YAxis type="category" dataKey="name" style={{ fontSize:9 }} tick={{ fill:T.textDim }} width={72}/>
                       <Tooltip content={<DarkTooltip/>}/>
-                      <Bar dataKey="value" name="Registros" radius={[0,4,4,0]}>
+                      <Bar dataKey="value" name="Unidades" radius={[0,4,4,0]}>
                         {pncStats.causas.map((_,i)=>(
                           <Cell key={i} fill={[T.danger,T.warning,T.orange,T.accent,T.menta,T.purple][i%6]}/>
                         ))}
@@ -1113,7 +1225,7 @@ export default function RevisionDireccionManager({ onBack }) {
                     <BarChart data={pncStats.topDefectos} layout="vertical" margin={{ left:2, right:20, top:5, bottom:5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={T.border} horizontal={false}/>
                       <XAxis type="number" style={{ fontSize:9 }} tick={{ fill:T.textMuted }}/>
-                      <YAxis type="category" dataKey="name" style={{ fontSize:9 }} tick={{ fill:T.textDim }} width={95}/>
+                      <YAxis type="category" dataKey="name" style={{ fontSize:9 }} tick={{ fill:T.textDim }} width={150}/>
                       <Tooltip content={<DarkTooltip/>}/>
                       <Bar dataKey="value" name="Unidades" fill={T.danger} radius={[0,4,4,0]}/>
                     </BarChart>
@@ -1256,6 +1368,48 @@ export default function RevisionDireccionManager({ onBack }) {
                   </div>
                 </>
               )}
+            </Panel>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:12 }}>
+            <Panel title="Devoluciones — Unidades y % sobre Ventas" icon={Activity} color={T.orange} delay={0.27}>
+              {devStats.tendencia.length===0 ? (
+                <p style={{ textAlign:'center', color:T.textMuted, fontSize:12, padding:'40px 0' }}>Sin devoluciones en el período</p>
+              ) : (
+                <div style={{ height:200 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={devStats.tendencia} margin={{ top:5, right:10, bottom:0, left:-15 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={T.border}/>
+                      <XAxis dataKey="mes" style={{ fontSize:9 }} tick={{ fill:T.textMuted }}/>
+                      <YAxis yAxisId="u" style={{ fontSize:9 }} tick={{ fill:T.textMuted }} allowDecimals={false}/>
+                      <YAxis yAxisId="p" orientation="right" style={{ fontSize:9 }} tick={{ fill:T.textMuted }} unit="%"/>
+                      <Tooltip content={<DarkTooltip/>}/>
+                      <Legend iconSize={8} wrapperStyle={{ fontSize:9, color:T.textDim }}/>
+                      <Bar yAxisId="u" dataKey="uds" name="Unidades devueltas" fill={T.orange} radius={[3,3,0,0]}/>
+                      <Line yAxisId="p" type="monotone" dataKey="pct" name="% sobre ventas" stroke={T.accent} strokeWidth={2} dot={{ r:3 }} connectNulls/>
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </Panel>
+            <Panel title="Devoluciones — Reclasificación" icon={Activity} color={T.orange} delay={0.29}>
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {devStats.reclass.length===0
+                  ? <p style={{ textAlign:'center', color:T.textMuted, fontSize:12, padding:'20px 0' }}>Sin reclasificación registrada</p>
+                  : devStats.reclass.map(c=>(
+                    <div key={c.name} style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', borderBottom:`1px solid ${T.border}` }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <span style={{ width:8, height:8, borderRadius:'50%', backgroundColor:c.color, display:'inline-block' }}/>
+                        <span style={{ fontSize:10, color:T.textDim }}>{c.name}</span>
+                      </div>
+                      <span style={{ fontSize:11, fontWeight:700, color:c.color }}>{c.value}</span>
+                    </div>
+                  ))}
+                <div style={{ marginTop:8, textAlign:'center', backgroundColor:T.panel2, borderRadius:8, padding:'8px 0' }}>
+                  <div style={{ fontSize:22, fontWeight:800, color:devStats.pctResp>=80?T.good:T.warning }}>{devStats.pctResp}%</div>
+                  <div style={{ fontSize:9, color:T.textMuted }}>Devoluciones con respuesta</div>
+                </div>
+              </div>
             </Panel>
           </div>
 

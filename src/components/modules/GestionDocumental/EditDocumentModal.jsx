@@ -18,10 +18,25 @@ import { useDocumentTraceability } from '../../../hooks/useDocumentTraceability'
  *    reemplaza en el mismo documento: sin versión nueva, motivo ni aprobación.
  *    El código anterior queda libre para reutilizarse.
  *    La trazabilidad se activa desde el Listado Maestro (solo admin).
+ *
+ * 🆕 v oct-2026 — En corrección directa también se editan los datos de
+ *    "Control de Cambios" igual que en la creación: VERSIÓN, FECHA DEL
+ *    ÚLTIMO CAMBIO (fecha del documento que muestra el Listado Maestro) y
+ *    MOTIVO. Se permite reemplazar el archivo por PDF (máx. 10 MB, igual
+ *    que en la creación).
  */
 
 // Mismo formato que el CHECK de la tabla document (document_code_format)
 const CODE_REGEX = /^[A-Z]{2,5}-[A-Z]{1,10}-[0-9]{2,3}$/;
+
+// 🆕 Fechas date-only: se toma la parte YYYY-MM-DD tal como se guardó
+// (los documentos cargados guardan '2023-02-22 00:00+00'; convertirla con
+// new Date() la correría un día atrás en Colombia).
+const toDateInput = (v) => (v ? String(v).slice(0, 10) : '');
+// Se guarda al mediodía de Colombia para que ninguna zona horaria la corra de día
+const fromDateInput = (d) => (d ? `${d}T12:00:00-05:00` : null);
+
+const MAX_MB = 10;
 const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
   const { user, isAdmin, isGerencia } = useAuth();
   const { notifyManagers } = useDocumentActions(); // 🆕 AGREGAR ESTA LÍNEA
@@ -44,6 +59,9 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
     objective: '',
     scope: '',
     responsible: '', // ⬅️ NUEVO: Campo responsable (texto libre)
+    version: '',           // 🆕 Control de cambios (corrección directa)
+    change_date: '',       // 🆕
+    change_reason: '',     // 🆕
     storage_location: '',
     retention_central: '',
     file_type_magnetic: false,
@@ -76,6 +94,9 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
         objective: document.objective || '',
         scope: document.scope || '',
         responsible: document.responsible || '', // ⬅️ NUEVO
+        version: String(document.version || document.current_version || 1), // 🆕
+        change_date: toDateInput(document.change_date || document.created_at), // 🆕
+        change_reason: document.change_reason || '', // 🆕
         storage_location: document.storage_location || '',
         retention_central: document.retention_central || '',
         file_type_magnetic: document.file_type_magnetic || false,
@@ -134,7 +155,10 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
     (formData.code || '').trim().toUpperCase() !== (document.code || '') ||
     formData.name !== (document.name || '') ||
     formData.document_type_id !== (document.document_type_id || '') ||
-    formData.process_id !== (document.process_id || '')
+    formData.process_id !== (document.process_id || '') ||
+    String(formData.version) !== String(document.version || document.current_version || 1) ||
+    formData.change_date !== toDateInput(document.change_date || document.created_at) ||
+    (formData.change_reason || '') !== (document.change_reason || '')
   );
 
   // Detectar si hubo cambios en metadatos (EXCLUYENDO nombre)
@@ -164,18 +188,21 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
         'application/msword', // .doc
-        'application/vnd.ms-excel' // .xls
+        'application/vnd.ms-excel', // .xls
+        'application/pdf', // 🆕 .pdf (igual que en la creación)
       ];
+      const ext = file.name.split('.').pop().toLowerCase();
+      const validExt = ['docx', 'doc', 'xlsx', 'xls', 'pdf'].includes(ext);
 
-      if (!validTypes.includes(file.type)) {
-        setError('Solo se permiten archivos Word (.docx, .doc) o Excel (.xlsx, .xls)');
+      if (!validTypes.includes(file.type) && !validExt) {
+        setError('Solo se permiten archivos PDF, Word (.docx, .doc) o Excel (.xlsx, .xls)');
         e.target.value = '';
         return;
       }
 
-      // Validar tamaño (5MB máximo)
-      if (file.size > 5 * 1024 * 1024) {
-        setError('El archivo no debe superar 5 MB');
+      // Validar tamaño (igual que en la creación)
+      if (file.size > MAX_MB * 1024 * 1024) {
+        setError(`El archivo no debe superar ${MAX_MB} MB`);
         e.target.value = '';
         return;
       }
@@ -339,8 +366,28 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
       throw new Error('Código inválido. Formato esperado: XX-XX-00 (ej: RE-GS-05)');
     }
 
+    // 🆕 Versión
+    const newVersion = parseInt(formData.version, 10);
+    if (isNaN(newVersion) || newVersion < 1) throw new Error('La versión debe ser un número mayor o igual a 1');
+    const versionChanged = newVersion !== (document.version || document.current_version || 1);
+
     const typeObj = docTypes.find(t => t.id === formData.document_type_id);
     const procObj = processList.find(p => p.id === formData.process_id);
+
+    // 🆕 La combinación código + versión debe ser única (document_code_version_unique)
+    if (versionChanged && !codeChanged) {
+      const { data: dupVer, error: dvErr } = await supabase
+        .from('document')
+        .select('id')
+        .eq('code', newCode)
+        .eq('version', newVersion)
+        .neq('id', document.id)
+        .limit(1);
+      if (dvErr) throw dvErr;
+      if (dupVer && dupVer.length > 0) {
+        throw new Error(`Ya existe ${newCode} en versión v${String(newVersion).padStart(2, '0')} (puede estar archivada)`);
+      }
+    }
 
     // Código ya usado por OTRO documento
     if (codeChanged) {
@@ -367,6 +414,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
     const ok = window.confirm(
       `¿Aplicar corrección directa?\n\n` +
       (codeChanged ? `• Código: ${document.code} → ${newCode} (el anterior queda libre)\n` : '') +
+      (versionChanged ? `• Versión: v${String(document.version || 1).padStart(2, '0')} → v${String(newVersion).padStart(2, '0')}\n` : '') +
       (newFile ? `• Se reemplaza el archivo\n` : '') +
       `• Sin versión nueva ni aprobación (carga inicial)`
     );
@@ -378,7 +426,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
       setUploadProgress(40);
       const ext = newFile.name.split('.').pop().toLowerCase();
       const folder = typeObj?.code || selectedTypeCode || 'general';
-      const version = document.version || 1;
+      const version = newVersion; // 🆕 usa la versión editada
       let path = `${folder}/${newCode}_v${version}.${ext}`;
 
       let { error: upErr } = await supabase.storage.from('documents')
@@ -419,6 +467,11 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
         disposition_total_conservation: formData.disposition_total_conservation,
         disposition_selection: formData.disposition_selection,
         disposition_elimination: formData.disposition_elimination,
+        // 🆕 Control de cambios
+        version: newVersion,
+        current_version: newVersion,
+        change_date: fromDateInput(formData.change_date) || document.change_date || null,
+        change_reason: (formData.change_reason || '').trim() || null,
         ...filePatch,
         updated_by: user?.id || null,
         updated_at: new Date().toISOString(),
@@ -428,7 +481,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
 
     if (updErr) {
       if (/document_code_version_unique|duplicate key/i.test(updErr.message)) {
-        throw new Error(`El código ${newCode} ya existe`);
+        throw new Error(`Ya existe ${newCode} en versión v${String(newVersion).padStart(2, '0')}`);
       }
       if (/document_code_format/i.test(updErr.message)) {
         throw new Error('El código no cumple el formato XX-XX-00');
@@ -582,7 +635,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                 <p className="font-bold mb-1">Modo corrección directa (carga inicial del sistema)</p>
                 <p>
                   La trazabilidad de cambios está <strong>desactivada</strong>. Puedes editar código, nombre,
-                  tipo, proceso y reemplazar el archivo. Los cambios se aplican de inmediato,
+                  tipo, proceso, versión, fecha y motivo del cambio, y reemplazar el archivo. Los cambios se aplican de inmediato,
                   sin versión nueva ni aprobación. El código anterior queda libre.
                 </p>
               </div>
@@ -626,7 +679,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                 </label>
                 <input
                   type="file"
-                  accept=".docx,.xlsx,.doc,.xls"
+                  accept=".pdf,.docx,.xlsx,.doc,.xls"
                   onChange={handleFileChange}
                   disabled={loading}
                   className="block w-full text-sm text-gray-500
@@ -638,7 +691,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                     disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Formatos: Word (.docx, .doc) o Excel (.xlsx, .xls) • Máximo 5 MB
+                  Formatos: PDF, Word (.docx, .doc) o Excel (.xlsx, .xls) • Máximo {MAX_MB} MB
                 </p>
               </div>
 
@@ -799,6 +852,59 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
 
             </div>
           </div>
+
+          {/* 🆕 Sección: Control de Cambios (solo corrección directa, igual que en la creación) */}
+          {directMode && (
+            <div className="border-2 rounded-lg p-4" style={{ borderColor: '#d97706' }}>
+              <h3 className="text-lg font-bold mb-1" style={{ color: '#2e5244' }}>
+                🕒 Control de Cambios
+              </h3>
+              <p className="text-xs text-gray-500 mb-4">
+                Versión, fecha y motivo del último cambio del documento (se muestran en el Listado Maestro).
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Versión actual <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.version}
+                    onChange={(e) => setFormData({ ...formData, version: e.target.value })}
+                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-amber-400"
+                    disabled={loading}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Fecha del último cambio
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.change_date}
+                    onChange={(e) => setFormData({ ...formData, change_date: e.target.value })}
+                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-amber-400"
+                    disabled={loading}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Puede ser histórica (fecha de creación o del último cambio)</p>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Motivo del último cambio
+                  </label>
+                  <textarea
+                    value={formData.change_reason}
+                    onChange={(e) => setFormData({ ...formData, change_reason: e.target.value })}
+                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-amber-400"
+                    rows="2"
+                    disabled={loading}
+                    placeholder="Ej: Creación, Actualización según ISO 9001:2015…"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Sección 3: Control de Archivo */}
           {/* 🆕 Solo aplica para Registros (RE) y Formatos (FO). Para los demás */}

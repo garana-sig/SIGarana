@@ -1,4 +1,7 @@
 // src/components/modules/MejoramientoContinuo/EvaluacionCompetencias/EvaluacionDashboard.jsx
+// v5 (oct 2026): al filtrar un período se muestra la LISTA de colaboradores
+// de ese período (Evaluados con sus métricas · Pendientes · Inactivos),
+// con avance real (los inactivos no cuentan) y botón Activo/Inactivo.
 import { useState, useMemo, useEffect } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -6,8 +9,9 @@ import {
   LineChart, Line, PieChart, Pie, Cell, Legend, ReferenceLine,
 } from 'recharts';
 import { supabase } from '@/lib/supabase';
+import { exportInformeDesempeno } from '@/utils/exportInformeDesempeno'; // 🆕 informe Excel
 import { calcularNivel, COLOR_NIVEL, PUNTAJE_MAX } from '@/hooks/useEvaluacionCompetencias';
-import { TrendingUp, Users, Award, Target, ChevronUp, ChevronDown, Minus, Info } from 'lucide-react';
+import { TrendingUp, Users, Award, Target, ChevronUp, ChevronDown, Minus, Info, Search, CheckCircle2, Clock, ToggleLeft, ToggleRight, ListChecks, FileSpreadsheet, Loader2 } from 'lucide-react';
 
 // ─── Tema institucional ───────────────────────────────────────────────────────
 const T = {
@@ -140,8 +144,239 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
+// ─── 🆕 Lista de colaboradores del período filtrado ──────────────────────────
+function fmtFecha(s) {
+  if (!s) return '—';
+  const [y, m, d] = String(s).slice(0, 10).split('-');
+  return d ? `${d}/${m}/${y}` : '—';
+}
+
+function PeriodoLista({
+  periodoNombre, periodoId, deptoFiltro, evaluaciones, empleados,
+  inactivosSet, inactivosDisponible, canEvaluar, onToggleInactivo, togglingId,
+  categorias = [],
+}) {
+  const [vista, setVista] = useState('todos');
+  const [exportando, setExportando] = useState(false);   // todos | evaluados | pendientes | inactivos
+  const [q, setQ]         = useState('');
+
+  // Una evaluación por colaborador en el período (la más reciente)
+  const evalPorEmp = useMemo(() => {
+    const m = {};
+    evaluaciones.forEach(ev => {
+      const nom = typeof ev.periodo === 'string' ? ev.periodo : (ev.periodo?.nombre || '');
+      if (nom !== periodoNombre) return;
+      if (!m[ev.empleado_id] || new Date(ev.fecha_evaluacion) > new Date(m[ev.empleado_id].fecha_evaluacion)) {
+        m[ev.empleado_id] = ev;
+      }
+    });
+    return m;
+  }, [evaluaciones, periodoNombre]);
+
+  // Filas: colaboradores permitidos + evaluados que ya no estén en la lista (inactivos globales)
+  const filas = useMemo(() => {
+    const porId = new Map(empleados.map(e => [e.id, e]));
+    Object.values(evalPorEmp).forEach(ev => {
+      if (!porId.has(ev.empleado_id) && ev.empleado) porId.set(ev.empleado_id, { ...ev.empleado, id: ev.empleado_id });
+    });
+    return Array.from(porId.values())
+      .filter(e => !deptoFiltro || e.departamento === deptoFiltro)
+      .map(e => {
+        const ev = evalPorEmp[e.id];
+        const estado = ev ? 'evaluado' : (inactivosSet?.has(e.id) ? 'inactivo' : 'pendiente');
+        return { emp: e, ev, estado };
+      });
+  }, [empleados, evalPorEmp, deptoFiltro, inactivosSet]);
+
+  const cuenta = {
+    evaluados:  filas.filter(f => f.estado === 'evaluado').length,
+    pendientes: filas.filter(f => f.estado === 'pendiente').length,
+    inactivos:  filas.filter(f => f.estado === 'inactivo').length,
+  };
+  const aplican = cuenta.evaluados + cuenta.pendientes;
+
+  // 🆕 Informe Excel del período (respeta el filtro de departamento)
+  const descargarInforme = async () => {
+    setExportando(true);
+    try {
+      const ESTADO = { evaluado: 'Evaluado', pendiente: 'Pendiente', inactivo: 'Inactivo' };
+      await exportInformeDesempeno({
+        periodoNombre, deptoFiltro,
+        filas: filas.map(f => ({ emp: f.emp, ev: f.ev || null, estado: ESTADO[f.estado] })),
+        categorias,
+      });
+    } catch (e) {
+      alert(e.message || 'No se pudo generar el informe.');
+    } finally {
+      setExportando(false);
+    }
+  };
+  const avance  = aplican ? Math.round((cuenta.evaluados / aplican) * 100) : 0;
+
+  const qn = q.trim().toLowerCase();
+  const visibles = filas
+    .filter(f => vista === 'todos' || f.estado === vista.replace(/s$/, ''))
+    .filter(f => !qn || `${f.emp.nombre_completo} ${f.emp.cargo || ''} ${f.emp.cedula || ''}`.toLowerCase().includes(qn))
+    .sort((a, b) => {
+      const orden = { evaluado: 0, pendiente: 1, inactivo: 2 };
+      return orden[a.estado] - orden[b.estado]
+        || (b.ev?.puntaje_total || 0) - (a.ev?.puntaje_total || 0)
+        || a.emp.nombre_completo.localeCompare(b.emp.nombre_completo, 'es');
+    });
+
+  const Chip = ({ id, label, n, color }) => (
+    <button onClick={() => setVista(id)}
+      className="px-3 py-1 rounded-full text-xs font-semibold transition-all"
+      style={{
+        background: vista === id ? color : 'white',
+        color: vista === id ? 'white' : color,
+        border: `1px solid ${color}`,
+      }}>
+      {label} <span style={{ opacity: 0.8 }}>({n})</span>
+    </button>
+  );
+
+  return (
+    <div className="rounded-xl p-4 space-y-3" style={{ background: T.panel, border: `2px solid ${T.menta}` }}>
+      {/* Encabezado + avance */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <ListChecks className="h-5 w-5" style={{ color: T.verde }} />
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-sm" style={{ color: T.text }}>
+            Colaboradores del período {periodoNombre}{deptoFiltro ? ` · ${deptoFiltro}` : ''}
+          </p>
+          <p className="text-xs" style={{ color: T.sub }}>
+            {cuenta.evaluados} de {aplican} evaluados
+            {cuenta.inactivos > 0 && ` · ${cuenta.inactivos} inactivo${cuenta.inactivos === 1 ? '' : 's'} (no cuentan)`}
+          </p>
+        </div>
+        <button onClick={descargarInforme} disabled={exportando || filas.length === 0}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
+          style={{ border: `1px solid ${T.verde}`, color: T.verde, background: 'white' }}
+          title="Informe de evaluación del desempeño en Excel (formato de calidad)">
+          {exportando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+          Informe Excel
+        </button>
+        <div className="flex items-center gap-2" style={{ minWidth: 180 }}>
+          <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: T.grid }}>
+            <div className="h-full rounded-full" style={{ width: `${avance}%`, background: avance === 100 ? T.verde : T.menta }} />
+          </div>
+          <span className="text-sm font-black" style={{ color: avance === 100 ? T.verde : T.text }}>{avance}%</span>
+        </div>
+      </div>
+
+      {/* Filtros de la lista */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Chip id="todos"      label="Todos"      n={filas.length}      color={T.verde} />
+        <Chip id="evaluados"  label="Evaluados"  n={cuenta.evaluados}  color={T.menta} />
+        <Chip id="pendientes" label="Pendientes" n={cuenta.pendientes} color={T.ambar} />
+        {inactivosDisponible && <Chip id="inactivos" label="Inactivos" n={cuenta.inactivos} color="#6b7280" />}
+        <div className="relative ml-auto" style={{ minWidth: 200 }}>
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: T.sub }} />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar colaborador…"
+            className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs outline-none"
+            style={{ border: `1px solid ${T.border}` }} />
+        </div>
+      </div>
+
+      {/* Tabla */}
+      <div className="overflow-x-auto rounded-lg" style={{ border: `1px solid ${T.border}` }}>
+        <table className="w-full text-xs">
+          <thead>
+            <tr style={{ background: T.verde, color: 'white' }}>
+              <th className="text-left px-3 py-2 font-semibold">#</th>
+              <th className="text-left px-3 py-2 font-semibold">Colaborador</th>
+              <th className="text-left px-3 py-2 font-semibold">Dpto.</th>
+              <th className="text-center px-3 py-2 font-semibold">Puntaje</th>
+              <th className="text-center px-3 py-2 font-semibold">%</th>
+              <th className="text-left px-3 py-2 font-semibold">Nivel</th>
+              <th className="text-center px-3 py-2 font-semibold">Fecha</th>
+              <th className="text-left px-3 py-2 font-semibold">Evaluador</th>
+              <th className="text-center px-3 py-2 font-semibold">Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibles.length === 0 && (
+              <tr><td colSpan={9} className="px-3 py-8 text-center" style={{ color: T.sub }}>Sin colaboradores en esta vista.</td></tr>
+            )}
+            {visibles.map(({ emp, ev, estado }, i) => {
+              const pct = ev ? Math.round((ev.puntaje_total / PUNTAJE_MAX) * 100) : null;
+              const colorNivel = COLORES_NIVEL[ev?.nivel_desempeno] || T.sub;
+              return (
+                <tr key={emp.id} style={{ borderTop: `1px solid ${T.grid}`, opacity: estado === 'inactivo' ? 0.6 : 1 }}>
+                  <td className="px-3 py-2" style={{ color: T.sub }}>{i + 1}</td>
+                  <td className="px-3 py-2">
+                    <div className="font-semibold" style={{ color: T.text }}>{emp.nombre_completo}</div>
+                    <div style={{ color: T.sub }}>{emp.cargo || '—'}</div>
+                  </td>
+                  <td className="px-3 py-2" style={{ color: T.sub }}>{emp.departamento}</td>
+                  <td className="px-3 py-2 text-center">
+                    {ev ? (
+                      <div className="flex items-center gap-2 justify-center">
+                        <div className="h-1.5 rounded-full overflow-hidden" style={{ width: 50, background: T.grid }}>
+                          <div className="h-full" style={{ width: `${pct}%`, background: colorNivel }} />
+                        </div>
+                        <span className="font-mono font-bold" style={{ color: T.text }}>{ev.puntaje_total}</span>
+                      </div>
+                    ) : <span style={{ color: '#d1d5db' }}>—</span>}
+                  </td>
+                  <td className="px-3 py-2 text-center font-semibold" style={{ color: T.text }}>{pct != null ? `${pct}%` : '—'}</td>
+                  <td className="px-3 py-2">
+                    {ev ? (
+                      <span className="px-2 py-0.5 rounded-full font-semibold whitespace-nowrap"
+                        style={{ background: colorNivel + '22', color: colorNivel }}>
+                        {NIVEL_SHORT[ev.nivel_desempeno] || ev.nivel_desempeno}
+                      </span>
+                    ) : <span style={{ color: '#d1d5db' }}>—</span>}
+                  </td>
+                  <td className="px-3 py-2 text-center" style={{ color: T.sub }}>{ev ? fmtFecha(ev.fecha_evaluacion) : '—'}</td>
+                  <td className="px-3 py-2" style={{ color: T.sub }}>{ev?.evaluador?.full_name || '—'}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center justify-center gap-1.5">
+                      {estado === 'evaluado' && (
+                        <span className="flex items-center gap-1 font-semibold" style={{ color: T.verde }}>
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Evaluado
+                        </span>
+                      )}
+                      {estado === 'pendiente' && (
+                        <span className="flex items-center gap-1 font-semibold" style={{ color: T.ambar }}>
+                          <Clock className="h-3.5 w-3.5" /> Pendiente
+                        </span>
+                      )}
+                      {estado === 'inactivo' && (
+                        <span className="flex items-center gap-1 font-semibold" style={{ color: '#6b7280' }}>
+                          <ToggleLeft className="h-3.5 w-3.5" /> Inactivo
+                        </span>
+                      )}
+                      {/* Botón Activo / Inactivo (solo si no está evaluado) */}
+                      {inactivosDisponible && periodoId && estado !== 'evaluado' && onToggleInactivo && canEvaluar?.(emp.departamento) && (
+                        <button onClick={() => onToggleInactivo(periodoId, emp, estado !== 'inactivo')}
+                          disabled={togglingId === emp.id}
+                          className="ml-1 px-1.5 py-0.5 rounded disabled:opacity-40"
+                          title={estado === 'inactivo' ? 'Activar en este período' : 'No se evalúa en este período'}
+                          style={{ border: `1px solid ${T.border}`, color: T.sub }}>
+                          {estado === 'inactivo' ? <ToggleRight className="h-3.5 w-3.5" /> : <ToggleLeft className="h-3.5 w-3.5" />}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
-export default function EvaluacionDashboard({ evaluaciones, categorias, metas: metasProp }) {
+export default function EvaluacionDashboard({
+  evaluaciones, categorias, metas: metasProp,
+  // 🆕 lista del período filtrado
+  empleados = [], periodos: periodosProp = [], getInactivosEnPeriodo = null,
+  inactivosDisponible = false, canEvaluar = null, onToggleInactivo = null, togglingId = null,
+}) {
   const [periodoFiltro, setPeriodoFiltro] = useState('');
   const [deptoFiltro,   setDeptoFiltro]   = useState('');
   const [catStats,      setCatStats]      = useState([]);
@@ -171,8 +406,10 @@ export default function EvaluacionDashboard({ evaluaciones, categorias, metas: m
   const periodos = useMemo(() => {
     const getPNombre = (p) => typeof p === 'string' ? p : (p?.nombre || '');
     const set = new Set(evaluaciones.map(e => getPNombre(e.periodo)).filter(Boolean));
+    // 🆕 también los períodos creados aunque aún no tengan evaluaciones
+    periodosProp.forEach(p => p?.nombre && set.add(p.nombre));
     return Array.from(set).sort().reverse();
-  }, [evaluaciones]);
+  }, [evaluaciones, periodosProp]);
 
   // ── Filtrar ───────────────────────────────────────────────────────────────
   const evsFilt = useMemo(() => evaluaciones.filter(e => {
@@ -303,6 +540,31 @@ export default function EvaluacionDashboard({ evaluaciones, categorias, metas: m
           {n} evaluación{n !== 1 ? 'es' : ''} {periodoFiltro ? `· ${periodoFiltro}` : ''}
         </span>
       </div>
+
+      {/* 🆕 Lista del período filtrado */}
+      {periodoFiltro ? (() => {
+        const pObj = periodosProp.find(p => p.nombre === periodoFiltro);
+        return (
+          <PeriodoLista
+            periodoNombre={periodoFiltro}
+            periodoId={pObj?.id || null}
+            deptoFiltro={deptoFiltro}
+            evaluaciones={evaluaciones}
+            empleados={empleados}
+            inactivosSet={getInactivosEnPeriodo && pObj ? getInactivosEnPeriodo(pObj.id) : new Set()}
+            inactivosDisponible={inactivosDisponible}
+            canEvaluar={canEvaluar}
+            onToggleInactivo={onToggleInactivo}
+            togglingId={togglingId}
+            categorias={categorias}
+          />
+        );
+      })() : (
+        <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
+          style={{ background: T.panel2, color: T.sub, border: `1px dashed ${T.border}` }}>
+          <Info className="h-3.5 w-3.5" /> Elige un período para ver la lista de colaboradores (evaluados, pendientes e inactivos).
+        </div>
+      )}
 
       {/* ── Fila 1: Gauge + KPIs ─────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

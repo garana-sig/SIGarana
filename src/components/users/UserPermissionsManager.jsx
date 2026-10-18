@@ -23,7 +23,6 @@ const HIDDEN_MODULES = ['clientes_ventas', 'inventario', 'configuracion'];
 // ── Submódulos ocultos — borrar de aquí cuando implementes cada uno ──
 const HIDDEN_SUBMODULES = new Set([
   // ── Mejoramiento Continuo — pendientes ──
-  'requisitos_legales',
   'auditorias_internas',
   'evaluacion_auditores',
   'reporte_incidentes',
@@ -45,6 +44,7 @@ const HIDDEN_SUBMODULES = new Set([
 
 // ── Nombres legibles (códigos exactos de BD) ─────────────────────────
 const SUBMODULE_NAMES = {
+  requisitos_legales:       'Matriz Legal',
   // Gestión Documental — activos
   formatos:                 'Formatos',
   procedimientos:           'Procedimientos',
@@ -106,6 +106,7 @@ const ACTION_NAMES = {
   deactivate:        'Desactivar',
   register_findings: 'Registrar hallazgos',
   audit:             'Auditar',
+  verify:            'Verificar',
   create:            'Crear',
   edit:              'Editar',
   delete:            'Eliminar',
@@ -121,6 +122,7 @@ const ACTION_COLORS = {
   measure: { bg: '#fff7ed', color: '#c2410c' },
   export:  { bg: '#f8fafc', color: '#475569' },
   audit:   { bg: '#ede9fe', color: '#6d28d9' },
+  verify:  { bg: '#ede9fe', color: '#6d28d9' },
 };
 
 const C = { green: '#2e5244', mint: '#6dbd96' };
@@ -321,7 +323,7 @@ export function UserPermissionsManager({ open, onClose, userId, userName, userRo
                                       <div className="flex flex-wrap gap-2">
                                         {subPerms
                                           .sort((a, b) => {
-                                            const order = ['view','create','edit','delete','approve','manage','measure','export','audit'];
+                                            const order = ['view','create','edit','delete','approve','manage','measure','export','audit','verify'];
                                             return (
                                               order.indexOf(a.code.split(':')[2]) -
                                               order.indexOf(b.code.split(':')[2])

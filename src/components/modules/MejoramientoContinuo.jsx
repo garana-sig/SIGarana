@@ -1,4 +1,5 @@
 // src/components/modules/MejoramientoContinuo/MejoramientoContinuo.jsx
+// ✅ Matriz Legal (RE-DP-04) habilitada: requisitos_legales → MatrizLegalManager
 // ✅ FIX: la tarjeta "Proveedores" solo se mostraba con el permiso
 //    'proveedores:evaluacion:view', ignorando catalogo:view y seleccion:view.
 //    Ahora usa 'permissions' (array) + hasAnyPermission, así que basta con
@@ -29,6 +30,7 @@ import RevisionDireccionManager       from './MejoramientoContinuo/RevisionDirec
 import EvaluacionCompetenciasManager  from './MejoramientoContinuo/EvaluacionCompetencias/EvaluacionCompetenciasManager';
 import InformesManager                from './MejoramientoContinuo/Informes/InformesManager';
 import ProveedoresManager             from './MejoramientoContinuo/Proveedores/ProveedoresManager';
+import MatrizLegalManager             from './MejoramientoContinuo/MatrizLegal/MatrizLegalManager';
 
 const SUBMODULES = [
   {
@@ -133,8 +135,15 @@ const SUBMODULES = [
     gradient: 'linear-gradient(135deg, #2e5244 0%, #6dbd96 100%)',
     badge: 'RE-GR-01 · RE-GR-05', enabled: true,
   },
+  {
+    id: 'requisitos_legales', name: 'Matriz Legal',
+    permission: 'auditorias:requisitos_legales:view',
+    description: 'Requisitos legales y normativos con verificación de cumplimiento',
+    icon: Scale, color: '#2e5244',
+    gradient: 'linear-gradient(135deg, #2e5244 0%, #6f7b2c 100%)',
+    badge: 'RE-DP-04', enabled: true,
+  },
   // ── Próximamente ──────────────────────────────────────────────────────
-  { id: 'requisitos_legales',   name: 'Requisitos Legales',     permission: 'auditorias:requisitos_legales:view',   description: 'Matriz de requisitos normativos',   icon: Scale,        color: '#2e5244', enabled: false },
   { id: 'auditorias',           name: 'Auditorías',             permission: 'auditorias:auditorias_internas:view',  description: 'Plan, programa y hallazgos',        icon: Search,       color: '#6dbd96', enabled: false },
   { id: 'evaluacion_auditores', name: 'Evaluación Auditores',   permission: 'auditorias:evaluacion_auditores:view', description: 'Competencias de auditores',         icon: Users,        color: '#6f7b2c', enabled: false },
   { id: 'reporte_incidentes',   name: 'Reporte de Incidentes',  permission: 'auditorias:reporte_incidentes:view',   description: 'Incidentes y eventos',              icon: AlertCircle,  color: '#6dbd96', enabled: false },
@@ -246,6 +255,8 @@ export default function MejoramientoContinuo() {
     return <InformesManager onBack={() => setActiveSubmodule(null)} />;
   if (activeSubmodule === 'proveedores')
     return <ProveedoresManager onBack={() => setActiveSubmodule(null)} />;
+  if (activeSubmodule === 'requisitos_legales')
+    return <MatrizLegalManager onBack={() => setActiveSubmodule(null)} />;
 
   // FIX: soporta tanto mod.permission (string, la mayoría de módulos) como
   // mod.permissions (array, ej. Proveedores) usando hasAnyPermission.

@@ -1,3 +1,8 @@
+// EvaluacionCompetenciasManager.jsx — v14 (oct 2026)
+//  · Botón ACTIVO / INACTIVO por colaborador y período (ec_periodo_inactivo).
+//    Los inactivos no cuentan como pendientes ni en el avance. No modifica evaluaciones.
+//  · Se retira la fecha de ingreso del formulario (la columna queda en BD sin uso).
+//  · El Dashboard muestra la lista de colaboradores del período filtrado.
 // src/components/modules/MejoramientoContinuo/EvaluacionCompetencias/EvaluacionCompetenciasManager.jsx
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
@@ -119,7 +124,13 @@ function PuntajeBar({ puntaje }) {
   );
 }
 
-function BadgeEstado({ evaluado }) {
+function BadgeEstado({ evaluado, inactivo }) {
+  if (inactivo && !evaluado) return (
+    <span className="text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
+      style={{ background: '#e5e7eb', color: '#6b7280' }}>
+      <ToggleLeft className="h-3 w-3" /> Inactivo
+    </span>
+  );
   if (evaluado) return (
     <span className="text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
       style={{ background: '#6dbd9620', color: P.verde }}>
@@ -212,7 +223,6 @@ function EmpleadoForm({ inicial, onSave, onClose, loading, usuarios = [] }) {
     nombre_completo: inicial?.nombre_completo || '',
     cargo:           inicial?.cargo           || '',
     departamento:    inicial?.departamento    || 'Operativo',
-    fecha_ingreso:   inicial?.fecha_ingreso   || '',
     is_active:       inicial?.is_active       ?? true,
     user_id:         inicial?.user_id         || '',
   });
@@ -238,16 +248,9 @@ function EmpleadoForm({ inicial, onSave, onClose, loading, usuarios = [] }) {
         <Input value={form.nombre_completo}
           onChange={e => set('nombre_completo', e.target.value.toUpperCase())} />
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="text-xs font-medium text-gray-600 mb-1 block">Cargo</label>
-          <Input value={form.cargo} onChange={e => set('cargo', e.target.value)} />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-gray-600 mb-1 block">Fecha de Ingreso</label>
-          <Input type="date" value={form.fecha_ingreso}
-            onChange={e => set('fecha_ingreso', e.target.value)} />
-        </div>
+      <div>
+        <label className="text-xs font-medium text-gray-600 mb-1 block">Cargo</label>
+        <Input value={form.cargo} onChange={e => set('cargo', e.target.value)} />
       </div>
       {/* Vinculación con cuenta del sistema */}
       <div>
@@ -1376,6 +1379,9 @@ function TablaEmpleados({
   canEvaluar, isAdminOrGerencia, canDeleteEval, periodoActivo,
   onVerPerfil, onEvaluar, onEditarEmpleado, onEliminarEmpleado, eliminandoId,
   mostrarEstado = true,
+  inactivosSet = null,          // 🆕 Set de inactivos del período mostrado
+  onToggleInactivo = null,      // 🆕 (emp, inactivar:boolean) => void
+  togglingId = null,            // 🆕
 }) {
   return (
     <div className="rounded-xl border overflow-hidden" style={{ borderColor: P.verde + '20' }}>
@@ -1400,7 +1406,8 @@ function TablaEmpleados({
           {empleados.map(emp => {
             const info   = evalPorEmpleado[emp.id] || { count: 0, ultima: null };
             const yaEval = evaluadosEnPeriodoActivo.has(emp.id);
-            const puedo  = canEvaluar(emp.departamento);
+            const esInactivo = !!inactivosSet?.has(emp.id);
+            const puedo  = canEvaluar(emp.departamento) && !esInactivo;
             const puedeEliminar = isAdminOrGerencia || canDeleteEval;
             return (
               <tr key={emp.id} className="border-b hover:bg-gray-50"
@@ -1426,7 +1433,7 @@ function TablaEmpleados({
                 <td className="px-4 py-3"><NivelBadge nivel={info.ultima?.nivel_desempeno} /></td>
                 {mostrarEstado && periodoActivo && (
                   <td className="px-4 py-3 text-center">
-                    <BadgeEstado evaluado={yaEval} />
+                    <BadgeEstado evaluado={yaEval} inactivo={esInactivo} />
                   </td>
                 )}
                 <td className="px-4 py-3">
@@ -1436,6 +1443,19 @@ function TablaEmpleados({
                       style={{ color: P.verde }}>
                       <Eye className="h-3.5 w-3.5" /> Perfil
                     </button>
+                    {onToggleInactivo && !yaEval && canEvaluar(emp.departamento) && (
+                      <button onClick={() => onToggleInactivo(emp, !esInactivo)}
+                        disabled={togglingId === emp.id}
+                        className="text-xs px-2 py-1 rounded flex items-center gap-1 disabled:opacity-40"
+                        title={esInactivo ? 'Volver a evaluar en este período' : 'No se evalúa en este período'}
+                        style={esInactivo
+                          ? { background: P.menta + '20', color: P.verde }
+                          : { background: '#f3f4f6', color: '#6b7280' }}>
+                        {esInactivo
+                          ? <><ToggleRight className="h-3.5 w-3.5" /> Activar</>
+                          : <><ToggleLeft className="h-3.5 w-3.5" /> Inactivar</>}
+                      </button>
+                    )}
                     {puedo && (
                       <button onClick={() => onEvaluar(emp)}
                         className="text-xs px-2 py-1 rounded flex items-center gap-1"
@@ -1607,6 +1627,7 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
     categorias, evaluaciones, evalPorEmpleado,
     periodos, periodoActivo, periodosActivos,
     evaluadosEnPeriodoActivo, getEvaluadosEnPeriodo,
+    inactivosEnPeriodoActivo, getInactivosEnPeriodo, inactivosDisponible, setInactivoEnPeriodo, // 🆕
     configuracion, usuarios,
     loading, isAdminOrGerencia, canEvaluar,
     canCreateEval, canEditEval, canDeleteEval, canManageEval,
@@ -1631,6 +1652,23 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
   const [saving,          setSaving]         = useState(false);
   const [toast,           setToast]          = useState(null);
   const [eliminandoEmpleado, setEliminandoEmpleado] = useState(null);
+
+  // 🆕 Activar / inactivar colaborador en un período
+  const [togglingId, setTogglingId] = useState(null);
+  async function handleToggleInactivo(periodoId, emp, inactivar) {
+    if (!periodoId) return;
+    setTogglingId(emp.id);
+    try {
+      await setInactivoEnPeriodo(periodoId, emp.id, inactivar);
+      showToast(inactivar
+        ? `${emp.nombre_completo} no se evaluará en este período`
+        : `${emp.nombre_completo} vuelve a estar activo en este período`);
+    } catch (e) {
+      showToast('Error: ' + e.message, 'err');
+    } finally {
+      setTogglingId(null);
+    }
+  }
 
   function showToast(msg, type = 'ok') {
     setToast({ msg, type });
@@ -1797,7 +1835,8 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
         <BannerPeriodo
           periodoActivo={periodoActivo}
           pendientes={empleadosPendientes.length}
-          total={empleadosPermitidos.length}
+          total={empleadosPermitidos.filter(e =>
+            !inactivosEnPeriodoActivo.has(e.id) || evaluadosEnPeriodoActivo.has(e.id)).length}
         />
       ) : (
         <div className="rounded-xl p-3 flex items-center gap-3 flex-wrap"
@@ -1883,10 +1922,14 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
         const pidActivo  = periodoFiltroId || periodoActivo?.id || null;
         const periodoSel = periodos.find(p => p.id === pidActivo) || periodoActivo;
         const evaluadosSel  = getEvaluadosEnPeriodo(pidActivo);
-        const pendientesBase = empleadosPermitidos.filter(e => !evaluadosSel.has(e.id));
+        const inactivosSel  = getInactivosEnPeriodo(pidActivo); // 🆕
+        const pendientesBase = empleadosPermitidos.filter(e => !evaluadosSel.has(e.id) && !inactivosSel.has(e.id));
         const pendientesSel  = deptoFiltroPend
           ? pendientesBase.filter(e => e.departamento === deptoFiltroPend)
           : pendientesBase;
+        const inactivosLista = empleadosPermitidos.filter(e =>
+          inactivosSel.has(e.id) && !evaluadosSel.has(e.id) &&
+          (!deptoFiltroPend || e.departamento === deptoFiltroPend));
         return (
           <div className="space-y-4">
             {periodosActivos.length > 0 ? (
@@ -1955,16 +1998,56 @@ export default function EvaluacionCompetenciasManager({ onBack }) {
                   onEditarEmpleado={emp => setEmpFormModal(emp)}
                   onEliminarEmpleado={handleEliminarEmpleado}
                   eliminandoId={eliminandoEmpleado}
+                  inactivosSet={inactivosSel}
+                  onToggleInactivo={inactivosDisponible ? (emp, inac) => handleToggleInactivo(pidActivo, emp, inac) : null}
+                  togglingId={togglingId}
                 />
               </>
             ))}
+
+            {/* 🆕 Inactivos del período (no cuentan como pendientes) */}
+            {pidActivo && inactivosDisponible && inactivosLista.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm flex items-center gap-2" style={{ color: '#6b7280' }}>
+                  <ToggleLeft className="h-4 w-4" />
+                  <strong>{inactivosLista.length}</strong> colaborador{inactivosLista.length === 1 ? '' : 'es'} inactivo{inactivosLista.length === 1 ? '' : 's'} en{' '}
+                  <strong>{periodoSel?.nombre}</strong> (no se evalúan ni cuentan como pendientes):
+                </p>
+                <TablaEmpleados
+                  empleados={inactivosLista}
+                  evalPorEmpleado={evalPorEmpleado}
+                  evaluadosEnPeriodoActivo={evaluadosSel}
+                  canEvaluar={canEvaluar}
+                  isAdminOrGerencia={isAdminOrGerencia}
+                  canDeleteEval={canDeleteEval}
+                  periodoActivo={periodoSel}
+                  mostrarEstado={true}
+                  onVerPerfil={emp => { setSelEmpleado(emp); setView('perfil'); }}
+                  onEvaluar={() => {}}
+                  onEditarEmpleado={emp => setEmpFormModal(emp)}
+                  inactivosSet={inactivosSel}
+                  onToggleInactivo={(emp, inac) => handleToggleInactivo(pidActivo, emp, inac)}
+                  togglingId={togglingId}
+                />
+              </div>
+            )}
           </div>
         );
       })()}
 
       {/* ── Tab: Dashboard ── */}
       {tab === 'dashboard' && (
-        <EvaluacionDashboard evaluaciones={evaluaciones} categorias={categorias} />
+        <EvaluacionDashboard
+          evaluaciones={evaluaciones}
+          categorias={categorias}
+          empleados={empleadosPermitidos}
+          periodos={periodos}
+          getInactivosEnPeriodo={getInactivosEnPeriodo}
+          inactivosDisponible={inactivosDisponible}
+          canEvaluar={canEvaluar}
+          onToggleInactivo={handleToggleInactivo}
+          togglingId={togglingId}
+        />
       )}
 
       {/* ── Tab: Configuración ── */}

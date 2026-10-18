@@ -31,6 +31,8 @@ function tipoArchivo(path = '') {
   return { label: ext.toUpperCase(), color: C.olive };
 }
 
+// Fecha del documento (change_date: la que se registra al crearlo/corregirlo),
+// tomada tal cual (YYYY-MM-DD) para que no se corra un día por zona horaria.
 function fmtFecha(s) {
   if (!s) return '';
   const [y, m, d] = String(s).slice(0, 10).split('-');
@@ -53,7 +55,7 @@ export default function Manuales() {
         const { data, error: e } = await supabase
           .from('document')
           .select(`
-            id, code, name, objective, version, status, file_path, file_name, file_size, updated_at,
+            id, code, name, objective, version, status, file_path, file_name, file_size, change_date,
             document_type:document_type_id!inner ( code, name ),
             process:process_id ( name )
           `)
@@ -163,7 +165,7 @@ export default function Manuales() {
                       {m.code}
                     </span>
                     <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.65)' }}>
-                      v{String(m.version ?? 1).padStart(2, '0')}{m.updated_at ? ` · ${fmtFecha(m.updated_at)}` : ''}
+                      Versión {String(m.version ?? 1).padStart(2, '0')}{m.change_date ? ` · ${fmtFecha(m.change_date)}` : ''}
                     </span>
                   </div>
                   <div className="flex items-center gap-3 mt-3 relative">
