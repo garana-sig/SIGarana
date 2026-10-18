@@ -1,4 +1,5 @@
 // src/components/modules/GestionDocumental/ListadoMaestro.jsx
+// 🆕 18-oct-2026: botón Eliminar definitivamente (hard delete, solo admin)
 import React, { useState, useMemo } from 'react';
 import { useDocuments, useDocumentTypes, useProcesses } from '@/hooks/useDocuments';
 import { useFileDownload } from '@/hooks/useFileDownload';
@@ -24,6 +25,7 @@ const fmtFechaDoc = (changeDate, createdAt) => {
 import EditDocumentModal from './EditDocumentModal';
 import DocumentViewerModal from './DocumentViewerModal';
 import { useAuth } from '@/context/AuthContext';                              // 🆕
+import { supabase } from '@/lib/supabase';                                    // 🆕 eliminar documento
 import { useDocumentTraceability } from '@/hooks/useDocumentTraceability';   // 🆕
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -33,6 +35,7 @@ import {
   FileText, Search, Plus, Eye, Edit, Download,
   Filter, RefreshCw, ChevronDown, ChevronRight, Loader2,
   ChevronsLeft, ChevronsRight, ShieldCheck, ShieldOff, FileSpreadsheet,
+  Trash2, AlertTriangle, X,
 } from 'lucide-react';
 
 // ── Opciones de página ────────────────────────────────────────────────────────
@@ -113,6 +116,94 @@ function Pagination({ currentPage, totalPages, totalRows, pageSize, onPage, onPa
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+// 🆕 ELIMINAR DOCUMENTO (hard delete) — solo admin (RLS: "Only admin can
+// delete documents" en la tabla y en Storage).
+// Borra: la fila de `document` (en cascada: document_version,
+// document_approval y notification) y los archivos del bucket `documents`
+// (versión vigente + versiones anteriores). No se puede deshacer.
+// Para confirmar hay que escribir el código del documento.
+// ═══════════════════════════════════════════════════════════════════════
+async function eliminarDocumentoDefinitivo(doc) {
+  // 1. Rutas de archivos ANTES de borrar (la cascada borra document_version)
+  const { data: versiones, error: eVer } = await supabase
+    .from('document_version').select('file_path').eq('document_id', doc.id);
+  if (eVer) throw eVer;
+  const rutas = [...new Set([doc.file_path, ...(versiones || []).map((v) => v.file_path)].filter(Boolean))];
+
+  // 2. Borrar en BD (si RLS no lo permite, count = 0 y no hay error → se valida)
+  const { error: eDel, count } = await supabase
+    .from('document').delete({ count: 'exact' }).eq('id', doc.id);
+  if (eDel) throw eDel;
+  if (!count) throw new Error('No tienes permiso para eliminar documentos (solo administrador).');
+
+  // 3. Borrar archivos de Storage (si falla, el documento ya no existe: solo se avisa)
+  let avisoStorage = null;
+  if (rutas.length) {
+    const { error: eSto } = await supabase.storage.from('documents').remove(rutas);
+    if (eSto) avisoStorage = `El documento se eliminó, pero no se pudieron borrar ${rutas.length} archivo(s) del almacenamiento: ${eSto.message}`;
+  }
+  return { archivos: rutas.length, avisoStorage };
+}
+
+function DeleteDocumentModal({ doc, onClose, onDeleted }) {
+  const [texto, setTexto]   = useState('');
+  const [borrando, setBorr] = useState(false);
+  const [error, setError]   = useState('');
+  if (!doc) return null;
+  const ok = texto.trim().toUpperCase() === String(doc.code || '').toUpperCase();
+
+  const confirmar = async () => {
+    if (!ok) return;
+    setBorr(true); setError('');
+    try {
+      const res = await eliminarDocumentoDefinitivo(doc);
+      onDeleted(doc, res);
+    } catch (e) {
+      setError(e.message);
+      setBorr(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.55)' }}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-5 py-3 rounded-t-xl bg-red-600 text-white">
+          <div className="flex items-center gap-2 font-bold"><AlertTriangle className="h-5 w-5" />Eliminar documento</div>
+          <button onClick={onClose} disabled={borrando} className="opacity-80 hover:opacity-100"><X className="h-5 w-5" /></button>
+        </div>
+        <div className="p-5 space-y-3 text-sm">
+          <div className="rounded-lg p-3" style={{ background: '#f5f5ef' }}>
+            <p className="font-bold" style={{ color: '#2e5244' }}>{doc.code} · v{String(doc.version || 1).padStart(2, '0')}</p>
+            <p className="text-gray-700">{(doc.name || '').toUpperCase()}</p>
+          </div>
+          <p className="text-gray-700">
+            Se eliminará <b>definitivamente</b>: el documento, su historial de versiones, aprobaciones,
+            notificaciones y los archivos guardados. <b className="text-red-600">No se puede deshacer.</b>
+          </p>
+          <p className="text-xs text-gray-500">
+            Si el documento solo dejó de usarse y debe quedar trazabilidad, es mejor <b>archivarlo</b> en lugar de eliminarlo.
+          </p>
+          <label className="block">
+            <span className="text-xs font-semibold text-gray-600">Para confirmar escribe el código <b>{doc.code}</b></span>
+            <input autoFocus value={texto} onChange={(e) => setTexto(e.target.value)} disabled={borrando}
+              onKeyDown={(e) => { if (e.key === 'Enter') confirmar(); }}
+              className="mt-1 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
+          </label>
+          {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-3 border-t">
+          <Button variant="outline" onClick={onClose} disabled={borrando}>Cancelar</Button>
+          <Button onClick={confirmar} disabled={!ok || borrando} className="bg-red-600 hover:bg-red-700 text-white">
+            {borrando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+            Eliminar definitivamente
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
   const [searchTerm,      setSearchTerm]      = useState('');
   const [selectedType,    setSelectedType]    = useState(null);
@@ -125,6 +216,8 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
   const [selectedDocument,    setSelectedDocument]    = useState(null);
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
   const [isEditModalOpen,     setIsEditModalOpen]     = useState(false);
+  const [documentToDelete,    setDocumentToDelete]    = useState(null);   // 🆕
+  const [deleteMsg,           setDeleteMsg]           = useState(null);   // 🆕
   const [documentToEdit,      setDocumentToEdit]      = useState(null);
   const [isViewerModalOpen,   setIsViewerModalOpen]   = useState(false);
   const [documentToView,      setDocumentToView]      = useState(null);
@@ -223,6 +316,14 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
   const handleOpenEditModal   = (doc) => { setDocumentToEdit(doc); setIsEditModalOpen(true); };
   const handleCloseEditModal  = ()    => { setIsEditModalOpen(false); setDocumentToEdit(null); };
   const handleEditSuccess     = ()    => refresh();
+  const handleDeleted         = (doc, res) => {                                  // 🆕
+    setDocumentToDelete(null);
+    setDeleteMsg(res.avisoStorage
+      ? { type: 'warn', text: res.avisoStorage }
+      : { type: 'ok', text: `${doc.code} eliminado definitivamente${res.archivos ? ` (${res.archivos} archivo${res.archivos === 1 ? '' : 's'})` : ''}.` });
+    setTimeout(() => setDeleteMsg(null), 5000);
+    refresh();
+  };
 
   const handleOpenViewerModal = (doc) => { setDocumentToView(doc); setIsViewerModalOpen(true); };
 
@@ -586,6 +687,11 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
                                   ? <Loader2 className="h-3 w-3 animate-spin" />
                                   : <Download className="h-3 w-3" style={{ color: '#2e5244' }} />}
                               </Button>
+                              {isAdmin && (
+                                <Button variant="ghost" size="sm" onClick={() => setDocumentToDelete(doc)} className="h-6 w-6 p-0" title="Eliminar definitivamente">
+                                  <Trash2 className="h-3 w-3 text-red-500" />
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -619,6 +725,14 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
 
       <EditDocumentModal document={documentToEdit} isOpen={isEditModalOpen}
         onClose={handleCloseEditModal} onSuccess={handleEditSuccess} />
+
+      <DeleteDocumentModal doc={documentToDelete} onClose={() => setDocumentToDelete(null)} onDeleted={handleDeleted} />
+
+      {deleteMsg && (
+        <div className={`fixed bottom-4 right-4 z-[60] rounded-lg px-4 py-2 text-sm shadow-lg border ${deleteMsg.type === 'ok' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-800 border-amber-200'}`}>
+          {deleteMsg.text}
+        </div>
+      )}
 
       <DocumentViewerModal document={documentToView} isOpen={isViewerModalOpen}
         onClose={() => { setIsViewerModalOpen(false); setDocumentToView(null); }} />
