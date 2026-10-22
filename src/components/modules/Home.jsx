@@ -75,7 +75,7 @@ const ACCESOS_RAPIDOS = [
   {
     key: 'planesProgramas',
     label: 'Planes y Programas',
-    desc: 'Planes SST, Bienestar y Mantenimiento',
+    desc: 'Planes y programas del Sistema de Gestión',
     icon: ClipboardCheck,
     color: C.olive,
   },

@@ -1,4 +1,5 @@
 // src/components/modules/MejoramientoContinuo/MejoramientoContinuo.jsx
+// ✅ (oct 2026) Mantenimiento de Equipos (RE-GR-11) migrado desde Planes y Programas → MantenimientoManager
 // ✅ Matriz Legal (RE-DP-04) habilitada: requisitos_legales → MatrizLegalManager
 // ✅ FIX: la tarjeta "Proveedores" solo se mostraba con el permiso
 //    'proveedores:evaluacion:view', ignorando catalogo:view y seleccion:view.
@@ -14,7 +15,7 @@ import {
   FileText, CheckCircle2, AlertTriangle, ClipboardCheck,
   FileBarChart, TrendingUp, Scale, Search, Users,
   BarChart3, AlertCircle, Smile, Award, HelpCircle, Settings,
-  Building2,
+  Building2, Wrench,
 } from 'lucide-react';
 
 import ActasManager                   from './MejoramientoContinuo/Actas/ActasManager';
@@ -31,6 +32,7 @@ import EvaluacionCompetenciasManager  from './MejoramientoContinuo/EvaluacionCom
 import InformesManager                from './MejoramientoContinuo/Informes/InformesManager';
 import ProveedoresManager             from './MejoramientoContinuo/Proveedores/ProveedoresManager';
 import MatrizLegalManager             from './MejoramientoContinuo/MatrizLegal/MatrizLegalManager';
+import MantenimientoManager           from '@/components/modules/MantenimientoManager';
 
 const SUBMODULES = [
   {
@@ -142,6 +144,16 @@ const SUBMODULES = [
     icon: Scale, color: '#2e5244',
     gradient: 'linear-gradient(135deg, #2e5244 0%, #6f7b2c 100%)',
     badge: 'RE-DP-04', enabled: true,
+  },
+  // ── MANTENIMIENTO DE EQUIPOS (migrado desde Planes y Programas) ─────────
+  // Basta con ver computadores O maquinaria para ver la tarjeta.
+  {
+    id: 'mantenimiento', name: 'Mantenimiento de Equipos',
+    permissions: ['mantenimiento:computadores:view', 'mantenimiento:maquinaria:view'],
+    description: 'Hoja de vida y registro de mantenimiento de computadores y maquinaria',
+    icon: Wrench, color: '#6f7b2c',
+    gradient: 'linear-gradient(135deg, #6f7b2c 0%, #6dbd96 100%)',
+    badge: 'RE-GR-11', enabled: true,
   },
   // ── Próximamente ──────────────────────────────────────────────────────
   { id: 'auditorias',           name: 'Auditorías',             permission: 'auditorias:auditorias_internas:view',  description: 'Plan, programa y hallazgos',        icon: Search,       color: '#6dbd96', enabled: false },
@@ -257,6 +269,8 @@ export default function MejoramientoContinuo() {
     return <ProveedoresManager onBack={() => setActiveSubmodule(null)} />;
   if (activeSubmodule === 'requisitos_legales')
     return <MatrizLegalManager onBack={() => setActiveSubmodule(null)} />;
+  if (activeSubmodule === 'mantenimiento')
+    return <MantenimientoManager onBack={() => setActiveSubmodule(null)} />;
 
   // FIX: soporta tanto mod.permission (string, la mayoría de módulos) como
   // mod.permissions (array, ej. Proveedores) usando hasAnyPermission.
