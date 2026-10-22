@@ -1,6 +1,13 @@
 // supabase/functions/create-user/index.ts
 // ══════════════════════════════════════════════════════════════════════
 // Crea un usuario sin desloguear al admin
+// v7 (oct 2026):
+//   · FIX 401: la llamada a send-email ya no envía el header "apikey"
+//     (con él el gateway respondía 401). Igual que sst-alerts: solo Authorization.
+//   · Revisa la respuesta de send-email. Si falla, responde email_sent=false y
+//     devuelve temp_password para que el admin se la entregue al usuario.
+//   · Acepta process_id / process_name (lo que envía GestionUsuarios.jsx)
+//     además de department_id / department_name.
 // ══════════════════════════════════════════════════════════════════════
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
@@ -25,8 +32,25 @@ serve(async (req) => {
   }
 
   // ── DELETE: eliminar usuario de auth.users ────────────────────────
+  // v8: solo admin. (La app ya no lo usa: hard_delete_user borra auth.users.)
   if (req.method === "DELETE") {
     try {
+      const token = (req.headers.get("Authorization") || "").replace("Bearer ", "");
+      const sbAdmin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        { auth: { autoRefreshToken: false, persistSession: false } }
+      );
+      const { data: { user: caller } } = await sbAdmin.auth.getUser(token);
+      const { data: callerProf } = caller
+        ? await sbAdmin.from("profile").select("role").eq("id", caller.id).single()
+        : { data: null };
+      if (callerProf?.role !== "admin") {
+        return new Response(
+          JSON.stringify({ error: "Solo un administrador puede eliminar usuarios" }),
+          { status: 403, headers: { "Content-Type": "application/json", ...CORS_HEADERS } }
+        );
+      }
       const { userId } = await req.json();
       if (!userId) {
         return new Response(
@@ -108,6 +132,7 @@ serve(async (req) => {
       role,
       department_id,
       department_name,
+      process_name,
       phone,
       created_by_name,
     } = await req.json();
@@ -152,34 +177,48 @@ serve(async (req) => {
       must_change_password: true,
     }, { onConflict: "id" });
 
-    // 3️⃣ Enviar email de bienvenida via send-email
+    // 3️⃣ Enviar email de bienvenida via send-email (sin header apikey → evita 401)
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
-      method: "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-        "apikey":        Deno.env.get("SUPABASE_ANON_KEY")!,
-      },
-      body: JSON.stringify({
-        type: "user_bienvenida",
-        to:   email,
-        data: {
-          full_name,
-          email,
-          temp_password:   tempPassword,
-          role,
-          department:      department_name || null,
-          created_by_name: created_by_name || "Administrador",
+    let emailSent  = false;
+    let emailError = "";
+    try {
+      const mailRes = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+        method: "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
         },
-      }),
-    });
+        body: JSON.stringify({
+          type: "user_bienvenida",
+          to:   email,
+          data: {
+            full_name,
+            email,
+            temp_password:   tempPassword,
+            role,
+            department:      process_name || department_name || null,
+            created_by_name: created_by_name || "Administrador",
+          },
+        }),
+      });
+      emailSent = mailRes.ok;
+      if (!mailRes.ok) emailError = `send-email ${mailRes.status}: ${(await mailRes.text()).slice(0, 200)}`;
+    } catch (e: any) {
+      emailError = e?.message || "Error de red al llamar send-email";
+    }
+    if (!emailSent) console.error("❌ Email de bienvenida no enviado:", emailError);
 
     return new Response(
       JSON.stringify({
-        success: true,
-        userId:  newUserId,
-        message: `Usuario ${full_name} creado. Se envió email de bienvenida a ${email}.`,
+        success:    true,
+        userId:     newUserId,
+        email_sent: emailSent,
+        // Solo si el correo NO salió: el admin/gerente que creó el usuario
+        // necesita la contraseña temporal para entregársela personalmente.
+        ...(emailSent ? {} : { temp_password: tempPassword, email_error: emailError }),
+        message: emailSent
+          ? `Usuario ${full_name} creado. Se envió email de bienvenida a ${email}.`
+          : `Usuario ${full_name} creado, pero el email de bienvenida NO se pudo enviar.`,
       }),
       { status: 201, headers: { "Content-Type": "application/json", ...CORS_HEADERS } }
     );

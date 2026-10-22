@@ -131,6 +131,8 @@ export default function GestionUsuarios() {
   const [expandedUser,    setExpandedUser]    = useState(null);
 
   const [toasts, setToasts] = useState([]);
+  // Credenciales a mostrar cuando el email de bienvenida no se pudo enviar
+  const [credenciales, setCredenciales] = useState(null);
   const addToast = (message, type = 'success') => {
     const id = Date.now();
     setToasts(p => [...p, { id, message, type }]);
@@ -162,28 +164,10 @@ export default function GestionUsuarios() {
       if (rpcErr) throw rpcErr;
       if (result && !result.success) throw new Error(result.error || 'Error al eliminar');
 
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
-          {
-            method: 'DELETE',
-            headers: {
-              'Content-Type':  'application/json',
-              'Authorization': `Bearer ${session.access_token}`,
-              'apikey':        import.meta.env.VITE_SUPABASE_ANON_KEY,
-            },
-            body: JSON.stringify({ userId: user.id }),
-          }
-        );
-        if (!res.ok) {
-          addToast(`${user.full_name} eliminado. El email quedará libre en unos minutos.`, 'warning');
-        } else {
-          addToast(`${user.full_name} eliminado correctamente`);
-        }
-      } catch {
-        addToast(`${user.full_name} eliminado. El email quedará libre en unos minutos.`, 'warning');
-      }
+      // v2 (oct 2026): hard_delete_user ya borra también auth.users en la BD
+      // (sin trazabilidad). El email queda libre de inmediato; no hace falta
+      // llamar a create-user DELETE.
+      addToast(`${user.full_name} eliminado definitivamente`);
 
       refresh();
       setShowDelete(false);
@@ -349,7 +333,35 @@ export default function GestionUsuarios() {
         currentUser={currentUser}
         onSuccess={msg => { addToast(msg); refresh(); setShowCreate(false); }}
         onError={msg => addToast(msg, 'error')}
+        onEmailFailed={info => { refresh(); setShowCreate(false); setCredenciales(info); }}
       />
+
+      {/* Email de bienvenida NO enviado → mostrar contraseña temporal al admin */}
+      {credenciales && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <h3 style={{ color: C.green, fontSize: 17, fontWeight: 800, margin: 0 }}>Usuario creado — correo no enviado</h3>
+            <p style={{ fontSize: 13, color: '#4b5563', margin: 0, lineHeight: 1.55 }}>
+              <strong>{credenciales.full_name}</strong> quedó creado, pero el correo de bienvenida no se pudo enviar.
+              Entrégale estos datos personalmente. Al ingresar, el sistema le pedirá cambiar la contraseña.
+            </p>
+            <div style={{ background: '#f8f9fa', borderLeft: `4px solid ${C.mint}`, borderRadius: 6, padding: '12px 14px', fontSize: 13 }}>
+              <div><strong style={{ color: C.green }}>Usuario:</strong> {credenciales.email}</div>
+              <div className="flex items-center gap-2 mt-1">
+                <strong style={{ color: C.green }}>Contraseña temporal:</strong>
+                <code style={{ fontSize: 15, fontWeight: 800, letterSpacing: 1 }}>{credenciales.temp_password}</code>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => {
+                navigator.clipboard?.writeText(`Usuario: ${credenciales.email}\nContraseña temporal: ${credenciales.temp_password}`)
+                  .then(() => addToast('Datos copiados')).catch(() => {});
+              }}>Copiar</Button>
+              <Button style={{ background: C.green, color: 'white' }} onClick={() => setCredenciales(null)}>Listo</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showEdit && selectedUser && (
         <EditUserModal
@@ -425,7 +437,7 @@ export default function GestionUsuarios() {
 // ══════════════════════════════════════════════════════════════════
 // MODAL CREAR USUARIO — v2: usa process_id
 // ══════════════════════════════════════════════════════════════════
-function CreateUserModal({ open, onClose, processes, currentUser, onSuccess, onError }) {
+function CreateUserModal({ open, onClose, processes, currentUser, onSuccess, onError, onEmailFailed }) {
   const [form,    setForm]    = useState({ email: '', full_name: '', role: 'usuario', process_id: '', phone: '' }); // ← CAMBIO
   const [saving,  setSaving]  = useState(false);
   const [step,    setStep]    = useState('');
@@ -492,7 +504,12 @@ function CreateUserModal({ open, onClose, processes, currentUser, onSuccess, onE
         }
       }
 
-      onSuccess(`✅ ${form.full_name} creado. Credenciales enviadas a ${form.email}`);
+      // v7 create-user: si el correo no salió, mostrar la contraseña temporal al admin
+      if (result.email_sent === false && result.temp_password && onEmailFailed) {
+        onEmailFailed({ full_name: form.full_name, email: form.email.trim().toLowerCase(), temp_password: result.temp_password });
+      } else {
+        onSuccess(`✅ ${form.full_name} creado. Credenciales enviadas a ${form.email}`);
+      }
       handleClose();
     } catch (err) {
       onError(err.message);

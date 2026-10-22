@@ -2,6 +2,12 @@
 // ══════════════════════════════════════════════════════════════════════
 // Edge Function unificada: Documentos + Acciones de Mejora + Informes
 // Usa nodemailer + Gmail. Logo corporativo desde Supabase Storage.
+// v52 (oct 2026): se restauran/agregan los tipos que la app ya enviaba y
+//   no existían (respondían 400 "Tipo de email no reconocido"):
+//   user_bienvenida · accion_mejora_m1/_m2/_m3_verificacion ·
+//   sst_asignacion_actividad · sst_recordatorio_actividad · sst_actividad_vencida ·
+//   indicador_creacion · indicador_edicion · indicador_critico
+//   Deploy SIEMPRE con verify_jwt = false.
 // ══════════════════════════════════════════════════════════════════════
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
@@ -38,7 +44,21 @@ interface EmailRequest {
     // ── Informes de Gestión ──────────────────────────────────────────
     | "informe_enviado"
     | "informe_revisado_ok"
-    | "informe_revision_solicitada";
+    | "informe_revision_solicitada"
+    // ── Usuarios ─────────────────────────────────────────────────────
+    | "user_bienvenida"
+    // ── Acciones de Mejora por momentos ─────────────────────────────
+    | "accion_mejora_m1"
+    | "accion_mejora_m2"
+    | "accion_mejora_m3_verificacion"
+    // ── SST y Bienestar ──────────────────────────────────────────────
+    | "sst_asignacion_actividad"
+    | "sst_recordatorio_actividad"
+    | "sst_actividad_vencida"
+    // ── Indicadores ──────────────────────────────────────────────────
+    | "indicador_creacion"
+    | "indicador_edicion"
+    | "indicador_critico";
   to: string | string[];
   document?: {
     id: string;
@@ -85,6 +105,8 @@ interface EmailRequest {
     created_by?: string;
     reviewer_name?: string;
     review_notes?: string;
+    // Campos de los tipos v52 (bienvenida, M1-M3, SST, indicadores)
+    [key: string]: any;
   };
 }
 
@@ -533,6 +555,217 @@ const getInformeRevisionSolicitadaTemplate = (req: EmailRequest): string => {
 };
 
 // ══════════════════════════════════════════════════════════════════════
+// v52 — HELPERS + TEMPLATES RESTAURADOS
+// ══════════════════════════════════════════════════════════════════════
+const esc = (v: unknown): string =>
+  String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const row = (label: string, value: unknown, strong = false): string =>
+  value === undefined || value === null || value === ""
+    ? ""
+    : `<div class="info-row"><div class="info-label">${label}</div><div class="info-value">${strong ? `<strong>${esc(value)}</strong>` : esc(value)}</div></div>`;
+const block = (title: string, text: unknown, warn = false): string =>
+  text
+    ? `<p style="font-size:13px;font-weight:700;color:${warn ? "#dc2626" : "#2e5244"};margin:16px 0 8px;">${title}</p>
+       <div class="${warn ? "reason-box-warn" : "reason-box"}" style="white-space:pre-line">${esc(text)}</div>`
+    : "";
+const button = (path: string, label: string): string =>
+  `<div style="text-align:center;margin-top:28px;"><a href="${APP_URL}${path}" class="btn">${label}</a></div>`;
+const checks = (items: [string, boolean | undefined][]): string => {
+  const on = items.filter(([, v]) => !!v).map(([l]) => l);
+  return on.length ? on.join(" · ") : "—";
+};
+
+// ── Usuarios: bienvenida con contraseña temporal ─────────────────────
+const getUserBienvenidaTemplate = (req: EmailRequest): string => {
+  const d = req.data!;
+  return getBaseTemplate("Bienvenido(a) a Garana SIG", `
+    <div class="content">
+      <div class="title">👋 ¡Bienvenido(a) a Garana SIG!</div>
+      <div class="message">
+        Hola <strong>${esc(d.full_name)}</strong>, ${esc(d.created_by_name || "el administrador")} creó tu usuario
+        en el Sistema de Gestión Integral. Estos son tus datos de acceso:
+      </div>
+      <div class="info-box">
+        ${row("Usuario (email):", d.email, true)}
+        <div class="info-row"><div class="info-label">Contraseña temporal:</div>
+          <div class="info-value"><strong style="font-family:monospace;font-size:16px;letter-spacing:1px;color:#2e5244">${esc(d.temp_password)}</strong></div></div>
+        ${row("Rol:", d.role)}
+        ${row("Proceso / Área:", d.department)}
+      </div>
+      <div style="background:#fff7ed;border-left:3px solid #d97706;padding:12px 16px;margin:16px 0;border-radius:4px;font-size:13px;color:#92400e">
+        🔐 Al ingresar por primera vez el sistema te pedirá cambiar esta contraseña. No la compartas con nadie.
+      </div>
+      ${button("", "Ingresar al sistema")}
+    </div>`);
+};
+
+// ── Acciones de Mejora: Momento 1 (registro del hallazgo) ────────────
+const getAccionM1Template = (req: EmailRequest): string => {
+  const d = req.data!;
+  const origen = checks([
+    ["Auditoría", d.origin_audit], ["Satisfacción del cliente", d.origin_satisfaction],
+    ["QRS", d.origin_qrs], ["Autocontrol", d.origin_autocontrol],
+    ["Análisis de riesgos", d.origin_risk_analysis], ["Producto no conforme", d.origin_nonconforming],
+  ]);
+  return getBaseTemplate("Nueva Acción de Mejora", `
+    <div class="content">
+      <div class="title">🎯 Nueva Acción de Mejora registrada</div>
+      <div class="message">Se registró un nuevo hallazgo en tu proceso. Está pendiente el análisis y plan de acción (Momento 2).</div>
+      <div class="info-box">
+        ${row("Consecutivo:", d.consecutive, true)}
+        ${row("Origen:", origen)}
+        ${row("Registrado por:", d.created_by_name)}
+        <div class="info-row"><div class="info-label">Estado:</div><div class="info-value"><span class="badge badge-amber">Abierta · Momento 1</span></div></div>
+      </div>
+      ${block("📋 Hallazgo:", d.finding)}
+      ${button("/mejoramiento-continuo", "Ver Acción de Mejora")}
+    </div>`);
+};
+
+// ── Acciones de Mejora: Momento 2 (análisis + plan) ──────────────────
+const getAccionM2Template = (req: EmailRequest): string => {
+  const d = req.data!;
+  const tipos = checks([
+    ["Corrección", d.action_correction], ["Acción Correctiva", d.action_corrective],
+    ["Acción Preventiva", d.action_preventive], ["Acción de Mejora", d.action_improvement],
+  ]);
+  return getBaseTemplate("Acción de Mejora — Plan de acción", `
+    <div class="content">
+      <div class="title">🛠️ Acción de Mejora — Análisis y plan registrados</div>
+      <div class="message">Se completó el análisis de causas y el plan de acción (Momento 2).</div>
+      <div class="info-box">
+        ${row("Consecutivo:", d.consecutive, true)}
+        ${row("Responsable:", d.responsible_name)}
+        ${row("Tipo de acción:", tipos)}
+        ${row("Fecha propuesta:", d.proposed_date, true)}
+        ${row("Registrado por:", d.created_by_name)}
+        <div class="info-row"><div class="info-label">Estado:</div><div class="info-value"><span class="badge badge-amber">En proceso · Momento 2</span></div></div>
+      </div>
+      ${block("🔍 Causas:", d.causes)}
+      ${block("📝 Acción a realizar:", d.action_description)}
+      ${block("🎯 Resultados esperados:", d.expected_results)}
+      ${block("💰 Recursos / presupuesto:", d.resources_budget)}
+      ${button("/mejoramiento-continuo", "Ver Acción de Mejora")}
+    </div>`);
+};
+
+// ── Acciones de Mejora: Momento 3 (verificación) ─────────────────────
+const getAccionM3Template = (req: EmailRequest): string => {
+  const d = req.data!;
+  return getBaseTemplate("Acción de Mejora — Verificación", `
+    <div class="content">
+      <div class="title">✔️ Acción de Mejora — Verificación registrada</div>
+      <div class="message">El auditor registró la verificación de la acción (Momento 3). Queda pendiente el cierre.</div>
+      <div class="info-box">
+        ${row("Consecutivo:", d.consecutive, true)}
+        ${row("Responsable:", d.responsible_name)}
+        ${row("Auditor:", d.auditor_name)}
+        ${row("Fecha verificación:", d.verification_date)}
+        ${row("Fecha eficacia:", d.efficacy_date)}
+      </div>
+      ${block("📏 Criterio de verificación:", d.verification_criteria)}
+      ${block("📋 Hallazgo de la verificación:", d.verification_finding)}
+      ${button("/mejoramiento-continuo", "Ver Acción de Mejora")}
+    </div>`);
+};
+
+// ── SST y Bienestar ──────────────────────────────────────────────────
+const getSstAsignacionTemplate = (req: EmailRequest): string => {
+  const d = req.data!;
+  return getBaseTemplate("Actividad asignada", `
+    <div class="content">
+      <div class="title">📅 ${d.is_edit ? "Actividad actualizada" : "Nueva actividad asignada"}</div>
+      <div class="message">Eres responsable de una actividad del plan de trabajo <strong>${esc(d.plan_label)} ${esc(d.plan_year)}</strong>.</div>
+      <div class="info-box">
+        ${row("Plan:", `${d.plan_label ?? ""} ${d.plan_year ?? ""}`.trim(), true)}
+        ${row("Responsable(s):", d.responsible_name)}
+        ${row("Meses programados:", d.months_scheduled)}
+        ${row("Presupuesto:", d.budget)}
+      </div>
+      ${block("📋 Actividad:", d.activity)}
+      ${block("🧰 Recursos:", d.resources)}
+      ${button("", "Ver plan de trabajo")}
+    </div>`);
+};
+
+const getSstRecordatorioTemplate = (req: EmailRequest): string => {
+  const d = req.data!;
+  return getBaseTemplate("Recordatorio de actividad", `
+    <div class="content">
+      <div class="title">⏰ Recordatorio: actividad por ejecutar</div>
+      <div class="message">Quedan <strong>${esc(d.days_left)} día(s)</strong> para terminar <strong>${esc(d.month_name)}</strong> y esta actividad aún no está ejecutada.</div>
+      <div class="info-box">
+        ${row("Plan:", `${d.plan_label ?? ""} ${d.plan_year ?? ""}`.trim(), true)}
+        ${row("Mes:", d.month_name)}
+        ${row("Responsable:", d.responsible)}
+      </div>
+      ${block("📋 Actividad:", d.activity)}
+      ${button("", "Registrar ejecución")}
+    </div>`);
+};
+
+const getSstVencidaTemplate = (req: EmailRequest): string => {
+  const d = req.data!;
+  return getBaseTemplate("Actividad vencida", `
+    <div class="content">
+      <div class="title">⚠️ Actividad sin ejecutar</div>
+      <div class="message">El mes de <strong>${esc(d.month_name)}</strong> terminó y esta actividad quedó sin ejecutar.</div>
+      <div class="info-box">
+        ${row("Plan:", `${d.plan_label ?? ""} ${d.plan_year ?? ""}`.trim(), true)}
+        ${row("Mes:", d.month_name)}
+        ${row("Responsable:", d.responsible)}
+        <div class="info-row"><div class="info-label">Estado:</div><div class="info-value"><span class="badge badge-red">Vencida</span></div></div>
+      </div>
+      ${block("📋 Actividad:", d.activity, true)}
+      ${button("", "Ver plan de trabajo")}
+    </div>`);
+};
+
+// ── Indicadores ──────────────────────────────────────────────────────
+const getIndicadorTemplate = (req: EmailRequest, kind: "creacion" | "edicion"): string => {
+  const d = req.data!;
+  const titulo = kind === "creacion" ? "📊 Nuevo indicador asignado" : "✏️ Indicador actualizado";
+  return getBaseTemplate(kind === "creacion" ? "Nuevo indicador asignado" : "Indicador actualizado", `
+    <div class="content">
+      <div class="title">${titulo}</div>
+      <div class="message">Hola <strong>${esc(d.recipient_name || "")}</strong>, ${kind === "creacion"
+        ? "se creó un indicador en el Cuadro de Mando Integral del que eres responsable o seguimiento."
+        : "se modificó un indicador del que eres responsable."}</div>
+      <div class="info-box">
+        ${row("Consecutivo:", d.consecutive, true)}
+        ${row("Indicador:", d.indicator_name, true)}
+        ${row("Meta:", d.goal)}
+        ${row("Frecuencia:", d.frequency)}
+        ${row("Inicio medición:", d.start_date)}
+        ${row("Fin medición:", d.end_date)}
+        ${row("Fórmula:", d.formula_expression)}
+        ${row(kind === "creacion" ? "Creado por:" : "Modificado por:", d.created_by_name || d.updated_by_name)}
+      </div>
+      ${block("🎯 Objetivo:", d.objective)}
+      ${button("/mejoramiento-continuo", "Ver indicador")}
+    </div>`);
+};
+
+const getIndicadorCriticoTemplate = (req: EmailRequest): string => {
+  const d = req.data!;
+  return getBaseTemplate("Indicador en estado crítico", `
+    <div class="content">
+      <div class="title">🚨 Indicador en estado crítico</div>
+      <div class="message">Hola <strong>${esc(d.recipient_name || "")}</strong>, la última medición quedó por debajo del 80% de la meta.</div>
+      <div class="info-box">
+        ${row("Consecutivo:", d.consecutive, true)}
+        ${row("Indicador:", d.indicator_name, true)}
+        ${row("Período:", d.period_label)}
+        ${row("Valor medido:", `${d.measured_value ?? "—"} ${d.unit ?? ""}`.trim(), true)}
+        ${row("Meta:", `${d.goal_value ?? "—"} ${d.unit ?? ""}`.trim())}
+        ${row("Registrado por:", d.registered_by)}
+        <div class="info-row"><div class="info-label">Estado:</div><div class="info-value"><span class="badge badge-red">Crítico</span></div></div>
+      </div>
+      ${button("/mejoramiento-continuo", "Ver indicador")}
+    </div>`);
+};
+
+// ══════════════════════════════════════════════════════════════════════
 // FUNCIÓN PRINCIPAL
 // ══════════════════════════════════════════════════════════════════════
 
@@ -567,7 +800,8 @@ serve(async (req) => {
         { status: 400, headers: JSON_HEADERS }
       );
     }
-    if ((isAccionType || isActaType || isEvalType || isInformeType) && !data) {
+    // v52: todo tipo que no sea de documento necesita "data"
+    if (!isDocType && !data) {
       return new Response(
         JSON.stringify({ error: "Falta el campo data para este tipo de email" }),
         { status: 400, headers: JSON_HEADERS }
@@ -648,6 +882,54 @@ serve(async (req) => {
       case "informe_revision_solicitada":
         subject = `🔄 Se solicitaron correcciones en tu informe: ${data!.consecutive}`;
         html = getInformeRevisionSolicitadaTemplate({ type, to, data });
+        break;
+
+      // ── v52: Usuarios ──────────────────────────────────────────────
+      case "user_bienvenida":
+        subject = `👋 Bienvenido(a) a Garana SIG — tus datos de acceso`;
+        html = getUserBienvenidaTemplate({ type, to, data });
+        break;
+
+      // ── v52: Acciones de Mejora por momentos ────────────────────────
+      case "accion_mejora_m1":
+        subject = `🎯 Nueva Acción de Mejora: ${data!.consecutive}`;
+        html = getAccionM1Template({ type, to, data });
+        break;
+      case "accion_mejora_m2":
+        subject = `🛠️ Plan de acción registrado — Acción de Mejora ${data!.consecutive}`;
+        html = getAccionM2Template({ type, to, data });
+        break;
+      case "accion_mejora_m3_verificacion":
+        subject = `✔️ Verificación registrada — Acción de Mejora ${data!.consecutive}`;
+        html = getAccionM3Template({ type, to, data });
+        break;
+
+      // ── v52: SST y Bienestar ────────────────────────────────────────
+      case "sst_asignacion_actividad":
+        subject = `📅 ${data!.is_edit ? "Actividad actualizada" : "Nueva actividad asignada"} — ${data!.plan_label} ${data!.plan_year ?? ""}`;
+        html = getSstAsignacionTemplate({ type, to, data });
+        break;
+      case "sst_recordatorio_actividad":
+        subject = `⏰ Recordatorio: actividad de ${data!.month_name} — ${data!.plan_label}`;
+        html = getSstRecordatorioTemplate({ type, to, data });
+        break;
+      case "sst_actividad_vencida":
+        subject = `⚠️ Actividad sin ejecutar en ${data!.month_name} — ${data!.plan_label}`;
+        html = getSstVencidaTemplate({ type, to, data });
+        break;
+
+      // ── v52: Indicadores ────────────────────────────────────────────
+      case "indicador_creacion":
+        subject = `📊 Nuevo indicador: ${data!.indicator_name}`;
+        html = getIndicadorTemplate({ type, to, data }, "creacion");
+        break;
+      case "indicador_edicion":
+        subject = `✏️ Indicador actualizado: ${data!.indicator_name}`;
+        html = getIndicadorTemplate({ type, to, data }, "edicion");
+        break;
+      case "indicador_critico":
+        subject = `🚨 Indicador crítico: ${data!.indicator_name} (${data!.period_label ?? ""})`;
+        html = getIndicadorCriticoTemplate({ type, to, data });
         break;
 
       default:
