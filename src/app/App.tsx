@@ -32,6 +32,12 @@ const PUBLIC_ROUTES: Record<string, () => JSX.Element> = {
 function AppContent() {
   const { user, loading } = useAuth();
   const [currentModule, setCurrentModule] = useState('home');
+  // Parámetros de navegación entre módulos (ej. Planes y Programas → SST › plan)
+  const [navParams, setNavParams] = useState<Record<string, any> | null>(null);
+  const navigate = (module: string, params: Record<string, any> | null = null) => {
+    setNavParams(params);
+    setCurrentModule(module);
+  };
 
   if (loading) {
     return (
@@ -68,22 +74,22 @@ function AppContent() {
 
   const renderModule = () => {
     switch (currentModule) {
-      case 'home':                  return <Home onModuleChange={setCurrentModule} />;
+      case 'home':                  return <Home onModuleChange={navigate} />;
       case 'gestionDocumental':     return <GestionDocumental />;
       case 'planeacionEstrategica': return <PlaneacionEstrategica />;
       case 'mejoramientoContinuo':  return <MejoramientoContinuo />;
-      case 'segBienestar':          return <SegBienestar />;
+      case 'segBienestar':          return <SegBienestar key={navParams?.plan || 'sst'} initialPlan={navParams?.plan} />;
       case 'usuarios':              return <GestionUsuarios />;
       // Accesos rápidos desde Home (solo consulta)
       case 'manuales':              return <Manuales />;
-      case 'planesProgramas':       return <PlanesProgramas />;
+      case 'planesProgramas':       return <PlanesProgramas onNavigate={navigate} />;
       case 'politicas':             return <Politicas />;
-      default:                      return <Home onModuleChange={setCurrentModule} />;
+      default:                      return <Home onModuleChange={navigate} />;
     }
   };
 
   return (
-    <Layout currentModule={currentModule} onModuleChange={setCurrentModule}>
+    <Layout currentModule={currentModule} onModuleChange={(m: string) => navigate(m)}>
       {renderModule()}
     </Layout>
   );

@@ -117,8 +117,11 @@ function ComingSoon({ title, desc, fields=[], accentColor=C.primary }) {
 }
 
 // ── Tab Planes ────────────────────────────────────────────────────────
-function PlanesTab() {
-  const [openProg, setOpenProg] = useState('capacitacion');
+function PlanesTab({ initialPlan }) {
+  // initialPlan: llega desde Planes y Programas ("Diligenciar")
+  const [openProg, setOpenProg] = useState(
+    PROGRAMAS.some(p => p.id === initialPlan) ? initialPlan : 'capacitacion'
+  );
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
       <SectionHeader title="Planes y Programas SST"
@@ -193,7 +196,7 @@ function ProfesiogramaTab() {
 // ═══════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════
-export default function SegBienestar() {
+export default function SegBienestar({ initialPlan } = {}) {
   const { isAdmin, isGerencia, hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState('planes');
 
@@ -250,7 +253,7 @@ export default function SegBienestar() {
       </div>
 
       {/* Contenido */}
-      {activeTab === 'planes'        && <PlanesTab />}
+      {activeTab === 'planes'        && <PlanesTab initialPlan={initialPlan} />}
       {activeTab === 'estandares'    && <EstandaresTab />}
       {activeTab === 'matriz'        && <MatrizPeligrosTab />}
       {activeTab === 'inspecciones'  && <InspeccionesTab />}

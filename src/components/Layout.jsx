@@ -2,6 +2,7 @@
 // ✅ Navbar con avatar real (foto o iniciales)
 // ✅ Sidebar: Gestión de Usuarios visible para admin Y gerencia
 // ✅ Modal cambio de contraseña obligatorio (must_change_password)
+// ✅ (oct 2026) Hoja flotante "Ayúdanos a mejorar" → components/AyudanosAMejorar.jsx
 
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -12,6 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/app/components/ui/dialog';
 import NotificationBell from '../components/Layout/NotificationBell';
+import AyudanosAMejorar from '@/components/AyudanosAMejorar';
 import {
   FileText, Target, TrendingUp, Shield, Users, Home,
   LogOut, Menu, X, ChevronRight, ChevronLeft, Lock,
@@ -242,6 +244,9 @@ export default function Layout({ children, currentModule, onModuleChange }) {
       {mustChangePassword && (
         <ChangePasswordModal onSuccess={handlePasswordChanged} />
       )}
+
+      {/* ── "Ayúdanos a mejorar": hoja Garana flotante (oct 2026) ── */}
+      {!mustChangePassword && <AyudanosAMejorar />}
 
       {/* ════════════════════════════════════════════════
           SIDEBAR

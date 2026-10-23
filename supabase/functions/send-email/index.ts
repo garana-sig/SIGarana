@@ -8,6 +8,8 @@
 //   sst_asignacion_actividad · sst_recordatorio_actividad · sst_actividad_vencida ·
 //   indicador_creacion · indicador_edicion · indicador_critico
 //   Deploy SIEMPRE con verify_jwt = false.
+// v54 (oct 2026): tipo reporte_recibido ("Ayúdanos a mejorar"). Lo envía la
+//   RPC crear_reporte() desde la BD con pg_net, a los responsables del tipo.
 // ══════════════════════════════════════════════════════════════════════
 
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
@@ -58,7 +60,9 @@ interface EmailRequest {
     // ── Indicadores ──────────────────────────────────────────────────
     | "indicador_creacion"
     | "indicador_edicion"
-    | "indicador_critico";
+    | "indicador_critico"
+    // ── Ayúdanos a mejorar ───────────────────────────────────────────
+    | "reporte_recibido";
   to: string | string[];
   document?: {
     id: string;
@@ -160,7 +164,7 @@ const getBaseTemplate = (title: string, content: string): string => `
     <div class="footer">
       <div class="footer-title">Garana Art</div>
       <div class="footer-text">Sistema de Gestión Integral · SIG</div>
-      <div class="footer-text">Manizales, Caldas — Colombia</div>
+      <div class="footer-text">Riosucio, Caldas — Colombia</div>
       <div class="footer-note">Este es un correo automático, por favor no responder.</div>
     </div>
   </div>
@@ -765,6 +769,31 @@ const getIndicadorCriticoTemplate = (req: EmailRequest): string => {
     </div>`);
 };
 
+// ── Ayúdanos a mejorar: reporte recibido ────────────────────────────
+const getReporteRecibidoTemplate = (req: EmailRequest): string => {
+  const d = req.data!;
+  const color = /^#[0-9a-fA-F]{6}$/.test(String(d.tipo_color || "")) ? d.tipo_color : "#2e5244";
+  return getBaseTemplate("Nuevo reporte — Ayúdanos a mejorar", `
+    <div class="content">
+      <div class="title">${esc(d.tipo_icono || "📩")} Nuevo reporte recibido</div>
+      <div class="message">
+        Un colaborador usó <strong>"Ayúdanos a mejorar"</strong> en Garana SIG. Eres responsable de este tipo
+        de reporte: revísalo y regístralo en el formato oficial.
+      </div>
+      <div class="info-box" style="border-left-color:${color}">
+        ${row("Consecutivo:", d.consecutive, true)}
+        ${row("Tipo:", d.tipo_nombre, true)}
+        ${row("Fecha:", d.fecha)}
+        ${row("Área:", d.area)}
+        ${row("Reportado por:", d.reportado_por)}
+        ${d.tiene_foto ? row("Foto:", "Adjunta en el sistema") : ""}
+      </div>
+      ${block("📝 Descripción:", d.descripcion)}
+      ${d.is_anonimo ? `<p style="font-size:12px;color:#888;font-style:italic;margin-top:12px;">Reporte anónimo: el sistema no guarda quién lo envió.</p>` : ""}
+      ${button("", "Gestionar en Garana SIG")}
+    </div>`);
+};
+
 // ══════════════════════════════════════════════════════════════════════
 // FUNCIÓN PRINCIPAL
 // ══════════════════════════════════════════════════════════════════════
@@ -930,6 +959,12 @@ serve(async (req) => {
       case "indicador_critico":
         subject = `🚨 Indicador crítico: ${data!.indicator_name} (${data!.period_label ?? ""})`;
         html = getIndicadorCriticoTemplate({ type, to, data });
+        break;
+
+      // ── v54: Ayúdanos a mejorar ─────────────────────────────────────
+      case "reporte_recibido":
+        subject = `${data!.tipo_icono || "📩"} Nuevo reporte ${data!.consecutive}: ${data!.tipo_nombre}`;
+        html = getReporteRecibidoTemplate({ type, to, data });
         break;
 
       default:

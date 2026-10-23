@@ -8,6 +8,7 @@ import ModuleHero from '@/components/ModuleHero';
 import { useUsers } from '@/hooks/useUsers';
 import { useAuth } from '@/context/AuthContext';
 import { UserPermissionsManager } from '../users/UserPermissionsManager';
+import ResponsablesReportes from '../users/ResponsablesReportes';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -19,6 +20,7 @@ import {
   CheckCircle2, XCircle, Edit2, Key, ChevronDown, ChevronUp,
   Camera, Loader2, AlertTriangle, GitBranch, Mail,
   UserCheck, UserX, Lock, Trash2,
+  Bell,
 } from 'lucide-react';
 
 const C = { green: '#2e5244', mint: '#6dbd96', olive: '#6f7b2c', sand: '#dedecc', dark: '#1a2e25' };
@@ -123,6 +125,7 @@ export default function GestionUsuarios() {
   const { users: allUsers } = useUsers({ includeInactive: true });
 
   const [showCreate,      setShowCreate]      = useState(false);
+  const [showResponsables, setShowResponsables] = useState(false);   // Ayúdanos a mejorar
   const [showEdit,        setShowEdit]        = useState(false);
   const [showPermissions, setShowPermissions] = useState(false);
   const [showDeactivate,  setShowDeactivate]  = useState(false);
@@ -236,8 +239,14 @@ export default function GestionUsuarios() {
             <option value="all">Todos</option>
           </select>
           <span className="text-sm text-gray-400">{displayed.length} usuario{displayed.length !== 1 ? 's' : ''}</span>
+          {isAdmin && (
+            <Button variant="outline" onClick={() => setShowResponsables(true)} className="flex items-center gap-2 font-semibold ml-auto"
+              style={{ borderColor: C.mint, color: C.green }} title="Quién recibe los reportes de 'Ayúdanos a mejorar'">
+              <Bell className="h-4 w-4" /> Responsables de reportes
+            </Button>
+          )}
           {canManage && (
-            <Button onClick={() => setShowCreate(true)} className="flex items-center gap-2 font-semibold ml-auto" style={{ backgroundColor: C.green, color: 'white' }}>
+            <Button onClick={() => setShowCreate(true)} className={`flex items-center gap-2 font-semibold ${isAdmin ? '' : 'ml-auto'}`} style={{ backgroundColor: C.green, color: 'white' }}>
               <UserPlus className="h-4 w-4" /> Nuevo Usuario
             </Button>
           )}
@@ -326,6 +335,7 @@ export default function GestionUsuarios() {
       </div>
 
       {/* MODALES */}
+      <ResponsablesReportes open={showResponsables} onClose={() => setShowResponsables(false)} onToast={addToast} />
       <CreateUserModal
         open={showCreate}
         onClose={() => setShowCreate(false)}

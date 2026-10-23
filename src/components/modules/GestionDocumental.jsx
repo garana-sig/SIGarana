@@ -1,6 +1,8 @@
 // src/components/modules/GestionDocumental.jsx
 // ✅ Dashboard futurista + todos los submódulos
 // 🆕 Una tarjeta por TIPO de documento (leídos de document_type) +
+// 🆕 (oct 2026) Formatos del sistema (admin): formato_vinculado → Listado Maestro
+//
 //    Listado Maestro, Por Área y Crear Nuevo
 
 import { useState, useEffect } from 'react';
@@ -15,6 +17,7 @@ import ListadoMaestro from './GestionDocumental/ListadoMaestro';
 import FormularioCreacion from './GestionDocumental/FormularioCreacion';
 import PorArea from './GestionDocumental/PorArea';
 import DocumentosPorTipo, { getDocTypeStyle } from './GestionDocumental/DocumentosPorTipo';
+import FormatosSistema from './GestionDocumental/FormatosSistema';
 import { 
   FileText, 
   FolderOpen,
@@ -25,7 +28,8 @@ import {
   CheckSquare,
   ClipboardList,
   BookOpen,
-  Sparkles
+  Sparkles,
+  Link2
 } from 'lucide-react';
 
 export default function GestionDocumental() {
@@ -371,6 +375,20 @@ export default function GestionDocumental() {
                 />
               )}
 
+              {/* 🆕 Formatos del sistema (solo admin): vincula pantallas ↔ Listado Maestro */}
+              {isAdmin && (
+                <FuturisticCard
+                  title="Formatos del sistema"
+                  description="Código, versión y plantilla que usa cada pantalla de la app"
+                  icon={Link2}
+                  color="#6dbd96"
+                  gradient="linear-gradient(135deg, #6dbd96 0%, #2e5244 100%)"
+                  badge="Solo administrador"
+                  onClick={() => handleCardClick('formatos')}
+                  delay={0.25}
+                />
+              )}
+
               {canViewAreas && (
                 <FuturisticCard
                   title="Por Área"
@@ -472,6 +490,9 @@ export default function GestionDocumental() {
       
       case 'areas':
         return <PorArea />;
+
+      case 'formatos':
+        return isAdmin ? <FormatosSistema /> : null;
       
       default:
         return null;

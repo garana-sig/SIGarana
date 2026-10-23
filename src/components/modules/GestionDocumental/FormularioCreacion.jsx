@@ -210,7 +210,9 @@ export default function FormularioCreacion({
     const { name, value, type, checked } = e.target;
     
     if (name === 'code' && !isNewFormat) {
-      const upperValue = value.toUpperCase();
+      // Sin espacios: "RE-GF-10 " pasaba la validación (que hace trim) pero se
+      // guardaba con el espacio y la BD lo rechazaba (check document_code_format).
+      const upperValue = value.toUpperCase().replace(/\s+/g, '');
       setFormData(prev => ({ ...prev, [name]: upperValue }));
       validateCode(upperValue);
       return;

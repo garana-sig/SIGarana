@@ -6,6 +6,9 @@
 //   · Computadores → <MantenimientoEquipos tipo="computador" />
 //   · Maquinaria   → aviso "campos por definir" (tablas y permisos listos)
 // Permisos: mantenimiento:<computadores|maquinaria>:view/create/edit/delete/export
+// v2 (oct 2026): prop `tipo` ('computadores' | 'maquinaria'). Con tipo se
+//   muestra solo ese registro, sin selector (cada uno es su propia tarjeta
+//   dentro del grupo Mantenimiento). Sin tipo funciona como antes.
 // ═══════════════════════════════════════════════════════════════════
 
 import { useState } from 'react';
@@ -29,10 +32,10 @@ const TIPOS = [
   },
 ];
 
-export default function MantenimientoManager({ onBack }) {
+export default function MantenimientoManager({ onBack, tipo }) {
   const { hasPermission } = useAuth();
   const tipos = TIPOS.map((t) => ({ ...t, acceso: hasPermission(`${t.perm}:view`) }));
-  const [activo, setActivo] = useState(() => (tipos.find((t) => t.acceso) || tipos[0]).id);
+  const [activo, setActivo] = useState(() => tipo || (tipos.find((t) => t.acceso) || tipos[0]).id);
   const cfg = tipos.find((t) => t.id === activo);
 
   return (
@@ -42,19 +45,21 @@ export default function MantenimientoManager({ onBack }) {
         <Button variant="ghost" size="sm" onClick={onBack}
           className="flex items-center gap-2 text-sm font-medium hover:bg-gray-100" style={{ color: C.green }}>
           <ArrowLeft className="h-4 w-4" />
-          Mejoramiento Continuo
+          {tipo ? 'Mantenimiento' : 'Mejoramiento Continuo'}
         </Button>
       </div>
 
       <div>
-        <h2 className="text-2xl font-bold" style={{ color: C.green }}>Mantenimiento de Equipos</h2>
+        <h2 className="text-2xl font-bold" style={{ color: C.green }}>
+          {tipo === 'maquinaria' ? 'Mantenimiento de Maquinaria' : 'Mantenimiento de Equipos'}
+        </h2>
         <p className="text-sm mt-1" style={{ color: C.olive }}>
           Hoja de vida de máquina RE-GR-11 · Mantenimiento preventivo y correctivo
         </p>
       </div>
 
-      {/* ── Selector Computadores / Maquinaria ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* ── Selector Computadores / Maquinaria (solo sin prop tipo) ── */}
+      {!tipo && <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {tipos.map((t) => {
           const I = t.icon;
           const on = t.id === activo;
@@ -84,7 +89,7 @@ export default function MantenimientoManager({ onBack }) {
             </button>
           );
         })}
-      </div>
+      </div>}
 
       {/* ── Contenido ── */}
       {cfg.id === 'computadores' && cfg.acceso && <MantenimientoEquipos key="computador" tipo="computador" />}
