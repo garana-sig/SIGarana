@@ -626,7 +626,7 @@ const getAccionM1Template = (req: EmailRequest): string => {
 const getAccionM2Template = (req: EmailRequest): string => {
   const d = req.data!;
   const tipos = checks([
-    ["Corrección", d.action_correction], ["Acción Correctiva", d.action_corrective],
+    ["Corrección", d.action_correction], ["Acción correctiva/mejora", d.action_corrective],
     ["Acción Preventiva", d.action_preventive], ["Acción de Mejora", d.action_improvement],
   ]);
   return getBaseTemplate("Acción de Mejora — Plan de acción", `

@@ -453,7 +453,7 @@ export default function AccionesMejoraManager({ onBack }) {
                       <VHead w={26}>Auditoría</VHead><VHead w={26}>QRS</VHead>
                       <VHead w={26}>Satisfacción</VHead><VHead w={26}>Autocontrol /|Gest. cambio</VHead>
                       <VHead w={26}>Análisis de|riesgos</VHead><VHead w={26}>Pto no conforme</VHead>
-                      <VHead w={26}>Corrección</VHead><VHead w={26}>Correctiva</VHead><VHead w={26}>Preventiva</VHead>
+                      <VHead w={26}>Corrección</VHead><VHead w={26}>Correctiva|Mejora</VHead><VHead w={26}>Preventiva</VHead>
                       <VHead w={50}>Verificación</VHead><VHead w={50}>Eficacia</VHead>
                       <VHead w={30}>SI</VHead><VHead w={30}>NO</VHead>
                     </tr>

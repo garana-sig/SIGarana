@@ -346,7 +346,7 @@ export default function AccionMejoraModal({ isOpen, mode, accion, onClose, onSuc
                 <div className="grid grid-cols-3 gap-2">
                   {[
                     ['action_correction', 'Corrección'],
-                    ['action_corrective', 'Acción Correctiva'],
+                    ['action_corrective', 'Acción correctiva/mejora'],
                     ['action_preventive', 'Acción Preventiva'],
                   ].map(([key, lbl]) => (
                     <CheckItem key={key} label={lbl} checked={f2[key]} disabled={m2Lock}
