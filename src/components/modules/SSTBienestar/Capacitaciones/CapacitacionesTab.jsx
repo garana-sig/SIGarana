@@ -546,8 +546,8 @@ export default function CapacitacionesTab() {
     createPlan, createItem, updateItem, toggleMonth, deleteItem,
   } = useCapacitaciones();
 
-  const canCreate = isAdmin || isGerencia || hasPermission('sst_bienestar:capacitaciones:create');
-  const canEdit   = isAdmin || isGerencia || hasPermission('sst_bienestar:capacitaciones:edit');
+  const canCreate = hasPermission('sst_bienestar:capacitaciones:create');
+  const canEdit   = hasPermission('sst_bienestar:capacitaciones:edit');
 
   const [showNuevoPlan, setShowNuevoPlan] = useState(false);
   const [drawerItem, setDrawerItem]       = useState(null);   // null=cerrado, {}=nuevo, {id,...}=editar

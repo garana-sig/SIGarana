@@ -191,7 +191,7 @@ export default function GestionUsuarios() {
   });
 
   const isAdmin   = currentUser?.role === 'admin';
-  const canManage = isAdmin || currentUser?.role === 'gerencia';
+  const canManage = isAdmin; // v3: gerencia solo consulta
 
   return (
     <div className="space-y-0">
@@ -303,7 +303,9 @@ export default function GestionUsuarios() {
                     {canManage && (
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button onClick={() => { setSelectedUser(user); setShowEdit(true); }} className="p-2 rounded-lg hover:bg-gray-100 transition-colors" title="Editar"><Edit2 className="h-4 w-4 text-gray-400" /></button>
-                        <button onClick={() => { setSelectedUser(user); setShowPermissions(true); }} className="p-2 rounded-lg hover:bg-purple-50 transition-colors" title="Permisos"><Key className="h-4 w-4" style={{ color: '#7c3aed' }} /></button>
+                        {isAdmin && ( /* v3 permisos: solo admin asigna */
+                          <button onClick={() => { setSelectedUser(user); setShowPermissions(true); }} className="p-2 rounded-lg hover:bg-purple-50 transition-colors" title="Permisos"><Key className="h-4 w-4" style={{ color: '#7c3aed' }} /></button>
+                        )}
                         {isAdmin && user.id !== currentUser?.id && (
                           <button onClick={() => { setSelectedUser(user); setShowDeactivate(true); }} className="p-2 rounded-lg hover:bg-red-50 transition-colors" title={user.is_active ? 'Desactivar' : 'Reactivar'}>
                             {user.is_active ? <UserX className="h-4 w-4 text-red-400" /> : <UserCheck className="h-4 w-4 text-green-500" />}

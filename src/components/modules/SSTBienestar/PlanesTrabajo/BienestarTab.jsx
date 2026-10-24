@@ -606,8 +606,8 @@ export default function BienestarTab() {
   } = useWorkPlan('bienestar');
 
   const users   = useActiveUsers();
-  const canCreate = isAdmin || isGerencia || hasPermission('sst_bienestar:bienestar:create');
-  const canEdit   = isAdmin || isGerencia || hasPermission('sst_bienestar:bienestar:edit');
+  const canCreate = hasPermission('sst_bienestar:bienestar:create');
+  const canEdit   = hasPermission('sst_bienestar:bienestar:edit');
 
   const [showNuevoPlan, setShowNuevoPlan] = useState(false);
   const [modalItem, setModalItem]         = useState(null);

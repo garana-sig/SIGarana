@@ -59,11 +59,11 @@ export function useEvaluacionCompetencias() {
   const role              = profile?.role;
   const isAdminOrGerencia = role === 'admin' || role === 'gerencia';
   // Permisos granulares del sistema
-  const canViewEval   = isAdminOrGerencia || hasPermission('auditorias:evaluacion_competencias:view');
-  const canCreateEval = isAdminOrGerencia || hasPermission('auditorias:evaluacion_competencias:create');
-  const canEditEval   = isAdminOrGerencia || hasPermission('auditorias:evaluacion_competencias:edit');
-  const canDeleteEval = isAdminOrGerencia || hasPermission('auditorias:evaluacion_competencias:delete');
-  const canManageEval = isAdminOrGerencia || hasPermission('auditorias:evaluacion_competencias:manage');
+  const canViewEval   = hasPermission('auditorias:evaluacion_competencias:view');
+  const canCreateEval = hasPermission('auditorias:evaluacion_competencias:create');
+  const canEditEval   = hasPermission('auditorias:evaluacion_competencias:edit');
+  const canDeleteEval = hasPermission('auditorias:evaluacion_competencias:delete');
+  const canManageEval = hasPermission('auditorias:evaluacion_competencias:manage');
 
   const [empleados,        setEmpleados]        = useState([]);
   const [categorias,       setCategorias]       = useState([]);

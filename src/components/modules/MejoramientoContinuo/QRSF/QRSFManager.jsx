@@ -702,10 +702,10 @@ export default function QRSFManager({ onBack }) {
   const { profile, hasPermission } = useAuth();
   const isAdmin    = profile?.role === 'admin';
   const isGerencia = profile?.role === 'gerencia';
-  const canCreate = isAdmin || isGerencia || hasPermission('auditorias:qrsf:create');
-  const canEdit   = isAdmin || isGerencia || hasPermission('auditorias:qrsf:edit');
+  const canCreate = hasPermission('auditorias:qrsf:create');
+  const canEdit   = hasPermission('auditorias:qrsf:edit');
   const canDelete = isAdmin               || hasPermission('auditorias:qrsf:delete');
-  const canExport = isAdmin || isGerencia || hasPermission('auditorias:qrsf:export');
+  const canExport = hasPermission('auditorias:qrsf:export');
 
   const {
     clientes, qrsfRegistros, devRegistros, referencias, qrsfVentas, devVentas,

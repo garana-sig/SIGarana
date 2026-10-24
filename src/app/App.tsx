@@ -29,8 +29,29 @@ const PUBLIC_ROUTES: Record<string, () => JSX.Element> = {
 };
 
 // ─── Contenido autenticado ────────────────────────────────────────────────────
+// ─── Permiso de entrada de cada módulo (v3 permisos, oct 2026) ─────────────────
+// El menú lateral ya los oculta; esto evita entrar por otro camino (notificaciones, enlaces).
+const ENTRADA_MODULO: Record<string, string> = {
+  gestionDocumental:     'gestion_documental:view',
+  planeacionEstrategica: 'cmi:view',
+  mejoramientoContinuo:  'auditorias:view',
+  segBienestar:          'sst_bienestar:view',
+};
+
+function SinAcceso() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+      <div style={{ textAlign: 'center', color: '#6b7280' }}>
+        <p style={{ fontSize: 40, margin: 0 }}>🔒</p>
+        <p style={{ fontSize: 16, fontWeight: 600, color: '#2e5244' }}>Sin acceso a este módulo</p>
+        <p style={{ fontSize: 13 }}>Pídele al administrador que te asigne el permiso.</p>
+      </div>
+    </div>
+  );
+}
+
 function AppContent() {
-  const { user, loading } = useAuth();
+  const { user, loading, hasPermission, isAdmin, isGerencia } = useAuth();
   const [currentModule, setCurrentModule] = useState('home');
   // Parámetros de navegación entre módulos (ej. Planes y Programas → SST › plan)
   const [navParams, setNavParams] = useState<Record<string, any> | null>(null);
@@ -73,6 +94,9 @@ function AppContent() {
   if (!user) return <Login />;
 
   const renderModule = () => {
+    const entrada = ENTRADA_MODULO[currentModule];
+    if (entrada && !hasPermission(entrada)) return <SinAcceso />;
+    if (currentModule === 'usuarios' && !(isAdmin || isGerencia)) return <SinAcceso />;
     switch (currentModule) {
       case 'home':                  return <Home onModuleChange={navigate} />;
       case 'gestionDocumental':     return <GestionDocumental />;

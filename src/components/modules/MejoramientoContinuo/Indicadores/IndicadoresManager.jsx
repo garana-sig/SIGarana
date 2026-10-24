@@ -201,11 +201,11 @@ export default function IndicadoresManager({ onBack }) {
   const isAdmin    = profile?.role === 'admin';
   const isGerencia = profile?.role === 'gerencia';
 
-  const canCreate  = isAdmin || isGerencia || hasPermission('cmi:indicadores:create');
-  const canEdit    = isAdmin || isGerencia || hasPermission('cmi:indicadores:edit');
+  const canCreate  = hasPermission('cmi:indicadores:create');
+  const canEdit    = hasPermission('cmi:indicadores:edit');
   const canDelete  = isAdmin               || hasPermission('cmi:indicadores:delete');
-  const canMeasure = isAdmin || isGerencia || hasPermission('cmi:indicadores:measure');
-  const canExport  = isAdmin || isGerencia || hasPermission('cmi:indicadores:export');
+  const canMeasure = hasPermission('cmi:indicadores:measure');
+  const canExport  = hasPermission('cmi:indicadores:export');
 
   useEffect(() => {
     fetchIndicators();

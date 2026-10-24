@@ -1190,9 +1190,9 @@ export default function PlaneacionEstrategicaV2() {
   const { isAdmin, isGerencia, hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
 
-  const canView    = isAdmin || isGerencia || hasPermission('cmi:indicadores:view');
-  const canManage  = isAdmin || isGerencia || hasPermission('cmi:indicadores:manage');
-  const canMeasure = canManage || hasPermission('cmi:valores:create');
+  const canView    = hasPermission('cmi:indicadores:view');
+  const canManage  = hasPermission('cmi:indicadores:edit');
+  const canMeasure = canManage || hasPermission('cmi:indicadores:measure');
 
   // ✅ fetchIndicators (no refresh), hook correcto
   const hook = useIndicadores();

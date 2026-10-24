@@ -12,7 +12,15 @@ import { useReporteTipos, crearReporte } from '@/hooks/useReportes';
 const C = { green: '#2e5244', mint: '#6dbd96', olive: '#6f7b2c', sand: '#dedecc', dark: '#1a2e25' };
 
 const CSS = `
-.aam-buddy{position:fixed;right:20px;bottom:18px;z-index:40;display:flex;align-items:flex-end;gap:8px;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;background:none;border:none;padding:0}
+.aam-buddy{position:fixed;right:20px;bottom:18px;z-index:40;display:flex;align-items:flex-end;gap:8px;cursor:grab;user-select:none;-webkit-tap-highlight-color:transparent;background:none;border:none;padding:0;touch-action:none}
+.aam-buddy.aam-drag{cursor:grabbing}
+.aam-buddy.aam-drag .aam-wrap{animation:none;transform:scale(1.08)}
+.aam-mini .aam-leaf{width:52px;height:52px}
+.aam-mini .aam-wrap{width:30px;height:44px}
+.aam-mini .aam-halo,.aam-mini .aam-ping{display:none}
+.aam-tool{position:absolute;top:-4px;left:-4px;width:22px;height:22px;border-radius:50%;border:1px solid #e8e8dc;background:#fff;color:${C.green};font-size:13px;font-weight:800;line-height:18px;cursor:pointer;opacity:0;transition:opacity .15s;box-shadow:0 2px 6px rgba(0,0,0,.15);z-index:2;padding:0}
+.aam-buddy:hover .aam-tool,.aam-buddy:focus-within .aam-tool{opacity:1}
+@media (hover:none){.aam-tool{opacity:1}}
 .aam-bubble{background:#fff;color:${C.green};font-weight:700;font-size:13px;padding:9px 13px;border-radius:16px 16px 4px 16px;box-shadow:0 10px 28px -10px rgba(26,46,37,.45);border:1px solid #e8e8dc;white-space:nowrap;transform-origin:bottom right;animation:aam-pop 8s ease-in-out infinite;text-align:left}
 .aam-bubble small{display:block;font-weight:500;color:#6b7280;font-size:11px;margin-top:2px}
 @keyframes aam-pop{0%,8%{opacity:0;transform:scale(.6)}14%,68%{opacity:1;transform:scale(1)}76%,100%{opacity:0;transform:scale(.6)}}
@@ -120,6 +128,49 @@ export default function AyudanosAMejorar() {
   const fileRef = useRef(null);
   const { tipos, areas, loading } = useReporteTipos(abierto);
 
+  // ── Hoja movible (oct 2026): se arrastra a cualquier lugar y se puede achicar.
+  //    La posición se recuerda en este navegador.
+  const POS_KEY = 'aam-pos-v1';
+  const leer = () => { try { return JSON.parse(localStorage.getItem(POS_KEY)) || {}; } catch { return {}; } };
+  const [pos, setPos]   = useState(() => leer().pos || null);   // {x,y} esquina sup. izq. · null = abajo a la derecha
+  const [mini, setMini] = useState(() => !!leer().mini);
+  const [arrastrando, setArrastrando] = useState(false);
+  const buddyRef = useRef(null);
+  const drag = useRef(null);
+  const guardar = (p, m) => { try { localStorage.setItem(POS_KEY, JSON.stringify({ pos: p, mini: m })); } catch { /* sin almacenamiento */ } };
+  const limitar = (x, y) => {
+    const el = buddyRef.current; const w = el?.offsetWidth || 80; const h = el?.offsetHeight || 90;
+    return { x: Math.min(Math.max(4, x), window.innerWidth - w - 4), y: Math.min(Math.max(4, y), window.innerHeight - h - 4) };
+  };
+  useEffect(() => {
+    const onResize = () => setPos((p) => (p ? limitar(p.x, p.y) : p));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onPointerDown = (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    if (e.target.closest('.aam-tool')) return;
+    const r = buddyRef.current.getBoundingClientRect();
+    drag.current = { sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, movido: false };
+    buddyRef.current.setPointerCapture?.(e.pointerId);
+  };
+  const onPointerMove = (e) => {
+    const d = drag.current; if (!d) return;
+    const dx = e.clientX - d.sx; const dy = e.clientY - d.sy;
+    if (!d.movido && Math.hypot(dx, dy) < 6) return;          // un toque no es arrastre
+    if (!d.movido) { d.movido = true; setArrastrando(true); }
+    setPos(limitar(d.ox + dx, d.oy + dy));
+  };
+  const onPointerUp = () => {
+    const d = drag.current; drag.current = null;
+    if (!d) return;
+    if (d.movido) { setArrastrando(false); setPos((p) => { guardar(p, mini); return p; }); }
+    else setAbierto(true);                                       // fue un clic: abrir
+  };
+  const toggleMini = (e) => { e.stopPropagation(); const m = !mini; setMini(m); guardar(pos, m); };
+  const volverEsquina = (e) => { e.stopPropagation(); setPos(null); guardar(null, mini); };
+
   const reset = () => {
     setPaso('inicio'); setTipo(null); setDesc(''); setArea(''); setFoto(null);
     setAnonimo(false); setError(null); setResultado(null); setEnviando(false);
@@ -164,14 +215,24 @@ export default function AyudanosAMejorar() {
       <style>{CSS}</style>
 
       {/* ── Hoja flotante ── */}
-      <button type="button" className="aam-buddy" onClick={() => setAbierto(true)}
-        aria-label="Ayúdanos a mejorar: registrar sugerencia o reporte" title="Ayúdanos a mejorar">
-        <span className="aam-bubble">¡Ayúdanos a mejorar! 👋<small>Tu opinión nos importa</small></span>
+      <div ref={buddyRef} role="button" tabIndex={0}
+        className={`aam-buddy${mini ? ' aam-mini' : ''}${arrastrando ? ' aam-drag' : ''}`}
+        style={pos ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto' } : undefined}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
+        onPointerCancel={() => { drag.current = null; setArrastrando(false); }}
+        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setAbierto(true))}
+        aria-label="Ayúdanos a mejorar: registrar sugerencia o reporte"
+        title="Ayúdanos a mejorar · arrástrame para moverme">
+        {/* La burbuja solo se muestra en la esquina original y en tamaño normal */}
+        {!pos && !mini && <span className="aam-bubble">¡Ayúdanos a mejorar! 👋<small>Tu opinión nos importa</small></span>}
         <span style={{ position: 'relative', display: 'block' }}>
+          <button type="button" className="aam-tool" onClick={toggleMini} onDoubleClick={volverEsquina}
+            title={mini ? 'Agrandar (doble clic: volver a la esquina)' : 'Achicar (doble clic: volver a la esquina)'}
+            aria-label={mini ? 'Agrandar' : 'Achicar'}>{mini ? '+' : '–'}</button>
           <span className="aam-ping" />
           <HojaCarita />
         </span>
-      </button>
+      </div>
 
       {/* ── Modal ── */}
       {abierto && (

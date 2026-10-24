@@ -38,12 +38,12 @@ const fromDateInput = (d) => (d ? `${d}T12:00:00-05:00` : null);
 
 const MAX_MB = 10;
 const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
-  const { user, isAdmin, isGerencia } = useAuth();
+  const { user, isAdmin, isGerencia, hasPermission } = useAuth();
   const { notifyManagers } = useDocumentActions(); // 🆕 AGREGAR ESTA LÍNEA
   const { traceabilityEnabled, loading: traceabilityLoading } = useDocumentTraceability(); // 🆕
 
   // 🆕 Corrección directa: solo admin/gerencia y con trazabilidad apagada
-  const directMode = !traceabilityLoading && !traceabilityEnabled && (isAdmin || isGerencia);
+  const directMode = !traceabilityLoading && !traceabilityEnabled && (isAdmin || hasPermission('gestion_documental:documentos:edit'));
 
   // 🆕 Catálogos para editar tipo y proceso (solo se usan en corrección directa)
   const [docTypes, setDocTypes] = useState([]);

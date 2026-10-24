@@ -484,8 +484,8 @@ export default function WorkPlanTab({ planType }) {
     toggleMonth, setMonthValue, deleteItem,
   } = useWorkPlan(planType);
 
-  const canCreate = isAdmin || isGerencia || hasPermission(`${cfg.perm}:create`);
-  const canEdit   = isAdmin || isGerencia || hasPermission(`${cfg.perm}:edit`);
+  const canCreate = hasPermission(`${cfg.perm}:create`);
+  const canEdit   = hasPermission(`${cfg.perm}:edit`);
 
   const [showNuevoPlan, setShowNuevoPlan] = useState(false);
   const [modalItem, setModalItem]         = useState(null);

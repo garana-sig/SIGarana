@@ -248,8 +248,8 @@ export default function InformesManager({ onBack }) {
   const [saving,        setSaving]        = useState(false);
   const [toast,         setToast]         = useState(null);
 
-  const canCreate = isAdmin || isGerencia || hasPermission('auditorias:informes:create');
-  const canReview = isAdmin || isGerencia || hasPermission('auditorias:informes:review');
+  const canCreate = hasPermission('auditorias:informes:create');
+  const canReview = hasPermission('auditorias:informes:review');
 
   useEffect(() => { fetchInformes(); }, [fetchInformes]);
 
@@ -292,7 +292,7 @@ export default function InformesManager({ onBack }) {
     result.success ? showToast('Informe eliminado') : showToast(result.error ?? 'Error', 'error');
   };
 
-  const canEdit   = r => isAdmin || isGerencia || (r.created_by===user?.id && ['draft','revision_requested'].includes(r.status));
+  const canEdit   = r => isAdmin || canReview || (r.created_by===user?.id && ['draft','revision_requested'].includes(r.status));
   const canDelete = r => isAdmin || (r.created_by===user?.id && r.status==='draft');
 
   if (wizardOpen || editTarget) {

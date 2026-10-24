@@ -158,14 +158,16 @@ export default function AccionesMejoraManager({ onBack }) {
   const role = profile?.role;
 
   // ── Permisos ────────────────────────────────────────────────────────────────
-  const isAdmin    = ['admin', 'gerencia'].includes(role);
+  // v3 permisos: gerencia ya no edita por rol; edita lo que tenga asignado
+  const isAdmin    = role === 'admin';
+  const editaTodas = isAdmin || hasPermission('auditorias:acciones_mejora:edit_all');
   const isAuditor  = isAdmin || hasPermission('auditorias:acciones_mejora:audit');
   const canManage  = isAdmin || hasPermission('auditorias:acciones_mejora:close');
-  const canDelete  = isAdmin;
+  const canDelete  = isAdmin || hasPermission('auditorias:acciones_mejora:delete');
 
   // Verifica si el usuario es del mismo proceso que la acción
   const isMyProcess = (a) => {
-    if (isAdmin) return true;
+    if (editaTodas) return true;
     return profile?.process_id && profile.process_id === a.process_id;
   };
 
@@ -469,7 +471,7 @@ export default function AccionesMejoraManager({ onBack }) {
                       const canM2     = a.status === 'open' && myProcess && !a.is_closed;
                       const canM3     = a.status === 'in_progress' && isAuditor && !a.is_closed;
                       const canCierre = canManage && !a.is_closed;
-                      const canEdit   = isAdmin || (myProcess && !a.is_closed);
+                      const canEdit   = editaTodas || (myProcess && !a.is_closed && hasPermission('auditorias:acciones_mejora:edit'));
 
                       return (
                         <tr key={a.id} style={{ backgroundColor:bg }}

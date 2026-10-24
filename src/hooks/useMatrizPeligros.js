@@ -87,12 +87,12 @@ export function useMatrizPeligros() {
   });
 
   // ── Permisos ──────────────────────────────────────────────
-  const canView   = isAdmin || isGerencia || hasPermission('sst:matriz_peligros:view');
-  const canCreate = isAdmin || isGerencia || hasPermission('sst:matriz_peligros:create');
-  const canEdit   = isAdmin || isGerencia || hasPermission('sst:matriz_peligros:edit');
-  const canDelete = isAdmin || isGerencia || hasPermission('sst:matriz_peligros:delete');
-  const canExport = isAdmin || isGerencia || hasPermission('sst:matriz_peligros:export');
-  const canManage = isAdmin || isGerencia || hasPermission('sst:matriz_peligros:manage');
+  const canView   = hasPermission('sst:matriz_peligros:view');
+  const canCreate = hasPermission('sst:matriz_peligros:create');
+  const canEdit   = hasPermission('sst:matriz_peligros:edit');
+  const canDelete = hasPermission('sst:matriz_peligros:delete');
+  const canExport = hasPermission('sst:matriz_peligros:export');
+  const canManage = hasPermission('sst:matriz_peligros:manage');
 
   // ─────────────────────────────────────────────────────────
   // FETCH CATÁLOGOS (proceso → sección → actividad)

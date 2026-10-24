@@ -1,6 +1,7 @@
 // src/components/modules/MejoramientoContinuo/ClimaLaboral/ClimaLaboralManager.jsx
 
 import { useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
 import {
   ArrowLeft, Smile, Users, TrendingUp, BarChart3,
   RefreshCw, Download, ArrowUpRight, ArrowDownRight, Minus, Settings,
@@ -37,6 +38,10 @@ const CAT_LINE_COLORS = ['#2e5244', '#6f7b2c', '#3d6b59', '#4a7c3f', '#6dbd96'];
 const META = 4.0;
 
 export default function ClimaLaboralManager({ onBack }) {
+  // v3 permisos: configurar = :manage · exportar = :export
+  const { hasPermission } = useAuth();
+  const canConfig = hasPermission('auditorias:clima_laboral:manage');
+  const canExport = hasPermission('auditorias:clima_laboral:export');
   const [selectedPeriodId, setSelectedPeriodId] = useState(null);
   const [selectedArea, setSelectedArea]         = useState('all');
   const [activeTab, setActiveTab]               = useState('overview');
@@ -187,13 +192,17 @@ export default function ClimaLaboralManager({ onBack }) {
         </div>
         <div className="flex gap-2">
           {/* ── NUEVO: Botón configuración ── */}
+          {canConfig && (
           <Button variant="outline" size="sm" onClick={() => setShowConfig(true)}>
             <Settings className="h-4 w-4 mr-1" /> Configurar
           </Button>
+          )}
+          {canExport && (
           <Button variant="outline" size="sm" onClick={handleExport} disabled={downloading || filteredResponses.length === 0}>
             <Download className="h-4 w-4 mr-1" />
             {downloading ? 'Generando...' : 'Exportar Excel'}
           </Button>
+          )}
           <Button variant="outline" size="sm" onClick={reload}>
             <RefreshCw className="h-4 w-4 mr-1" /> Actualizar
           </Button>

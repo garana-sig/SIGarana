@@ -187,9 +187,9 @@ export default function CatalogoTab() {
     createProveedor, updateProveedor, deleteProveedor,
   } = useProveedores();
 
-  const canCreate = isAdmin || isGerencia || hasPermission('proveedores:catalogo:create');
-  const canEdit   = isAdmin || isGerencia || hasPermission('proveedores:catalogo:edit');
-  const canDelete = isAdmin || isGerencia || hasPermission('proveedores:catalogo:delete');
+  const canCreate = hasPermission('proveedores:catalogo:create');
+  const canEdit   = hasPermission('proveedores:catalogo:edit');
+  const canDelete = hasPermission('proveedores:catalogo:delete');
 
   const [search,      setSearch]      = useState('');
   const [filterTipo,  setFilterTipo]  = useState('todos');

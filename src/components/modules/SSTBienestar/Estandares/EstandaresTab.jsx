@@ -427,8 +427,8 @@ function AddItemModal({ open, onClose, evalId, onAdded }) {
 // ═══════════════════════════════════════════════════════════════════════
 export default function EstandaresTab() {
   const { hasPermission, profile } = useAuth();
-  const canCreate = profile?.role === 'admin' || profile?.role === 'gerencia' || hasPermission('sst_bienestar:estandares:create');
-  const canEdit   = profile?.role === 'admin' || profile?.role === 'gerencia' || hasPermission('sst_bienestar:estandares:edit');
+  const canCreate = hasPermission('sst_bienestar:estandares:create');
+  const canEdit   = hasPermission('sst_bienestar:estandares:edit');
 
   const {
     evaluations, activeEval, setActiveEval,

@@ -377,10 +377,10 @@ export default function SeleccionTab() {
   const { proveedores } = useProveedores();
   const { users }       = useUsers();
 
-  const canCreate = isAdmin || isGerencia || hasPermission('proveedores:seleccion:create');
-  const canEdit   = isAdmin || isGerencia || hasPermission('proveedores:seleccion:edit');
-  const canDelete = isAdmin || isGerencia || hasPermission('proveedores:seleccion:delete');
-  const canExport = isAdmin || isGerencia || hasPermission('proveedores:seleccion:export');
+  const canCreate = hasPermission('proveedores:seleccion:create');
+  const canEdit   = hasPermission('proveedores:seleccion:edit');
+  const canDelete = hasPermission('proveedores:seleccion:delete');
+  const canExport = hasPermission('proveedores:seleccion:export');
 
   const [search,     setSearch]     = useState('');
   const [modalOpen,  setModalOpen]  = useState(false);

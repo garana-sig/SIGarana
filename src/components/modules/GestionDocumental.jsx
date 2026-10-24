@@ -90,10 +90,10 @@ export default function GestionDocumental() {
   };
 
   // ── Permisos ─────────────────────────────────────────────────────
-  const canView         = isAdmin || isGerencia || hasPermission('gestion_documental:view');
-  const canCreate       = isAdmin || isGerencia || hasPermission('gestion_documental:formatos:create');
-  const canViewListado  = isAdmin || isGerencia || hasPermission('gestion_documental:listado_maestro:view');
-  const canViewAreas    = isAdmin || isGerencia || hasPermission('gestion_documental:areas:view');
+  const canView         = hasPermission('gestion_documental:view');
+  const canCreate       = hasPermission('gestion_documental:formatos:create');
+  const canViewListado  = hasPermission('gestion_documental:listado_maestro:view');
+  const canViewAreas    = hasPermission('gestion_documental:areas:view');
 
   if (!canView) {
     return (

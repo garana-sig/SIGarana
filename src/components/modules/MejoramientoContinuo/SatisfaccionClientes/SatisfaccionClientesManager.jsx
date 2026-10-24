@@ -1,6 +1,7 @@
 // src/components/modules/MejoramientoContinuo/SatisfaccionClientes/SatisfaccionClientesManager.jsx
 
 import { useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
 import {
   ArrowLeft, Award, Users, TrendingUp, MessageSquare,
   BarChart3, RefreshCw, Download, ArrowUpRight, ArrowDownRight, Minus, Settings,
@@ -25,6 +26,10 @@ const SCALE_COLORS  = { 1: '#ef4444', 2: '#f97316', 3: '#eab308', 4: '#84cc16', 
 const META = 4.0;
 
 export default function SatisfaccionClientesManager({ onBack }) {
+  // v3 permisos: configurar = :manage · exportar = :export
+  const { hasPermission } = useAuth();
+  const canConfig = hasPermission('auditorias:satisfaccion_clientes:manage');
+  const canExport = hasPermission('auditorias:satisfaccion_clientes:export');
   const [selectedPeriodId, setSelectedPeriodId] = useState(null);
   const [activeTab, setActiveTab]               = useState('overview');
   const [downloading, setDownloading]           = useState(false);
@@ -112,13 +117,17 @@ export default function SatisfaccionClientesManager({ onBack }) {
         </div>
         <div className="flex gap-2">
           {/* ── NUEVO: Botón configuración ── */}
+          {canConfig && (
           <Button variant="outline" size="sm" onClick={() => setShowConfig(true)}>
             <Settings className="h-4 w-4 mr-1" /> Configurar
           </Button>
+          )}
+          {canExport && (
           <Button variant="outline" size="sm" onClick={handleExport} disabled={downloading || responses.length === 0}>
             <Download className="h-4 w-4 mr-1" />
             {downloading ? 'Generando...' : 'Exportar Excel'}
           </Button>
+          )}
           <Button variant="outline" size="sm" onClick={reload}>
             <RefreshCw className="h-4 w-4 mr-1" /> Actualizar
           </Button>

@@ -424,7 +424,7 @@ export default function MejoramientoContinuo() {
       delay={i * 0.06}
       building={mod.building}
       alerta={mod.reporteTipo ? nuevosPorTipo[mod.reporteTipo] : 0}
-      hasConfig={mod.hasConfig && canAccess(mod)}
+      hasConfig={mod.hasConfig && hasPermission(String(mod.permission).replace(/:view$/, ':manage'))}
       onConfig={() => setConfigModal({ surveyCode: mod.surveyCode, surveyName: mod.surveyName })}
       onClick={() => setActiveSubmodule(mod.id)}
     />

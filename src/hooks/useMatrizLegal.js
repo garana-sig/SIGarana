@@ -102,7 +102,7 @@ export function useMatrizLegal() {
   const [error, setError]           = useState(null);
 
   // ── Permisos de UI ────────────────────────────────────────────────────
-  const full = isAdmin || isGerencia;
+  const full = isAdmin; // v3: gerencia edita solo lo asignado
   const can = useMemo(() => ({
     create: full || hasPermission(`${PERM}:create`),
     edit:   full || hasPermission(`${PERM}:edit`),

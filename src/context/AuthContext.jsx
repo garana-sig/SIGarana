@@ -276,18 +276,21 @@ export const AuthProvider = ({ children }) => {
     setProfile(prev => ({ ...prev, must_change_password: false }));
   };
 
+  // ✅ v3 permisos (oct 2026):
+  //   admin    = todo
+  //   gerencia = VE todo (lectura) y APRUEBA · crear/editar/eliminar solo si se le asigna
+  //   usuario  = solo lo asignado
+  const ACCIONES_LECTURA = ['view', 'view_all', 'view_responses', 'download', 'export', 'approve'];
+  const esLectura = (code) => ACCIONES_LECTURA.includes(String(code || '').split(':').pop());
+
   const hasPermission = (permissionCode) => {
-    if (isAdmin || isGerencia) return true;
+    if (isAdmin) return true;
+    if (isGerencia && esLectura(permissionCode)) return true;
     return permissions.includes(permissionCode);
   };
 
-  const hasAnyPermission = (permissionCodes) => {
-    // Admin y Gerencia tienen acceso total
-    if (isAdmin || isGerencia) return true;
-
-    // Verificar si tiene al menos uno de los permisos
-    return permissionCodes.some((code) => hasPermission(code));
-  };
+  const hasAnyPermission = (permissionCodes) =>
+    (permissionCodes || []).some((code) => hasPermission(code));
 
   // ==========================================
   // 🔄 EFECTOS - VERSIÓN MEJORADA SIN RELOADS

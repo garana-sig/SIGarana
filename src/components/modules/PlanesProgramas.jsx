@@ -294,7 +294,7 @@ export default function PlanesProgramas({ onNavigate }) {
 
   const puedeDiligenciar = (plan) => {
     if (!plan.perm) return false;
-    if (isAdmin || isGerencia) return true;
+    if (isAdmin) return true;
     return hasPermission('sst_bienestar:view') &&
       (hasPermission(`${plan.perm}:create`) || hasPermission(`${plan.perm}:edit`));
   };

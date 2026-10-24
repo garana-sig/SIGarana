@@ -179,9 +179,9 @@ function Pagination({ currentPage, totalPages, totalRows, pageSize, onPage, onPa
 export default function RiskMatrixManager({ onBack }) {
   const { user, profile, hasPermission } = useAuth();
   const role      = profile?.role;
-  const canManage = ['admin', 'gerencia'].includes(role) || hasPermission('auditorias:riesgos:edit_all');
-  const canDelete = ['admin', 'gerencia'].includes(role) || hasPermission('auditorias:riesgos:delete');
-  const canCreate = ['admin', 'gerencia'].includes(role) || hasPermission('auditorias:riesgos:create');
+  const canManage = hasPermission('auditorias:riesgos:edit_all');
+  const canDelete = hasPermission('auditorias:riesgos:delete');
+  const canCreate = hasPermission('auditorias:riesgos:create');
 
   const [exporting,   setExporting]   = useState(false);
   const [modalOpen,   setModalOpen]   = useState(false);

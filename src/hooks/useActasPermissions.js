@@ -1,5 +1,6 @@
 // src/hooks/useActasPermissions.js
 // Hook ESPECÍFICO para validar permisos en módulo Actas
+// v3 (oct 2026): gerencia ve y descarga todas; editar/archivar/eliminar = admin o permiso · aprobar = admin, gerencia o permiso
 
 import { useAuth } from '@/context/AuthContext';
 
@@ -22,7 +23,7 @@ export const useActasPermissions = () => {
     if (acta.status === 'archived') return false;
     
     // Admin y Gerencia pueden editar cualquier acta no archivada
-    if (role === 'admin' || role === 'gerencia') {
+    if (role === 'admin') {
       return true;
     }
     
@@ -48,7 +49,7 @@ export const useActasPermissions = () => {
    * - Usuario con auditorias:actas:archive: Puede archivar
    */
   const canArchiveActa = (role) => {
-    if (role === 'admin' || role === 'gerencia') {
+    if (role === 'admin') {
       return true;
     }
     
@@ -72,7 +73,7 @@ export const useActasPermissions = () => {
       acta = null;
     }
 
-    if (role === 'admin' || role === 'gerencia') {
+    if (role === 'admin') {
       return true;
     }
 

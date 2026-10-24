@@ -223,10 +223,10 @@ export default function ProductoNoConformeManager({ onBack }) {
   const isAdmin    = profile?.role === 'admin';
   const isGerencia = profile?.role === 'gerencia';
 
-  const canCreate = isAdmin || isGerencia || hasPermission('auditorias:producto_no_conforme:create');
-  const canEdit   = isAdmin || isGerencia || hasPermission('auditorias:producto_no_conforme:edit');
+  const canCreate = hasPermission('auditorias:producto_no_conforme:create');
+  const canEdit   = hasPermission('auditorias:producto_no_conforme:edit');
   const canDelete = isAdmin               || hasPermission('auditorias:producto_no_conforme:delete');
-  const canExport = isAdmin || isGerencia || hasPermission('auditorias:producto_no_conforme:export');
+  const canExport = hasPermission('auditorias:producto_no_conforme:export');
 
   const { defectos, referencias, registros, produccion,
           loading, error,

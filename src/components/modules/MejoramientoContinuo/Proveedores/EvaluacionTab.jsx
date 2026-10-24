@@ -362,10 +362,10 @@ export default function EvaluacionTab() {
   const { proveedores } = useProveedores();
   const { users }       = useUsers();
 
-  const canCreate = isAdmin || isGerencia || hasPermission('proveedores:evaluacion:create');
-  const canEdit   = isAdmin || isGerencia || hasPermission('proveedores:evaluacion:edit');
-  const canDelete = isAdmin || isGerencia || hasPermission('proveedores:evaluacion:delete');
-  const canExport = isAdmin || isGerencia || hasPermission('proveedores:evaluacion:export');
+  const canCreate = hasPermission('proveedores:evaluacion:create');
+  const canEdit   = hasPermission('proveedores:evaluacion:edit');
+  const canDelete = hasPermission('proveedores:evaluacion:delete');
+  const canExport = hasPermission('proveedores:evaluacion:export');
 
   const [search,       setSearch]       = useState('');
   const [showCharts,   setShowCharts]   = useState(true);

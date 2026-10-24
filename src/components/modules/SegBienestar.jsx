@@ -200,7 +200,7 @@ export default function SegBienestar({ initialPlan } = {}) {
   const { isAdmin, isGerencia, hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState('planes');
 
-  const canView = isAdmin || isGerencia || hasPermission('sst_bienestar:view');
+  const canView = hasPermission('sst_bienestar:view');
 
   if (!canView) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh' }}>
