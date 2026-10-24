@@ -131,11 +131,12 @@ async function eliminarDocumentoDefinitivo(doc) {
   if (eVer) throw eVer;
   const rutas = [...new Set([doc.file_path, ...(versiones || []).map((v) => v.file_path)].filter(Boolean))];
 
-  // 2. Borrar en BD (si RLS no lo permite, count = 0 y no hay error → se valida)
-  const { error: eDel, count } = await supabase
-    .from('document').delete({ count: 'exact' }).eq('id', doc.id);
+  // 2. Borrar en BD (si RLS no lo permite no hay error, solo 0 filas → se valida con .select)
+  //    (count de PostgREST puede venir en 0 aunque sí borre: por eso se usa .select('id'))
+  const { data: borrados, error: eDel } = await supabase
+    .from('document').delete().eq('id', doc.id).select('id');
   if (eDel) throw eDel;
-  if (!count) throw new Error('No tienes permiso para eliminar documentos (solo administrador).');
+  if (!borrados?.length) throw new Error('No tienes permiso para eliminar este documento.');
 
   // 3. Borrar archivos de Storage (si falla, el documento ya no existe: solo se avisa)
   let avisoStorage = null;
@@ -223,7 +224,11 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
   const [documentToView,      setDocumentToView]      = useState(null);
 
   // 🆕 Trazabilidad de cambios (interruptor solo admin)
-  const { isAdmin, isGerencia } = useAuth();
+  const { isAdmin, isGerencia, hasPermission, user } = useAuth();
+  // v3 permisos: aprobar = admin/gerencia o permiso · editar = permiso o sus propios borradores
+  const canApprove = hasPermission('gestion_documental:documentos:approve');
+  const canEditDoc = (doc) => hasPermission('gestion_documental:documentos:edit')
+    || (doc.created_by === user?.id && ['draft', 'pending_approval'].includes(doc.status));
   const {
     traceabilityEnabled, loading: traceabilityLoading, saving: traceabilitySaving, setTraceability,
   } = useDocumentTraceability();
@@ -655,7 +660,7 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
                                 archived:         { bg: '#f3f4f6', color: '#4b5563', text: 'Archivado' },
                               };
                               const c = cfg[doc.status] || cfg.draft;
-                              if (doc.status === 'pending_approval') {
+                              if (doc.status === 'pending_approval' && canApprove) {
                                 return (
                                   <Badge className="text-[9px] px-1.5 py-0.5 font-medium cursor-pointer hover:opacity-80 transition-opacity"
                                     style={{ backgroundColor: c.bg, color: c.color }}
@@ -678,9 +683,11 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
                               <Button variant="ghost" size="sm" onClick={() => handleOpenViewerModal(doc)} className="h-6 w-6 p-0" title="Ver documento">
                                 <Eye className="h-3 w-3" style={{ color: '#6dbd96' }} />
                               </Button>
+                              {canEditDoc(doc) && (
                               <Button variant="ghost" size="sm" onClick={() => handleOpenEditModal(doc)} className="h-6 w-6 p-0" title="Editar">
                                 <Edit className="h-3 w-3" style={{ color: '#6f7b2c' }} />
                               </Button>
+                              )}
                               <Button variant="ghost" size="sm" onClick={() => downloadDocument(doc)}
                                 disabled={downloading === doc.id} className="h-6 w-6 p-0" title="Descargar">
                                 {downloading === doc.id
