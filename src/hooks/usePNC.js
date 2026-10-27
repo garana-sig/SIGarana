@@ -338,12 +338,13 @@ function buildItemPayload(it, registroId, numeroFila) {
     verificacion_fecha:             it.verificacion_fecha      || null,
     verificacion_responsable:       it.verificacion_responsable|| null,
 
-    // ── Campos del formato anterior — ya no se usan desde el formulario nuevo.
-    //    Se envían con valor "vacío" solo para no romper el insert si la
-    //    columna es NOT NULL en la tabla. No se leen ni se muestran más.
-    causa_modulo: false, causa_operacion: false, causa_insumo: false,
-    causa_corte:  false, causa_sublimacion: false, causa_revision: false,
-    tratamiento_fecha: null,
-    clasificacion_correccion: false, clasificacion_reclasificacion: false, clasificacion_concesion: false,
+    // ── Formato RE-GP-13 v02 (oct 2026): causa, fecha de tratamiento y clasificación
+    causa_modulo:      !!it.causa_modulo,      causa_operacion:   !!it.causa_operacion,
+    causa_insumo:      !!it.causa_insumo,      causa_corte:       !!it.causa_corte,
+    causa_sublimacion: !!it.causa_sublimacion, causa_revision:    !!it.causa_revision,
+    tratamiento_fecha:              it.tratamiento_fecha      || null,
+    clasificacion_correccion:       !!it.clasificacion_correccion,
+    clasificacion_reclasificacion:  !!it.clasificacion_reclasificacion,
+    clasificacion_concesion:        !!it.clasificacion_concesion,
   };
 }

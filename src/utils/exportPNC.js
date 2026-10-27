@@ -1,175 +1,117 @@
 // src/utils/exportPNC.js
 // ═══════════════════════════════════════════════════════════════════════
-// Exportador Excel — Control de Producto No Conforme (RE-GS-06 modificado)
-// ✅ Mismo patrón que exportAccionesMejora.js
-// ✅ Direccionamiento directo ws.getCell() para celdas fusionadas
+// v4 (oct 2026) — Exporta sobre el formato vigente de Gestión Documental
+// (formato_vinculado 'registro_pnc' → hoy RE-GP-13 v02). El código, la
+// versión y la fecha del encabezado vienen en el mismo archivo del Listado
+// Maestro, así que si suben una versión nueva la app la toma sola.
 //
-// Estructura verificada del archivo RE-GS-06_CONTROL_PRODUCTO_NO_CONFORME.xlsx
-// (hoja "v1"), fila 4 = grupos, fila 5 = columnas, datos desde fila 6:
-//
-//   A = N°                       (IDENTIFICACION, A4:B4)
-//   B = MES REPORTE               (IDENTIFICACION)
-//   C = SECCION                   (DESCRIPCION, C4:F4)
-//   D = REFERENCIA                (DESCRIPCION)
-//   E = FECHA DEL REPORTE         (DESCRIPCION)
-//   F = CODIGO DEL DEFECTO        (DESCRIPCION)
-//   G = DESCRIPCION               (ANALISIS CAUSA/ORIGEN, G4:I4)
-//   H = OPERACIÓN DE ORIGEN       (ANALISIS CAUSA/ORIGEN)
-//   I = CANTIDAD                  (ANALISIS CAUSA/ORIGEN)
-//   J = COMO SE SOLUCIONO         (TRATAMIENTO, J4:K4)
-//   K = RESPONSABLE               (TRATAMIENTO)
-//   L = FECHA                     (VERIFICACION, L4:N4)
-//   M = RESPONSABLE               (VERIFICACION — fusionada M5:N5, escribir en M)
+// Hoja "v1" — fila 4 grupos, fila 5 columnas, datos desde la fila 6:
+//   A N° · B REF · C FECHA REPORTE · D:H PRODUCTO NO CONFORME · I TOTAL
+//   J MÓDULO · K OPERACIÓN · L INSUMO · M CORTE · N SUBLIMACIÓN · O REVISIÓN (X)
+//   P FECHA · Q DESCRIPCIÓN · R RESPONSABLE              (TRATAMIENTO)
+//   S CORRECCIÓN · T RECLASIFICACIÓN · U CONCESIÓN (X)    (CLASIFICACIÓN)
+//   V FECHA · W:X RESPONSABLE                             (VERIFICACIÓN)
+// C3 = "MES: …   PROCESO: …"
 // ═══════════════════════════════════════════════════════════════════════
-
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-import { supabase } from '@/lib/supabase';
+import { descargarPlantilla } from '@/hooks/useFormatoVinculado';
 import { MESES } from '@/hooks/usePNC';
 
+const SHEET_NAME = 'v1';
 const DATA_START_ROW = 6;
-const SHEET_NAME      = 'v1';
-const TEMPLATE_FILE   = 'RE-GS-06_CONTROL_PRODUCTO_NO_CONFORME.xlsx';
+const PLANTILLA_FILAS = 35;              // filas 6..40 ya formateadas en el formato
 
-const BORDER = {
-  top:    { style: 'thin', color: { argb: 'FFA6B8C2' } },
-  left:   { style: 'thin', color: { argb: 'FFA6B8C2' } },
-  bottom: { style: 'thin', color: { argb: 'FFA6B8C2' } },
-  right:  { style: 'thin', color: { argb: 'FFA6B8C2' } },
+export const CAUSAS = [
+  { campo: 'causa_modulo',      label: 'Módulo',      col: 'J' },
+  { campo: 'causa_operacion',   label: 'Operación',   col: 'K' },
+  { campo: 'causa_insumo',      label: 'Insumo',      col: 'L' },
+  { campo: 'causa_corte',       label: 'Corte',       col: 'M' },
+  { campo: 'causa_sublimacion', label: 'Sublimación', col: 'N' },
+  { campo: 'causa_revision',    label: 'Revisión',    col: 'O' },
+];
+export const CLASIFICACIONES = [
+  { campo: 'clasificacion_correccion',      label: 'Corrección',      col: 'S' },
+  { campo: 'clasificacion_reclasificacion', label: 'Reclasificación', col: 'T' },
+  { campo: 'clasificacion_concesion',       label: 'Concesión',       col: 'U' },
+];
+
+const COLS = 'ABCDEFGHIJKLMNOPQRSTUVWX'.split('');
+
+const fmt = (d) => {
+  if (!d) return null;
+  const x = new Date(d + (d.includes('T') ? '' : 'T00:00:00'));
+  return x.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: '2-digit' });
 };
 
-const FILL_ODD  = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
-const FILL_EVEN = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F9F5' } };
-
-const fmt = (dateStr) => {
-  if (!dateStr) return '';
-  const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
-  return d.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+// Copia el estilo de la fila modelo (para filas por encima de la 40)
+const copiarFila = (ws, desde, hasta) => {
+  const src = ws.getRow(desde);
+  const dst = ws.getRow(hasta);
+  dst.height = src.height;
+  COLS.forEach(c => { dst.getCell(c).style = JSON.parse(JSON.stringify(src.getCell(c).style || {})); });
+  ws.mergeCells(`D${hasta}:H${hasta}`);
+  ws.mergeCells(`W${hasta}:X${hasta}`);
 };
 
-const applyStyle = (cell, fill, hAlign = 'left') => {
-  cell.fill      = fill;
-  cell.font      = { name: 'Arial', size: 9 };
-  cell.alignment = { horizontal: hAlign, vertical: 'middle', wrapText: true };
-  cell.border    = BORDER;
+const poner = (cell, val, h = 'center') => {
+  cell.value = val ?? null;
+  cell.style = { ...JSON.parse(JSON.stringify(cell.style || {})),
+    alignment: { horizontal: h, vertical: 'middle', wrapText: true } };
 };
 
-// ═══════════════════════════════════════════════════════════════════════
-// FUNCIÓN PRINCIPAL
-// @param {Array}  registros  — array de pnc_registro (con anio, mes) y pnc_item
-//                              anidados, cada item debe traer referencia_obj
-//                              y defecto_obj ya resueltos
-// @param {string} filename   — nombre sin extensión
-// ═══════════════════════════════════════════════════════════════════════
-export const exportPNC = async (registros, filename = 'RE-GS-06_PNC') => {
-  try {
-    console.log('📊 Descargando plantilla RE-GS-06 desde Supabase Storage...');
+const periodo = (filas) => {
+  const keys = [...new Set(filas.map(f => f.anio * 100 + f.mes))].sort();
+  if (!keys.length) return '';
+  const t = (k) => `${MESES[(k % 100) - 1]} ${Math.floor(k / 100)}`;
+  return keys.length === 1 ? t(keys[0]) : `${t(keys[0])} a ${t(keys[keys.length - 1])}`;
+};
 
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from('templates')
-      .download(TEMPLATE_FILE);
+/**
+ * @param {Array}  filas    ítems planos { anio, mes, numero_fila, referencia_obj, defecto_obj, ... }
+ * @param {object} formato  documento vinculado (useFormato('registro_pnc'))
+ * @param {object} opts     { proceso }
+ */
+export const exportPNC = async (filas, formato, { proceso = 'Producción' } = {}) => {
+  const buf = await descargarPlantilla(formato);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const ws = wb.getWorksheet(SHEET_NAME) || wb.worksheets[0];
+  if (!ws) throw new Error(`No se encontró la hoja "${SHEET_NAME}" en ${formato.code}.`);
 
-    if (downloadError || !fileData) {
-      throw new Error(
-        `No se pudo descargar la plantilla: ${downloadError?.message || 'archivo no encontrado'}. ` +
-        `Verifica que "${TEMPLATE_FILE}" exista en el bucket "templates".`
-      );
-    }
+  const orden = [...filas].sort((a, b) => a.anio - b.anio || a.mes - b.mes || a.numero_fila - b.numero_fila);
 
-    console.log('✅ Plantilla descargada');
+  ws.getCell('C3').value = `MES: ${periodo(orden)}     PROCESO: ${proceso}`;
 
-    const arrayBuffer = await fileData.arrayBuffer();
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(arrayBuffer);
+  for (let i = PLANTILLA_FILAS; i < orden.length; i++) copiarFila(ws, DATA_START_ROW, DATA_START_ROW + i);
 
-    const ws = wb.getWorksheet(SHEET_NAME) || wb.worksheets[0];
-    if (!ws) throw new Error(`No se encontró la hoja "${SHEET_NAME}" en la plantilla RE-GS-06.`);
+  orden.forEach((it, i) => {
+    const r = DATA_START_ROW + i;
+    const g = (c) => ws.getCell(`${c}${r}`);
+    const fila = ws.getRow(r);
+    fila.hidden = false;                 // el formato trae filas ocultas (9–22)
+    fila.height = 24;
+    const ref = it.referencia_obj, def = it.defecto_obj;
 
-    // Limpiar filas de ejemplo desde fila 6 en adelante
-    for (let r = DATA_START_ROW; r <= ws.rowCount; r++) {
-      ws.getRow(r).eachCell({ includeEmpty: true }, (cell) => { cell.value = null; });
-    }
+    poner(g('A'), i + 1);
+    poner(g('B'), ref ? ref.ref : (it.referencia_texto || null));
+    poner(g('C'), fmt(it.fecha_reporte));
+    poner(g('D'), def ? `${def.codigo} — ${def.nombre}` : (it.defecto_texto || null), 'left');
+    poner(g('I'), it.total ?? null);
+    CAUSAS.forEach(c => poner(g(c.col), it[c.campo] ? 'X' : null));
+    poner(g('P'), fmt(it.tratamiento_fecha));
+    poner(g('Q'), it.tratamiento_descripcion || null, 'left');
+    poner(g('R'), it.tratamiento_responsable || null, 'left');
+    CLASIFICACIONES.forEach(c => poner(g(c.col), it[c.campo] ? 'X' : null));
+    poner(g('V'), fmt(it.verificacion_fecha));
+    poner(g('W'), it.verificacion_responsable || null, 'left');
+  });
 
-    // Ordenar registros por año/mes para que el consolidado salga cronológico
-    const regsOrdenados = [...registros].sort((a, b) => a.anio - b.anio || a.mes - b.mes);
-
-    const totalFilas = regsOrdenados.reduce((s, r) => s + (r.pnc_item || []).length, 0);
-    console.log(`📝 Escribiendo ${totalFilas} fila(s)...`);
-
-    let rowNum = DATA_START_ROW;
-
-    regsOrdenados.forEach((reg) => {
-      const items = (reg.pnc_item || []).sort((a, b) => a.numero_fila - b.numero_fila);
-
-      items.forEach((it, idx) => {
-        const fill = idx % 2 === 0 ? FILL_ODD : FILL_EVEN;
-        const row  = ws.getRow(rowNum);
-        row.height = 26;
-
-        const setCell = (col, val, align = 'left') => {
-          const cell = ws.getCell(`${col}${rowNum}`);
-          cell.value = val ?? '';
-          applyStyle(cell, fill, align);
-        };
-
-        const ref = it.referencia_obj || null;
-        const def = it.defecto_obj    || null;
-
-        // IDENTIFICACION
-        setCell('A', it.numero_fila,          'center'); // N°
-        setCell('B', MESES[reg.mes - 1] || '','center'); // MES REPORTE
-
-        // DESCRIPCION
-        setCell('C', it.seccion || '',                    'center'); // SECCION
-        setCell('D', ref ? ref.ref : (it.referencia_texto || ''), 'center'); // REFERENCIA
-        setCell('E', fmt(it.fecha_reporte),               'center'); // FECHA DEL REPORTE
-        setCell('F', def ? def.codigo : '',               'center'); // CODIGO DEL DEFECTO
-
-        // ANALISIS DE CAUSA/ORIGEN
-        setCell('G', def ? def.nombre : (it.defecto_texto || ''));   // DESCRIPCION
-        setCell('H', it.operacion_origen || '');                    // OPERACIÓN DE ORIGEN
-        setCell('I', it.total ?? '',                      'center'); // CANTIDAD
-
-        // TRATAMIENTO
-        setCell('J', it.tratamiento_descripcion || '');   // COMO SE SOLUCIONO
-        setCell('K', it.tratamiento_responsable || '');   // RESPONSABLE
-
-        // VERIFICACION
-        setCell('L', fmt(it.verificacion_fecha),          'center'); // FECHA
-        setCell('M', it.verificacion_responsable || '');             // RESPONSABLE (fusionada M:N)
-
-        row.commit();
-        rowNum++;
-      });
-    });
-
-    if (rowNum === DATA_START_ROW) {
-      const r = ws.getRow(DATA_START_ROW);
-      r.height = 20;
-      for (const col of ['A','B','C','D','E','F','G','H','I','J','K','L','M']) {
-        ws.getCell(`${col}${DATA_START_ROW}`).border = BORDER;
-      }
-      r.commit();
-    }
-
-    console.log('💾 Generando archivo final RE-GS-06...');
-    const buffer = await wb.xlsx.writeBuffer();
-    const blob   = new Blob([buffer], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-
-    const today = new Date()
-      .toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })
-      .replace(/\//g, '-');
-
-    saveAs(blob, `${filename}_${today}.xlsx`);
-    console.log('✅ RE-GS-06 exportado correctamente');
-    return true;
-
-  } catch (err) {
-    console.error('❌ Error exportando RE-GS-06:', err);
-    throw err;
-  }
+  const out = await wb.xlsx.writeBuffer();
+  const hoy = new Date().toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
+  saveAs(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    `${formato.code}_PNC_${hoy}.xlsx`);
+  return true;
 };
 
 export default exportPNC;

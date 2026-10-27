@@ -3,6 +3,11 @@
 // v3.1 — CRUD de Referencias (crear / editar / eliminar) en el modal de catálogo
 // v3.2 — Modal de Defectos (código + descripción): crear / editar / eliminar
 //        desde "Tabla Defectos" y acceso rápido "+ Nuevo" desde "Agregar Fila"
+// v4   — (oct 2026) Alineado al formato vigente de Gestión Documental
+//        (formato_vinculado 'registro_pnc' → RE-GP-13 v02): causa con 6 casillas,
+//        tratamiento con fecha, clasificación (corrección / reclasificación /
+//        concesión). Código y versión salen del Listado Maestro. "Sección" ya no
+//        se pide (se conserva lo guardado); "Detalle del origen" queda opcional.
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
@@ -15,7 +20,8 @@ import {
   Edit, Trash2, X, Check, BarChart3, FileSpreadsheet, Eye,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { exportPNC } from '@/utils/exportPNC';
+import { exportPNC, CAUSAS, CLASIFICACIONES } from '@/utils/exportPNC';
+import { useFormato, etiquetaFormato } from '@/hooks/useFormatoVinculado';
 import { usePNC, MESES, fmtFecha } from '@/hooks/usePNC';
 import { useAuth } from '@/context/AuthContext';
 
@@ -27,6 +33,7 @@ const XL = {
   descripcion:    '#92D050',
   causa:          '#9DC3E6',
   tratamiento:    '#70AD47',
+  clasificacion:  '#FFC000',
   verificacion:   '#C6EFCE',
   colBg:          '#DEEAF1',
   border:         '#A6B8C2',
@@ -35,7 +42,7 @@ const XL = {
 };
 
 // ── Listas de opciones (formulario consolidado) ───────────────────────────────
-const SECCIONES = ['Confección', 'Separación', 'Otro'];
+const marcadas = (f, lista) => lista.filter(x => f[x.campo]).map(x => x.label);
 
 const OPERACIONES_ORIGEN = [
   'Armado', 'Confección', 'Corte', 'Diseño', 'Plana', 'Presilla', 'Proveedor',
@@ -201,14 +208,17 @@ const MES_HOY = new Date().getMonth() + 1;
 
 const emptyForm = () => ({
   anio: AÑO_HOY, mes: MES_HOY,
-  seccion: '', seccion_otro: '',
+  seccion: '',                      // ya no se pide; se conserva al editar
   referencia_obj: null, referencia_texto: '',
   fecha_reporte: HOY,
   defecto_obj: null, defecto_texto: '',
   operacion_origen: '', operacion_origen_otro: '',
   total: '',
+  ...Object.fromEntries(CAUSAS.map(c => [c.campo, false])),
+  tratamiento_fecha: '',
   como_solucion: '', como_solucion_otro: '',
   tratamiento_responsable: '',
+  ...Object.fromEntries(CLASIFICACIONES.map(c => [c.campo, false])),
   verificacion_fecha: '', verificacion_responsable: '',
 });
 
@@ -227,6 +237,7 @@ export default function ProductoNoConformeManager({ onBack }) {
   const canEdit   = hasPermission('auditorias:producto_no_conforme:edit');
   const canDelete = isAdmin               || hasPermission('auditorias:producto_no_conforme:delete');
   const canExport = hasPermission('auditorias:producto_no_conforme:export');
+  const { formato } = useFormato('registro_pnc');   // RE-GP-13 desde Gestión Documental
 
   const { defectos, referencias, registros, produccion,
           loading, error,
@@ -295,7 +306,7 @@ export default function ProductoNoConformeManager({ onBack }) {
       const ref = getRef(f.referencia_id);
       return (
         MESES[f.mes-1].toLowerCase().includes(q) ||
-        (f.seccion||'').toLowerCase().includes(q) ||
+        marcadas(f, CAUSAS).join(' ').toLowerCase().includes(q) ||
         (ref?.ref || f.referencia_texto || '').toLowerCase().includes(q) ||
         (def?.nombre || f.defecto_texto || '').toLowerCase().includes(q) ||
         (f.operacion_origen||'').toLowerCase().includes(q) ||
@@ -310,19 +321,20 @@ export default function ProductoNoConformeManager({ onBack }) {
   // ── Abrir formulario (editar fila existente) — no permite cambiar año/mes ──
   const openEdit = (f) => {
     setEditingRow({ id: f.id, registro_id: f.registro_id, numero_fila: f.numero_fila });
-    const esSeccionLista  = SECCIONES.includes(f.seccion);
     const esOperacionLista= OPERACIONES_ORIGEN.includes(f.operacion_origen);
     const esSolucionLista = SOLUCIONES.includes(f.tratamiento_descripcion);
     setForm({
       anio: f.anio, mes: f.mes,
-      seccion: esSeccionLista ? f.seccion : (f.seccion ? 'Otro' : ''),
-      seccion_otro: esSeccionLista ? '' : (f.seccion || ''),
+      seccion: f.seccion || '',
       referencia_obj: getRef(f.referencia_id), referencia_texto: f.referencia_texto || '',
       fecha_reporte: f.fecha_reporte || HOY,
       defecto_obj: getDef(f.defecto_id), defecto_texto: f.defecto_texto || '',
       operacion_origen: esOperacionLista ? f.operacion_origen : (f.operacion_origen ? 'Otro' : ''),
       operacion_origen_otro: esOperacionLista ? '' : (f.operacion_origen || ''),
       total: f.total ?? '',
+      ...Object.fromEntries(CAUSAS.map(c => [c.campo, !!f[c.campo]])),
+      tratamiento_fecha: f.tratamiento_fecha || '',
+      ...Object.fromEntries(CLASIFICACIONES.map(c => [c.campo, !!f[c.campo]])),
       como_solucion: esSolucionLista ? f.tratamiento_descripcion : (f.tratamiento_descripcion ? 'Otro' : ''),
       como_solucion_otro: esSolucionLista ? '' : (f.tratamiento_descripcion || ''),
       tratamiento_responsable: f.tratamiento_responsable || '',
@@ -346,10 +358,12 @@ export default function ProductoNoConformeManager({ onBack }) {
         defecto_obj: form.defecto_obj,
         defecto_texto: form.defecto_obj ? null : form.defecto_texto,
         total: form.total,
-        seccion: form.seccion === 'Otro' ? form.seccion_otro : form.seccion,
+        seccion: form.seccion,
         operacion_origen: form.operacion_origen === 'Otro' ? form.operacion_origen_otro : form.operacion_origen,
         tratamiento_descripcion: form.como_solucion === 'Otro' ? form.como_solucion_otro : form.como_solucion,
         tratamiento_responsable: form.tratamiento_responsable,
+        tratamiento_fecha: form.tratamiento_fecha,
+        ...Object.fromEntries([...CAUSAS, ...CLASIFICACIONES].map(c => [c.campo, !!form[c.campo]])),
         verificacion_fecha: form.verificacion_fecha,
         verificacion_responsable: form.verificacion_responsable,
       };
@@ -375,21 +389,19 @@ export default function ProductoNoConformeManager({ onBack }) {
     finally { setDeletingId(null); }
   };
 
-  // ── Exportar TODOS los registros sobre la plantilla RE-GS-06 del Storage ───
+  // ── Exportar lo que se ve en la tabla (respeta el buscador: escribe "Octubre"
+  //    para sacar un solo mes) sobre el formato vigente de Gestión Documental ──
   const exportarTodo = async () => {
-    if (exporting || registros.length === 0) return;
+    if (exporting || filasFiltradas.length === 0) return;
     setExporting(true);
     try {
-      const regsEnriquecidos = registros.map(reg => ({
-        ...reg,
-        pnc_item: (reg.pnc_item || []).map(it => ({
-          ...it,
-          referencia_obj: getRef(it.referencia_id),
-          defecto_obj:    getDef(it.defecto_id),
-        })),
+      const datos = filasFiltradas.map(it => ({
+        ...it,
+        referencia_obj: getRef(it.referencia_id),
+        defecto_obj:    getDef(it.defecto_id),
       }));
-      await exportPNC(regsEnriquecidos, `RE-GS-06_PNC_${new Date().getFullYear()}`);
-      showMsg('success', `✅ Excel exportado con ${filas.length} fila(s).`);
+      await exportPNC(datos, formato);
+      showMsg('success', `✅ Excel ${formato?.code || ''} exportado con ${datos.length} fila(s).`);
     } catch (e) {
       showMsg('error', `Error al exportar: ${e.message}`);
     } finally {
@@ -571,7 +583,7 @@ export default function ProductoNoConformeManager({ onBack }) {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-xl font-bold" style={{ color: C.primary }}>Producto No Conforme</h2>
-          <p className="text-sm text-gray-500">RE-GS-06 · Control de Producto No Conforme</p>
+          <p className="text-sm text-gray-500">{etiquetaFormato(formato)} · Control de Producto No Conforme</p>
         </div>
         {onBack && (
           <Button variant="outline" size="sm" onClick={onBack}>Volver</Button>
@@ -606,12 +618,12 @@ export default function ProductoNoConformeManager({ onBack }) {
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <CardTitle style={{ color: C.primary }}>CONTROL DE PRODUCTO NO CONFORME</CardTitle>
-                <CardDescription>RE-GS-06 · Versión 01 · Formulario consolidado</CardDescription>
+                <CardDescription>{etiquetaFormato(formato)} · Formulario consolidado</CardDescription>
               </div>
               <div style={{ display:'flex', gap:8 }}>
                 {canExport && <Button variant="outline" size="sm"
                   onClick={exportarTodo}
-                  disabled={exporting || filas.length === 0}
+                  disabled={exporting || filasFiltradas.length === 0 || !formato}
                   style={{ fontSize:12, borderColor: C.primary, color: C.primary, opacity: exporting ? 0.6 : 1 }}>
                   {exporting
                     ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Generando...</>
@@ -669,38 +681,41 @@ export default function ProductoNoConformeManager({ onBack }) {
                       <col style={{ width:64  }} />{/* Acciones */}
                       <col style={{ width:34  }} />{/* N° */}
                       <col style={{ width:80  }} />{/* Mes */}
-                      <col style={{ width:84  }} />{/* Sección */}
                       <col style={{ width:60  }} />{/* Referencia */}
                       <col style={{ width:76  }} />{/* Fecha reporte */}
-                      <col style={{ width:180 }} />{/* Defecto/Descripción */}
-                      <col style={{ width:90  }} />{/* Operación origen */}
-                      <col style={{ width:56  }} />{/* Cantidad */}
-                      <col style={{ width:130 }} />{/* Cómo se solucionó */}
+                      <col style={{ width:180 }} />{/* Producto no conforme */}
+                      <col style={{ width:52  }} />{/* Total */}
+                      <col style={{ width:130 }} />{/* Causa / origen */}
+                      <col style={{ width:76  }} />{/* Fecha trat. */}
+                      <col style={{ width:130 }} />{/* Descripción trat. */}
                       <col style={{ width:100 }} />{/* Responsable trat. */}
+                      <col style={{ width:100 }} />{/* Clasificación */}
                       <col style={{ width:76  }} />{/* Fecha verif. */}
                       <col style={{ width:100 }} />{/* Responsable verif. */}
                     </colgroup>
                     <thead>
                       <tr>
                         <HHead bg="#E2EFDA">ACC.</HHead>
-                        <HHead bg={XL.identificacion} colSpan={2}>IDENTIFICACIÓN</HHead>
-                        <HHead bg={XL.descripcion}    colSpan={4}>DESCRIPCIÓN</HHead>
-                        <HHead bg={XL.causa}          colSpan={2}>CAUSA/ORIGEN</HHead>
-                        <HHead bg={XL.tratamiento}    colSpan={2} textColor="#fff">TRATAMIENTO</HHead>
+                        <HHead bg={XL.identificacion} colSpan={4}>IDENTIFICACIÓN</HHead>
+                        <HHead bg={XL.descripcion}    colSpan={2}>DESCRIPCIÓN</HHead>
+                        <HHead bg={XL.causa}>CAUSA/ORIGEN</HHead>
+                        <HHead bg={XL.tratamiento}    colSpan={3} textColor="#fff">TRATAMIENTO</HHead>
+                        <HHead bg={XL.clasificacion}>CLASIFICACIÓN</HHead>
                         <HHead bg={XL.verificacion}   colSpan={2}>VERIFICACIÓN</HHead>
                       </tr>
                       <tr>
                         <VHead w={64}></VHead>
                         <VHead w={34}>N°</VHead>
                         <VHead w={80}>Mes</VHead>
-                        <VHead w={84}>Sección</VHead>
                         <VHead w={60}>Ref.</VHead>
                         <VHead w={76}>Fecha|Reporte</VHead>
                         <VHead w={180}>Producto No|Conforme</VHead>
-                        <VHead w={90}>Operación|Origen</VHead>
-                        <VHead w={56}>Cant.</VHead>
-                        <VHead w={130}>Cómo se|Solucionó</VHead>
+                        <VHead w={52}>Total</VHead>
+                        <VHead w={130}>Módulo · Operación ·|Insumo · Corte ·|Sublim. · Revisión</VHead>
+                        <VHead w={76}>Fecha</VHead>
+                        <VHead w={130}>Descripción</VHead>
                         <VHead w={100}>Responsable</VHead>
+                        <VHead w={100}>Correc. · Reclas.|· Concesión</VHead>
                         <VHead w={76}>Fecha|Verif.</VHead>
                         <VHead w={100}>Responsable|Verif.</VHead>
                       </tr>
@@ -731,14 +746,18 @@ export default function ProductoNoConformeManager({ onBack }) {
                             </Cell>
                             <Cell center bg={bg}>{f.numero_fila}</Cell>
                             <Cell center bg={bg}>{MESES[f.mes-1]}</Cell>
-                            <Cell bg={bg}>{f.seccion || '—'}</Cell>
                             <Cell center bg={bg}>{ref ? ref.ref : (f.referencia_texto || '—')}</Cell>
                             <Cell center bg={bg}><Fecha v={f.fecha_reporte} /></Cell>
                             <Cell bg={bg}>{def ? `${def.codigo} — ${def.nombre}` : (f.defecto_texto || '—')}</Cell>
-                            <Cell bg={bg}>{f.operacion_origen || '—'}</Cell>
                             <Cell center bg={bg}>{f.total ?? '—'}</Cell>
+                            <Cell bg={bg}>
+                              {marcadas(f, CAUSAS).join(', ') || <span style={{ color:'#C0C0C0' }}>—</span>}
+                              {f.operacion_origen && <div style={{ fontSize:10, color:'#6B7280' }}>{f.operacion_origen}</div>}
+                            </Cell>
+                            <Cell center bg={bg}><Fecha v={f.tratamiento_fecha} /></Cell>
                             <Cell bg={bg}>{f.tratamiento_descripcion || '—'}</Cell>
                             <Cell bg={bg}>{f.tratamiento_responsable || '—'}</Cell>
+                            <Cell bg={bg}>{marcadas(f, CLASIFICACIONES).join(', ') || <span style={{ color:'#C0C0C0' }}>—</span>}</Cell>
                             <Cell center bg={bg}><Fecha v={f.verificacion_fecha} /></Cell>
                             <Cell bg={bg}>{f.verificacion_responsable || '—'}</Cell>
                           </tr>
@@ -900,13 +919,14 @@ export default function ProductoNoConformeManager({ onBack }) {
             <div style={{ borderLeft:`3px solid ${XL.descripcion}`, paddingLeft:10 }}>
               <p className="text-xs font-bold mb-2 uppercase" style={{ color:'#2d6a4f' }}>Descripción</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                <SelectConOtro label="Sección que identifica" options={SECCIONES}
-                  value={form.seccion} otro={form.seccion_otro}
-                  onChange={v => setF('seccion', v)} onChangeOtro={v => setF('seccion_otro', v)} />
                 <div>
                   <label className="text-xs font-medium text-gray-600 block mb-1">Referencia</label>
                   <ComboboxInput value={form.referencia_obj} onChange={v => setF('referencia_obj', v)}
                     options={referencias} placeholder="Ej: 107, 1283..." getLabel={r=>r.categoria||''} getId={r=>r.ref} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Total (unidades)</label>
+                  <Input type="number" min="0" value={form.total} onChange={e => setF('total', e.target.value)} placeholder="0" className="text-sm" />
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -934,28 +954,50 @@ export default function ProductoNoConformeManager({ onBack }) {
             {/* CAUSA/ORIGEN */}
             <div style={{ borderLeft:`3px solid ${XL.causa}`, paddingLeft:10 }}>
               <p className="text-xs font-bold mb-2 uppercase" style={{ color:'#155b9e' }}>Análisis de Causa / Origen</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <SelectConOtro label="Operación de Origen" options={OPERACIONES_ORIGEN}
-                  value={form.operacion_origen} otro={form.operacion_origen_otro}
-                  onChange={v => setF('operacion_origen', v)} onChangeOtro={v => setF('operacion_origen_otro', v)} />
-                <div>
-                  <label className="text-xs font-medium text-gray-600 block mb-1">Cantidad</label>
-                  <Input type="number" min="0" value={form.total} onChange={e => setF('total', e.target.value)} placeholder="0" className="text-sm" />
-                </div>
+              <p className="text-xs text-gray-500 mb-2">Marca dónde se originó (puede ser más de una).</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-3">
+                {CAUSAS.map(c => (
+                  <label key={c.campo} className="flex items-center gap-2 text-sm p-2 border rounded cursor-pointer"
+                    style={{ background: form[c.campo] ? '#EAF3FB' : '#fff', borderColor: form[c.campo] ? '#9DC3E6' : '#E5E7EB' }}>
+                    <input type="checkbox" checked={!!form[c.campo]} onChange={e => setF(c.campo, e.target.checked)} />
+                    {c.label}
+                  </label>
+                ))}
               </div>
+              <SelectConOtro label="Detalle del origen (opcional, solo en la app)" options={OPERACIONES_ORIGEN}
+                value={form.operacion_origen} otro={form.operacion_origen_otro}
+                onChange={v => setF('operacion_origen', v)} onChangeOtro={v => setF('operacion_origen_otro', v)} />
             </div>
 
             {/* TRATAMIENTO */}
             <div style={{ borderLeft:`3px solid ${XL.tratamiento}`, paddingLeft:10 }}>
               <p className="text-xs font-bold mb-2 uppercase" style={{ color:'#166534' }}>Tratamiento</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <SelectConOtro label="¿Cómo se solucionó?" options={SOLUCIONES}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Fecha</label>
+                  <Input type="date" value={form.tratamiento_fecha} onChange={e => setF('tratamiento_fecha', e.target.value)} className="text-sm" />
+                </div>
+                <SelectConOtro label="Descripción (¿cómo se solucionó?)" options={SOLUCIONES}
                   value={form.como_solucion} otro={form.como_solucion_otro}
                   onChange={v => setF('como_solucion', v)} onChangeOtro={v => setF('como_solucion_otro', v)} />
                 <div>
                   <label className="text-xs font-medium text-gray-600 block mb-1">Responsable</label>
                   <Input value={form.tratamiento_responsable} onChange={e => setF('tratamiento_responsable', e.target.value)} placeholder="Nombre" className="text-sm" />
                 </div>
+              </div>
+            </div>
+
+            {/* CLASIFICACION */}
+            <div style={{ borderLeft:`3px solid ${XL.clasificacion}`, paddingLeft:10 }}>
+              <p className="text-xs font-bold mb-2 uppercase" style={{ color:'#92400e' }}>Clasificación</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                {CLASIFICACIONES.map(c => (
+                  <label key={c.campo} className="flex items-center gap-2 text-sm p-2 border rounded cursor-pointer"
+                    style={{ background: form[c.campo] ? '#FFF7E0' : '#fff', borderColor: form[c.campo] ? '#FFC000' : '#E5E7EB' }}>
+                    <input type="checkbox" checked={!!form[c.campo]} onChange={e => setF(c.campo, e.target.checked)} />
+                    {c.label}
+                  </label>
+                ))}
               </div>
             </div>
 

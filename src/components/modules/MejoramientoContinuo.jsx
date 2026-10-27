@@ -107,7 +107,7 @@ const SUBMODULES = [
     description: 'Gestión de no conformidades productivas',
     icon: AlertTriangle, color: '#6f7b2c',
     gradient: 'linear-gradient(135deg, #6f7b2c 0%, #a3b347 100%)',
-    badge: 'RE-GS-06', enabled: true,
+    badge: 'RE-GP-13', enabled: true,
   },
   {
     id: 'qrsf', name: 'QRSF',
