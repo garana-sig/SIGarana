@@ -623,7 +623,6 @@ export default function WorkPlanTab({ planType }) {
                     style={{ background:'#fef3c7', color:'#92400e', fontWeight:800 }}>
                     CRONOGRAMA
                   </Th>
-                  <Th w={140} rowSpan={2}>EVIDENCIA</Th>
                   {canEdit && <Th w={60} rowSpan={2} center>ACC.</Th>}
                 </tr>
                 <tr style={{ background:'#fef9ee' }}>
@@ -677,13 +676,6 @@ export default function WorkPlanTab({ planType }) {
                         />
                       ))}
 
-                      {/* Evidencia */}
-                      <Td>
-                        <span style={{ fontSize:11, color:'#374151', lineHeight:1.4 }}>
-                          {item.evidence_text || <em style={{ color:'#9ca3af' }}>—</em>}
-                        </span>
-                      </Td>
-
                       {canEdit && (
                         <Td center>
                           <div style={{ display:'flex', gap:4, justifyContent:'center' }}>
@@ -718,7 +710,7 @@ export default function WorkPlanTab({ planType }) {
                     fontWeight:800, fontSize:13, color: C.olive }}>
                     {fmtCOP(totalBudget)}
                   </td>
-                  <td colSpan={canEdit ? 14 : 13}/>
+                  <td colSpan={canEdit ? 13 : 12}/>
                 </tr>
               </tbody>
             </table>

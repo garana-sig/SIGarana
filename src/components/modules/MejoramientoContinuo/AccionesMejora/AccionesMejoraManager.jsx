@@ -7,6 +7,7 @@ import { Input }  from '@/app/components/ui/input';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { FileDown } from 'lucide-react';
 import { exportAccionesMejora } from '@/utils/exportAccionesMejora';
+import { useFormato, etiquetaFormato } from '@/hooks/useFormatoVinculado';
 import { supabase } from '@/lib/supabase';
 import {
   Plus, Search, RefreshCw, Filter, Loader2,
@@ -155,6 +156,7 @@ function MomentoTag({ status }) {
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function AccionesMejoraManager({ onBack }) {
   const { user, profile, hasPermission } = useAuth();
+  const { formato } = useFormato('registro_acciones_mejora');   // RE-GS-06 desde Gestión Documental
   const role = profile?.role;
 
   // ── Permisos ────────────────────────────────────────────────────────────────
@@ -235,9 +237,9 @@ export default function AccionesMejoraManager({ onBack }) {
     if (rows.length === 0) return;
     setExporting(true);
     try {
-      await exportAccionesMejora(rows, (id) => procName(id), 'AccionesMejora_Filtradas');
+      await exportAccionesMejora(rows, (id) => procName(id), formato, 'Filtradas');
       showMsg('success', `✅ Excel generado con ${rows.length} acción(es).`);
-    } catch { showMsg('error', '❌ Error al generar el Excel.'); }
+    } catch (e) { showMsg('error', `❌ Error al generar el Excel: ${e.message}`); }
     finally  { setExporting(false); }
   };
 
@@ -258,9 +260,9 @@ export default function AccionesMejoraManager({ onBack }) {
         responsible_email: pm[a.responsible_id]?.email     || null,
         auditor:           pm[a.auditor_id] || null,
       }));
-      await exportAccionesMejora(enriched, (id)=>procName(id), 'AccionesMejora_Completo');
+      await exportAccionesMejora(enriched, (id)=>procName(id), formato, 'Completo');
       showMsg('success', `✅ Excel con ${enriched.length} acción(es).`);
-    } catch { showMsg('error', '❌ Error al exportar todo.'); }
+    } catch (e) { showMsg('error', `❌ Error al exportar todo: ${e.message}`); }
     finally  { setExporting(false); }
   };
 
@@ -275,7 +277,7 @@ export default function AccionesMejoraManager({ onBack }) {
         <div>
           <h2 className="text-2xl font-bold" style={{ color:'#2e5244' }}>Acciones de Mejora</h2>
           <p className="text-sm" style={{ color:'#6f7b2c' }}>
-            3 momentos: Identificación → Análisis y Plan → Verificación
+            {etiquetaFormato(formato)} · 3 momentos: Identificación → Análisis y Plan → Verificación
           </p>
         </div>
       </div>

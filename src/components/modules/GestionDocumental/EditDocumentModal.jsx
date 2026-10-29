@@ -797,40 +797,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                 )}
               </div>
 
-              {/* 🆕 Objetivo y Alcance: NO aplican para Formatos (FO) ni Registros (RE) */}
-              {!controlArchivoAplica && (
-                <>
-                {/* Objetivo */}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Objetivo
-                  </label>
-                  <textarea
-                    value={formData.objective}
-                    onChange={(e) => setFormData({ ...formData, objective: e.target.value })}
-                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    rows="2"
-                    disabled={loading}
-                    placeholder="Objetivo del documento"
-                  />
-                </div>
-
-                {/* Alcance */}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Alcance
-                  </label>
-                  <textarea
-                    value={formData.scope}
-                    onChange={(e) => setFormData({ ...formData, scope: e.target.value })}
-                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                    rows="2"
-                    disabled={loading}
-                    placeholder="Alcance del documento"
-                  />
-                </div>
-                </>
-              )}
+              {/* Objetivo y Alcance: retirados del formulario (oct 2026) */}
 
               {/* Responsable - NUEVO */}
               <div>

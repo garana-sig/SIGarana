@@ -207,19 +207,7 @@ const ApprovalModal = ({ document, isOpen, onClose, onSuccess }) => {
               </p>
             </div>
 
-            {document.objective && (
-              <div>
-                <p className="text-sm text-gray-600">Objetivo</p>
-                <p className="text-sm">{document.objective}</p>
-              </div>
-            )}
-
-            {document.scope && (
-              <div>
-                <p className="text-sm text-gray-600">Alcance</p>
-                <p className="text-sm">{document.scope}</p>
-              </div>
-            )}
+            {/* Objetivo y Alcance: retirados (oct 2026) */}
           </div>
 
           {/* Botón Descargar */}
