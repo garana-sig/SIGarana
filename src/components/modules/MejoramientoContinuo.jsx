@@ -30,6 +30,7 @@ import {
   BarChart3, AlertCircle, Smile, Award, HelpCircle, Settings,
   Building2, Wrench, ArrowLeft, Construction, ClipboardList, ShieldCheck,
   HardHat, Lightbulb, Star, BadgeCheck, Layers, Monitor, Cog, Building,
+  Lock, ShieldAlert,
 } from 'lucide-react';
 
 import ActasManager                   from './MejoramientoContinuo/Actas/ActasManager';
@@ -197,6 +198,9 @@ const SUBMODULES = [
   { id: 'registro_operacion_inusual', name: 'Registro Operación Inusual en Exportación', description: 'Operaciones sospechosas o inusuales en exportaciones', icon: ShieldCheck, color: '#1d4ed8', gradient: 'linear-gradient(135deg, #1d4ed8 0%, #2e5244 100%)', badge: 'RE-GF-10', reporteTipo: 'operacion_inusual', enabled: true },
   // Registros de "Ayúdanos a mejorar": acceso = responsables del tipo (+ admin/gerencia)
   { id: 'registro_actos_inseguros', name: 'Registro Actos Inseguros',         description: 'Bandeja de reportes y registro de actos y condiciones inseguras', icon: AlertCircle, color: '#dc2626', gradient: 'linear-gradient(135deg, #dc2626 0%, #f97316 100%)', badge: 'RE-GS-02', reporteTipo: 'acto_inseguro', enabled: true },
+  // (30-oct-2026) Solo bandeja por ahora — el formato se vincula después
+  { id: 'registro_seguridad_fisica', name: 'Posible Afectación en la Seguridad Física', description: 'Bandeja de reportes que pueden afectar la seguridad física', icon: Lock, color: '#1d4ed8', gradient: 'linear-gradient(135deg, #1d4ed8 0%, #2e5244 100%)', badge: 'Seguridad física', reporteTipo: 'seguridad_fisica', enabled: true },
+  { id: 'registro_amenazas_informaticas', name: 'Amenazas Informáticas', description: 'Bandeja de reportes de amenazas informáticas', icon: ShieldAlert, color: '#0e7490', gradient: 'linear-gradient(135deg, #0e7490 0%, #2e5244 100%)', badge: 'Ciberseguridad', reporteTipo: 'amenaza_informatica', enabled: true },
   { id: 'auditorias',              name: 'Auditorías Internas',               description: 'Plan, programa y hallazgos de auditoría',               icon: Search,      color: '#6dbd96', gradient: 'linear-gradient(135deg, #6dbd96 0%, #2e5244 100%)', badge: 'Auditoría',   building: true },
   { id: 'evaluacion_auditores',    name: 'Evaluación Auditores',              description: 'Competencias de los auditores internos',                icon: Users,       color: '#6f7b2c', gradient: 'linear-gradient(135deg, #6f7b2c 0%, #a3b347 100%)', badge: 'Auditoría',   building: true },
 ];
@@ -213,7 +217,7 @@ const GROUPS = [
       'satisfaccion_clientes', 'clima_laboral', 'evaluacion_competencias', 'proveedores',
       'indicadores', 'qrsf', 'eval_proveedor_critico', 'eval_requisitos_calidad',
       'eval_requisitos_sst', 'eval_requisitos_basc', 'registro_sugerencias', 'registro_actos_inseguros',
-      'registro_operacion_inusual',
+      'registro_operacion_inusual', 'registro_seguridad_fisica', 'registro_amenazas_informaticas',
     ],
   },
   {

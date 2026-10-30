@@ -1,5 +1,5 @@
 // src/components/modules/MejoramientoContinuo/Reportes/registros.js
-// Configuración de los 3 registros oficiales de "Ayúdanos a mejorar".
+// Configuración de los registros de "Ayúdanos a mejorar" (3 con formato + 2 solo bandeja).
 // La clave de cada objeto = id del submódulo en MejoramientoContinuo.jsx
 // = clave del formato vinculado (Gestión Documental → Formatos del sistema).
 import FormActoInseguro, { EPP_OPCIONES } from './FormActoInseguro';
@@ -62,5 +62,24 @@ export const REGISTROS = {
       { h: 'Descripción', ancho: 260, clamp: true, v: (g) => g.descripcion },
       { h: 'UIAF', nowrap: true, v: (g) => (g.reporte_uiaf === true ? 'Sí' : g.reporte_uiaf === false ? 'No' : '') },
     ],
+  },
+
+  // ── Solo bandeja (30-oct-2026): sin formato diligenciable todavía. ──
+  // tabla/Formulario/exportar = null → el manager muestra solo la bandeja
+  // y deja cerrar el reporte directamente desde "Nuevo" o "En gestión".
+  registro_seguridad_fisica: {
+    titulo: 'Posible Afectación en la Seguridad Física',
+    subtitulo: 'Bandeja de reportes de seguridad física',
+    claveFormato: 'registro_seguridad_fisica',
+    tipo: 'seguridad_fisica',
+    tabla: null, Formulario: null, exportar: null, columnas: [],
+  },
+
+  registro_amenazas_informaticas: {
+    titulo: 'Amenazas Informáticas',
+    subtitulo: 'Bandeja de reportes de amenazas informáticas',
+    claveFormato: 'registro_amenazas_informaticas',
+    tipo: 'amenaza_informatica',
+    tabla: null, Formulario: null, exportar: null, columnas: [],
   },
 };

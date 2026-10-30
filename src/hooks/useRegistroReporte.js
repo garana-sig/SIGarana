@@ -6,6 +6,7 @@
 // La RLS limita todo a los responsables del tipo + admin + gerencia.
 // Reemplaza a useActosInseguros.js (oct 2026).
 // v2: eliminación definitiva (eliminarRegistro / eliminarReporte, RM_04).
+// v3 (30-oct-2026): tabla = null → tipo "solo bandeja" (seguridad física, amenazas informáticas).
 // ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -41,9 +42,12 @@ export function useRegistroReporte({ tipo, tabla }) {
                  eventos:reporte_evento ( id, status, nota, created_at, usuario:user_id ( full_name ) )`)
         .eq('tipo_codigo', tipo)
         .order('created_at', { ascending: false }),
-      supabase.from(tabla)
-        .select('*, receptor:recibido_por ( full_name ), reporte:reporte_id ( consecutivo, is_anonimo )')
-        .order('created_at', { ascending: false }),
+      // Tipos "solo bandeja" (sin tabla de registro) → no se consulta nada
+      tabla
+        ? supabase.from(tabla)
+            .select('*, receptor:recibido_por ( full_name ), reporte:reporte_id ( consecutivo, is_anonimo )')
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
     ]);
     const err = r.error || g.error;
     if (err) setError(err.message);

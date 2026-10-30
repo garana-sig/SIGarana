@@ -6,6 +6,8 @@
 // Se configura con un objeto de ./registros.js (uno por formato).
 // Reemplaza a ActosInseguros/ActosInsegurosManager.jsx (oct 2026).
 // v2: eliminación definitiva (admin + responsable del tipo) — RM_04.
+// v3 (30-oct-2026): config sin tabla/Formulario → "solo bandeja": sin pestaña
+//     Registros ni "Diligenciar formato"; se cierra directo desde Nuevo/En gestión.
 // ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect, useMemo } from 'react';
 import {
@@ -62,7 +64,7 @@ function ConfirmarEliminar({ que, onClose, onConfirmar }) {
 }
 
 // ─── Detalle de un reporte de la bandeja ────────────────────────────
-function DetalleReporte({ reporte, registro, onClose, onEstado, onDiligenciar, onVerRegistro, onEliminar }) {
+function DetalleReporte({ reporte, registro, onClose, onEstado, onDiligenciar, onVerRegistro, onEliminar, soloBandeja = false }) {
   const [foto, setFoto] = useState(undefined);   // undefined = cargando · null = no disponible
   const [motivo, setMotivo] = useState('');
   const [modo, setModo] = useState(null);       // 'descartar' | 'cerrar'
@@ -100,7 +102,7 @@ function DetalleReporte({ reporte, registro, onClose, onEstado, onDiligenciar, o
       )}
 
       <div className="flex flex-wrap gap-2" style={{ marginTop: 14 }}>
-        {abierto && !registro && (
+        {abierto && !registro && !soloBandeja && (
           <Button onClick={onDiligenciar} style={{ background: C.green, color: 'white' }} className="flex items-center gap-1.5">
             <PenLine size={15} /> Diligenciar formato
           </Button>
@@ -115,7 +117,7 @@ function DetalleReporte({ reporte, registro, onClose, onEstado, onDiligenciar, o
             <FileSpreadsheet size={15} /> Ver registro
           </Button>
         )}
-        {reporte.status === 'registrado' && (
+        {(reporte.status === 'registrado' || (soloBandeja && abierto)) && (
           <Button variant="outline" disabled={busy} onClick={() => setModo('cerrar')} className="flex items-center gap-1.5">
             <CheckCircle2 size={15} /> Cerrar reporte
           </Button>
@@ -186,6 +188,7 @@ export default function RegistroReporteManager({ config, onBack, volverA = 'Eval
   const regPorId = useMemo(() => Object.fromEntries(registros.map((g) => [g.id, g])), [registros]);
   const pendientes = reportes.filter((r) => ['nuevo', 'en_gestion'].includes(r.status)).length;
   const codigo = formato?.code || '';
+  const soloBandeja = !tabla || !Formulario;   // tipos sin formato diligenciable (v3)
 
   const FILTROS = {
     pendientes:  (r) => ['nuevo', 'en_gestion'].includes(r.status),
@@ -221,7 +224,7 @@ export default function RegistroReporteManager({ config, onBack, volverA = 'Eval
             {' · '}{subtitulo}
           </p>
         </div>
-        {tab === 'registros' && (
+        {tab === 'registros' && !soloBandeja && (
           <Button onClick={() => setForm({})} className="flex items-center gap-2" style={{ background: C.green, color: 'white' }}>
             <Plus size={16} /> Nuevo registro
           </Button>
@@ -233,7 +236,7 @@ export default function RegistroReporteManager({ config, onBack, volverA = 'Eval
         {[
           { id: 'bandeja', label: 'Bandeja de reportes', icon: Inbox, n: pendientes },
           { id: 'registros', label: `Registros ${codigo}`.trim(), icon: FileSpreadsheet, n: registros.length },
-        ].map((t) => {
+        ].filter((t) => !(soloBandeja && t.id === 'registros')).map((t) => {
           const I = t.icon; const on = tab === t.id;
           return (
             <button key={t.id} type="button" onClick={() => setTab(t.id)} className="flex items-center gap-2 px-4 py-3 text-sm font-medium"
@@ -352,6 +355,7 @@ export default function RegistroReporteManager({ config, onBack, volverA = 'Eval
           onDiligenciar={() => setForm({ reporte: detalle })}
           onVerRegistro={() => setForm({ registro: regPorId[detalle.registro_id] })}
           onEliminar={puedeEliminar ? () => setBorrar({ tipo: 'reporte', item: detalle }) : null}
+          soloBandeja={soloBandeja}
         />
       )}
 
@@ -370,7 +374,7 @@ export default function RegistroReporteManager({ config, onBack, volverA = 'Eval
           }} />
       )}
 
-      {form && (
+      {form && Formulario && (
         <Formulario formato={formato} reporte={form.reporte} registro={form.registro}
           onClose={() => setForm(null)}
           onGuardar={async (campos) => {

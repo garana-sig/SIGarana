@@ -5,6 +5,7 @@
 //   tipo (de la tabla reporte_tipo) → descripción, área, foto, anónimo
 //   → crear_reporte() → consecutivo REP-AAAA-NNNN + correo a responsables.
 // Se monta una sola vez en Layout.jsx. Imagen: public/hoja-garana.png
+// v2 (30-oct-2026): ícono ⛑️ → casco SST dibujado; nombre "… · SST" → chip SST.
 // ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useReporteTipos, crearReporte } from '@/hooks/useReportes';
@@ -77,6 +78,36 @@ function HojaCarita({ conHalo = true }) {
   );
 }
 
+// ─── Íconos de los tipos (v2, 30-oct-2026) ───────────────────────────
+// El ícono viene de reporte_tipo.icono (emoji, también se usa en el correo).
+// '⛑️' se dibuja como casco de seguridad industrial (SST).
+function CascoSST({ size = 26 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
+      <path d="M8 31c0-9.4 7.2-17 16-17s16 7.6 16 17z" fill="#f59e0b" />
+      <path d="M20 14.6V11a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v3.6" fill="#fbbf24" />
+      <rect x="21.5" y="9" width="5" height="22" rx="1.5" fill="#fbbf24" />
+      <rect x="4" y="30" width="40" height="6" rx="3" fill="#d97706" />
+      <path d="M14 20c1.5-2 3.5-3.4 6-4" stroke="#fff" strokeWidth="2" strokeLinecap="round" fill="none" opacity=".6" />
+    </svg>
+  );
+}
+function IconoTipo({ icono, size }) {
+  if (icono === '⛑️' || icono === '⛑') return <CascoSST size={size} />;
+  return <>{icono}</>;
+}
+// Etiqueta "SST" cuando el nombre del tipo termina en "· SST"
+function partirNombre(nombre = '') {
+  const m = nombre.match(/^(.*?)\s*·\s*SST\s*$/i);
+  return m ? { texto: m[1], sst: true } : { texto: nombre, sst: false };
+}
+function ChipSST() {
+  return (
+    <span style={{ display: 'inline-block', marginLeft: 6, verticalAlign: 'middle', fontSize: 10.5, fontWeight: 800, letterSpacing: .5,
+      color: '#92400e', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 20, padding: '1px 7px' }}>SST</span>
+  );
+}
+
 function Header({ titulo, sub, icono, onClose }) {
   return (
     <div style={{ position: 'relative', background: `linear-gradient(135deg, ${C.green}, ${C.dark})`, color: 'white', padding: '20px 22px', overflow: 'hidden', borderRadius: '24px 24px 0 0' }}>
@@ -84,7 +115,7 @@ function Header({ titulo, sub, icono, onClose }) {
       <button type="button" onClick={onClose} aria-label="Cerrar"
         style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(255,255,255,.14)', border: 'none', color: 'white', width: 30, height: 30, borderRadius: '50%', cursor: 'pointer', fontSize: 15, zIndex: 3 }}>✕</button>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', position: 'relative', zIndex: 1, paddingRight: 28 }}>
-        <div style={{ fontSize: 34, lineHeight: 1, flexShrink: 0 }}>{icono}</div>
+        <div style={{ fontSize: 34, lineHeight: 1, flexShrink: 0 }}><IconoTipo icono={icono} size={38} /></div>
         <div>
           <h2 style={{ fontFamily: 'Georgia, serif', fontSize: 20, lineHeight: 1.25, margin: 0 }}>{titulo}</h2>
           <p style={{ fontSize: 13, color: '#dedecc', margin: '4px 0 0' }}>{sub}</p>
@@ -251,9 +282,11 @@ export default function AyudanosAMejorar() {
                   {tipos.map((t) => (
                     <button key={t.codigo} type="button" className="aam-opt" style={{ borderColor: `${t.color}40` }}
                       onClick={() => { setTipo(t); setPaso('form'); }}>
-                      <span style={{ width: 46, height: 46, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, background: `${t.color}14` }}>{t.icono}</span>
+                      <span style={{ width: 46, height: 46, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, background: `${t.color}14` }}><IconoTipo icono={t.icono} size={28} /></span>
                       <span style={{ minWidth: 0 }}>
-                        <b style={{ display: 'block', fontSize: 14.5, color: C.dark }}>{t.nombre}</b>
+                        <b style={{ display: 'block', fontSize: 14.5, color: C.dark }}>
+                          {partirNombre(t.nombre).texto}{partirNombre(t.nombre).sst && <ChipSST />}
+                        </b>
                         <span style={{ fontSize: 12, color: '#6b7280' }}>{t.descripcion}</span>
                       </span>
                       <span style={{ marginLeft: 'auto', color: '#c4c4b4', fontSize: 20 }}>›</span>
@@ -271,7 +304,7 @@ export default function AyudanosAMejorar() {
             </>)}
 
             {paso === 'form' && tipo && (<>
-              <Header titulo={tipo.nombre} sub="Solo lo básico: el responsable completará el registro oficial." icono={tipo.icono} onClose={cerrar} />
+              <Header titulo={<>{partirNombre(tipo.nombre).texto}{partirNombre(tipo.nombre).sst && <ChipSST />}</>} sub="Solo lo básico: el responsable completará el registro oficial." icono={tipo.icono} onClose={cerrar} />
               <div style={{ padding: '18px 20px 20px' }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.green, marginBottom: 5 }}>Descripción *</label>
                 <textarea className="aam-input" rows={4} autoFocus value={desc} maxLength={4000}
