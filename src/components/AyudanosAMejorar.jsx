@@ -5,6 +5,7 @@
 //   tipo (de la tabla reporte_tipo) → descripción, área, foto, anónimo
 //   → crear_reporte() → consecutivo REP-AAAA-NNNN + correo a responsables.
 // Se monta una sola vez en Layout.jsx. Imagen: public/hoja-garana.png
+// v3 (30-oct-2026): rescate — no se puede esconder detrás del menú lateral (z-index 55 + se corre al soltarla).
 // v2 (30-oct-2026): ícono ⛑️ → casco SST dibujado; nombre "… · SST" o "… · BASC" → chip.
 // ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -13,7 +14,7 @@ import { useReporteTipos, crearReporte } from '@/hooks/useReportes';
 const C = { green: '#2e5244', mint: '#6dbd96', olive: '#6f7b2c', sand: '#dedecc', dark: '#1a2e25' };
 
 const CSS = `
-.aam-buddy{position:fixed;right:20px;bottom:18px;z-index:40;display:flex;align-items:flex-end;gap:8px;cursor:grab;user-select:none;-webkit-tap-highlight-color:transparent;background:none;border:none;padding:0;touch-action:none}
+.aam-buddy{position:fixed;right:20px;bottom:18px;z-index:55;display:flex;align-items:flex-end;gap:8px;cursor:grab;user-select:none;-webkit-tap-highlight-color:transparent;background:none;border:none;padding:0;touch-action:none}
 .aam-buddy.aam-drag{cursor:grabbing}
 .aam-buddy.aam-drag .aam-wrap{animation:none;transform:scale(1.08)}
 .aam-mini .aam-leaf{width:52px;height:52px}
@@ -178,8 +179,26 @@ export default function AyudanosAMejorar() {
     const el = buddyRef.current; const w = el?.offsetWidth || 80; const h = el?.offsetHeight || 90;
     return { x: Math.min(Math.max(4, x), window.innerWidth - w - 4), y: Math.min(Math.max(4, y), window.innerHeight - h - 4) };
   };
+  // (30-oct-2026) Rescate: la hoja nunca queda debajo del menú lateral.
+  // Si cae encima del <aside> (al soltarla, al cargar o al cambiar el tamaño
+  // de la ventana) se corre a la derecha del menú.
+  const ajustar = (p) => {
+    if (!p) return p;
+    let { x, y } = limitar(p.x, p.y);
+    const el = buddyRef.current; const w = el?.offsetWidth || 80;
+    const r = document.querySelector('aside')?.getBoundingClientRect();
+    if (r && r.width > 0 && r.right > 0 && r.left < window.innerWidth && x < r.right && x + w > r.left) {
+      ({ x, y } = limitar(r.right + 12, y));
+    }
+    return { x, y };
+  };
   useEffect(() => {
-    const onResize = () => setPos((p) => (p ? limitar(p.x, p.y) : p));
+    // Al cargar: corrige una posición guardada que haya quedado escondida
+    const t = setTimeout(() => setPos((p) => { const n = ajustar(p); if (n && (n.x !== p.x || n.y !== p.y)) guardar(n, mini); return n; }), 300);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const onResize = () => setPos((p) => ajustar(p));
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -201,7 +220,7 @@ export default function AyudanosAMejorar() {
   const onPointerUp = () => {
     const d = drag.current; drag.current = null;
     if (!d) return;
-    if (d.movido) { setArrastrando(false); setPos((p) => { guardar(p, mini); return p; }); }
+    if (d.movido) { setArrastrando(false); setPos((p) => { const n = ajustar(p); guardar(n, mini); return n; }); }
     else setAbierto(true);                                       // fue un clic: abrir
   };
   const toggleMini = (e) => { e.stopPropagation(); const m = !mini; setMini(m); guardar(pos, m); };
@@ -399,4 +418,4 @@ export default function AyudanosAMejorar() {
       <canvas ref={confRef} className="aam-conf" aria-hidden="true" />
     </>
   );
-}
+}
