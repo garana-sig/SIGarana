@@ -273,21 +273,23 @@ export default function FormularioCreacion({
       const fileName = `${formData.code}_v${version}.${fileExt}`;
       const selectedType = documentTypes.find(t => t.id === formData.document_type_id);
       const folderName = selectedType?.code || 'general';
-      const filePath = `${folderName}/${fileName}`;
+      let filePath = `${folderName}/${fileName}`;
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      let { error: uploadError } = await supabase.storage
         .from('documents')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
+        .upload(filePath, file, { cacheControl: '3600', upsert: false });
 
-      if (uploadError) {
-        if (uploadError.message.includes('already exists')) {
-          throw new Error('Ya existe un archivo con este código y versión');
-        }
-        throw uploadError;
+      // Si el archivo ya existe pero ningún documento lo usa (quedó de un intento
+      // fallido), se sube con otro nombre en vez de bloquear la creación.
+      if (uploadError && /already exists|duplicate/i.test(uploadError.message || '')) {
+        const { data: enUso } = await supabase.from('document').select('id').eq('file_path', filePath).limit(1);
+        if (enUso?.length) throw new Error('Ya existe un documento con este código y versión');
+        filePath = `${folderName}/${formData.code}_v${version}_${Date.now()}.${fileExt}`;
+        ({ error: uploadError } = await supabase.storage
+          .from('documents')
+          .upload(filePath, file, { cacheControl: '3600', upsert: false }));
       }
+      if (uploadError) throw uploadError;
 
       // Determinar status
       const documentStatus = isNewFormat ? 'pending_approval' : 'published';
@@ -321,7 +323,11 @@ export default function FormularioCreacion({
         .select()
         .single();
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        // No dejar el archivo huérfano si el registro no se pudo crear
+        await supabase.storage.from('documents').remove([filePath]).catch(() => {});
+        throw dbError;
+      }
 
       // 🆕 Enviar notificaciones por email si es formato nuevo
       if (isNewFormat && documentStatus === 'pending_approval') {
