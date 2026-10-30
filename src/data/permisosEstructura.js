@@ -149,6 +149,7 @@ export const ESTRUCTURA_PERMISOS = [
         { id: 'plan_copasst',      nombre: 'COPASST',                  ...crud('sst_bienestar:copasst') },
         { id: 'plan_convivencia',  nombre: 'Comité de Convivencia',    ...crud('sst_bienestar:convivencia') },
         { id: 'plan_bienestar',    nombre: 'Bienestar Social',         ...crud('sst_bienestar:bienestar') },
+        { id: 'plan_gerencia',     nombre: 'Plan de Gerencia',         ...crud('sst_bienestar:gerencia') },
       ] },
       { nombre: 'Seguridad y salud', submodulos: [
         { id: 'estandares',       nombre: 'Estándares mínimos (Res. 0312)', ...crud('sst_bienestar:estandares', { eliminar: false }) },

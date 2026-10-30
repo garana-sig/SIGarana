@@ -36,7 +36,7 @@ const PROGRAMAS = [
   { id:'bienestar',          label:'Bienestar Social',       icon:Heart,       color:'#6dbd96', desc:'Programa de actividades de bienestar para colaboradores.' },
   { id:'sst',                label:'SST',                    icon:HardHat,     color:'#7e22ce', desc:'Plan de trabajo anual de Seguridad y Salud en el Trabajo.' },
   { id:'promocion_prevencion',label:'Promoción y Prevención',icon:Stethoscope, color:'#0891b2', desc:'Plan anual de promoción y prevención en salud.' },
-  { id:'gerencia',           label:'Plan de Gerencia',       icon:BarChart3,   color:C.olive,   desc:'Plan de trabajo SST aprobado por gerencia.' },
+  { id:'gerencia',           label:'Plan de Gerencia',       icon:BarChart3,   color:C.olive,   desc:'Plan de trabajo anual de gerencia (RE-DP-06).' },
 ];
 
 function SectionHeader({ title, subtitle, color, icon: Icon }) {
@@ -153,12 +153,7 @@ function PlanesTab({ initialPlan }) {
       {openProg === 'bienestar'           && <BienestarTab />}
       {openProg === 'sst'                 && <WorkPlanTab planType="sst" />}
       {openProg === 'promocion_prevencion'&& <WorkPlanTab planType="promocion_prevencion" />}
-      {openProg === 'gerencia'            && (
-        <ComingSoon title="Plan de Gerencia"
-          desc="Plan de trabajo SST aprobado por gerencia. Objetivos, metas, recursos y seguimiento de indicadores del sistema."
-          fields={['Política SST firmada y vigente','Objetivos y metas SST','Plan de trabajo anual','Presupuesto SST','Revisión por la dirección']}
-          accentColor={C.olive}/>
-      )}
+      {openProg === 'gerencia'            && <WorkPlanTab planType="gerencia" />}
     </div>
   );
 }

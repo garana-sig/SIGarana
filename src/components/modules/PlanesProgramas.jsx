@@ -48,8 +48,9 @@ const PLANES_SST = [
   { id: 'promocion_prevencion', label: 'Promoción y Prevención', color: '#0891b2', code: 'RE-GS-32', perm: 'sst_bienestar:promocion_prevencion',
     desc: 'Plan anual de promoción de la salud y prevención de la enfermedad.',
     cols: ['Actividad', 'Responsable', 'Recursos'], unidad: 'actividades' },
-  { id: 'gerencia', label: 'Plan de Gerencia', color: '#6f7b2c', code: 'PLAN SST', perm: null, soon: true,
-    desc: 'Plan de trabajo SST aprobado por gerencia.', cols: [], unidad: 'actividades' },
+  { id: 'gerencia', label: 'Plan de Gerencia', color: '#6f7b2c', code: 'RE-DP-06', perm: 'sst_bienestar:gerencia',
+    desc: 'Plan de trabajo anual de gerencia.',
+    cols: ['Actividad', 'Responsable', 'Recursos'], unidad: 'actividades' },
 ];
 
 const norm = (s = '') => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();

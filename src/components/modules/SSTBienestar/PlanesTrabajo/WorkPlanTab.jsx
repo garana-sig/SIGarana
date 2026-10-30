@@ -23,6 +23,7 @@ import {
   XCircle, Clock, Calendar,
 } from 'lucide-react';
 import { exportWorkPlan } from '@/utils/exportWorkPlan';
+import { useFormato } from '@/hooks/useFormatoVinculado';
 
 // ─── Paleta ──────────────────────────────────────────────────────────
 const C = { primary:'#2e5244', mint:'#6dbd96', olive:'#6f7b2c', sand:'#dedecc' };
@@ -58,6 +59,13 @@ const PLAN_CONFIG = {
     perm:     'sst_bienestar:sst',
     color:    '#7e22ce',
     code:     'RE-GS-32',
+  },
+  gerencia: {
+    title:    'Plan de Gerencia',
+    subtitle: 'Plan de trabajo anual — Gerencia (RE-DP-06)',
+    perm:     'sst_bienestar:gerencia',
+    color:    '#6f7b2c',
+    code:     'RE-DP-06',
   },
   promocion_prevencion: {
     title:    'Promoción y Prevención',
@@ -476,6 +484,7 @@ function DeleteModal({ open, onClose, item, onConfirm }) {
 // ═══════════════════════════════════════════════════════════════════════
 export default function WorkPlanTab({ planType }) {
   const cfg = PLAN_CONFIG[planType];
+  const { formato } = useFormato(`plan_${planType}`);   // código/versión del Listado Maestro si está vinculado
   const { isAdmin, isGerencia, hasPermission } = useAuth();
   const {
     plans, items, activePlan, setActivePlan,
@@ -604,7 +613,7 @@ export default function WorkPlanTab({ planType }) {
               PROPUESTA PLAN DE TRABAJO — {cfg.title.toUpperCase()} {activePlan.year}
             </p>
             <span style={{ fontSize:11, color:'rgba(255,255,255,0.75)' }}>
-              {cfg.code} · v1
+              {formato ? `${formato.code} · v${String(formato.version ?? 1).padStart(2, '0')}` : `${cfg.code} · v1`}
             </span>
           </div>
 

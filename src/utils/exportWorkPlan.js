@@ -16,7 +16,7 @@ const TEMPLATE_FILES = {
   bienestar:            'RE-GS-32_PLAN_DE _TRABAJO_BIENESTAR.xlsx',
   sst:                  'RE-GS-32_PLAN_DE _TRABAJO_SST.xlsx',
   promocion_prevencion: 'RE-GS-32_PLAN_DE _TRABAJO_PROMOCION.xlsx',
-  gerencia:             'RE-GS-32_PLAN_DE _TRABAJO_GERENCIA.xlsx',
+  gerencia:             'RE-GS-32_PLAN_DE _TRABAJO_SST.xlsx',   // mismo estándar de plan de trabajo
 };
 
 // Títulos que van en la celda B6 de cada plantilla
@@ -26,7 +26,7 @@ const PLAN_TITLES = {
   bienestar:            'PROPUESTA PLAN DE TRABAJO BIENESTAR SOCIAL',
   sst:                  'PLAN DE TRABAJO DE SEGURIDAD Y SALUD EN EL TRABAJO',
   promocion_prevencion: 'PLAN DEL PROGRAMA DE PROMOCIÓN Y PREVENCIÓN',
-  gerencia:             'PLAN DE TRABAJO — PLAN DE GERENCIA SST',
+  gerencia:             'PLAN DE TRABAJO ANUAL — GERENCIA',
 };
 
 const MONTH_KEYS = [
