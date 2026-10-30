@@ -1,5 +1,5 @@
 // src/components/modules/MejoramientoContinuo/Proveedores/SeleccionProveedores/SeleccionTab.jsx
-// Selección de Proveedores RE-GR-05 — agrupado por insumo + ranking por puntaje
+// Selección de Proveedores (RE-GR-05 v2 desde Gestión Documental) — agrupado por insumo + ranking
 
 import { useState, useMemo } from 'react';
 import {
@@ -12,7 +12,9 @@ import { Badge }  from '@/app/components/ui/badge';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/app/components/ui/dialog';
-import { useSeleccionProveedores, calcularPuntajeSeleccion } from '@/hooks/useSeleccionProveedores';
+import { useSeleccionProveedores, calcularPuntajeSeleccion, clasificarSeleccion, CRITERIOS_SELECCION } from '@/hooks/useSeleccionProveedores';
+import { CLASIF_COLOR } from './SeleccionModal';
+import { useFormato, etiquetaFormato } from '@/hooks/useFormatoVinculado';
 import { useProveedores }  from '@/hooks/useProveedores';
 import { useUsers }        from '@/hooks/useUsers';
 import { useAuth }         from '@/context/AuthContext';
@@ -55,14 +57,11 @@ function RankingTable({ seleccion }) {
           <tr style={{ backgroundColor: `${C.green}cc`, color: '#fff' }}>
             <th className="px-3 py-2 text-center w-8">#</th>
             <th className="px-3 py-2 text-left">Proveedor</th>
-            <th className="px-3 py-2 text-center">Precio<br/><span className="font-normal opacity-70">50%</span></th>
-            <th className="px-3 py-2 text-center">Entrega<br/><span className="font-normal opacity-70">25%</span></th>
-            <th className="px-3 py-2 text-center">Dto. Vol<br/><span className="font-normal opacity-70">6.25%</span></th>
-            <th className="px-3 py-2 text-center">Dto. PP<br/><span className="font-normal opacity-70">6.25%</span></th>
-            <th className="px-3 py-2 text-center">SGSST<br/><span className="font-normal opacity-70">6.25%</span></th>
-            <th className="px-3 py-2 text-center">Rendto.<br/><span className="font-normal opacity-70">6.25%</span></th>
-            <th className="px-3 py-2 text-center">Composic.</th>
-            <th className="px-3 py-2 text-center font-bold">Puntaje</th>
+            {CRITERIOS_SELECCION.map(c => (
+              <th key={c.key} className="px-3 py-2 text-center">{c.corto}<br/><span className="font-normal opacity-70">{Math.round(c.peso * 100)}%</span></th>
+            ))}
+            <th className="px-3 py-2 text-center font-bold">Resultado</th>
+            <th className="px-3 py-2 text-center">Clasif.</th>
             <th className="px-3 py-2 text-center">Estado</th>
           </tr>
         </thead>
@@ -83,45 +82,14 @@ function RankingTable({ seleccion }) {
                 <td className="px-3 py-2 font-medium" style={{ color: C.green }}>
                   {o.supplier?.nombre || o.proveedor_nombre || '—'}
                 </td>
-                <td className="px-3 py-2 text-center">
-                  <div className="flex flex-col items-center">
-                    <span className="font-semibold">{o.precio_score || 0}</span>
-                    <span className="text-gray-400">{((o.precio_score || 0) * 0.5).toFixed(3)}</span>
-                  </div>
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <div className="flex flex-col items-center">
-                    <span className="font-semibold">{o.entrega_score || 0}</span>
-                    <span className="text-gray-400">{((o.entrega_score || 0) * 0.25).toFixed(3)}</span>
-                  </div>
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <div className="flex flex-col items-center">
-                    <span className="font-semibold">{o.descuento_vol_score || 0}</span>
-                    <span className="text-gray-400">{((o.descuento_vol_score || 0) * 0.0625).toFixed(4)}</span>
-                  </div>
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <div className="flex flex-col items-center">
-                    <span className="font-semibold">{o.descuento_pp_score || 0}</span>
-                    <span className="text-gray-400">{((o.descuento_pp_score || 0) * 0.0625).toFixed(4)}</span>
-                  </div>
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <div className="flex flex-col items-center">
-                    <span className="font-semibold">{o.sgsst_score || 0}</span>
-                    <span className="text-gray-400">{((o.sgsst_score || 0) * 0.0625).toFixed(4)}</span>
-                  </div>
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <div className="flex flex-col items-center">
-                    <span className="font-semibold">{o.rendimiento_score || 0}</span>
-                    <span className="text-gray-400">{((o.rendimiento_score || 0) * 0.0625).toFixed(4)}</span>
-                  </div>
-                </td>
-                <td className="px-3 py-2 text-center text-gray-500">
-                  {o.composicion_score || 0}
-                </td>
+                {CRITERIOS_SELECCION.map(c => (
+                  <td key={c.key} className="px-3 py-2 text-center">
+                    <div className="flex flex-col items-center">
+                      <span className="font-semibold">{o[c.key] || 0}</span>
+                      <span className="text-gray-400">{((Number(o[c.key]) || 0) * c.peso).toFixed(2)}</span>
+                    </div>
+                  </td>
+                ))}
                 <td className="px-3 py-2 text-center">
                   <span
                     className="font-bold text-sm px-2 py-0.5 rounded-full"
@@ -130,8 +98,16 @@ function RankingTable({ seleccion }) {
                       color: isWinner ? '#16a34a' : C.green,
                     }}
                   >
-                    {o.puntaje_calc.toFixed(3)}
+                    {o.puntaje_calc.toFixed(2)}
                   </span>
+                </td>
+                <td className="px-3 py-2 text-center">
+                  {clasificarSeleccion(o.puntaje_calc) && (
+                    <span className="font-bold text-xs px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: CLASIF_COLOR[clasificarSeleccion(o.puntaje_calc)].bg, color: CLASIF_COLOR[clasificarSeleccion(o.puntaje_calc)].color }}>
+                      {clasificarSeleccion(o.puntaje_calc)}
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-center">
                   {o.es_seleccionado ? (
@@ -207,7 +183,7 @@ function SeleccionRow({ seleccion, canEdit, canDelete, canExport, onEdit, onDele
                 onClick={() => onExport(seleccion)}
                 disabled={exporting}
                 className="p-1.5 rounded-lg hover:bg-green-50 transition-colors"
-                title="Exportar RE-GR-05"
+                title="Descargar en el formato de Gestión Documental"
               >
                 {exporting
                   ? <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
@@ -370,6 +346,7 @@ function ConfirmDeleteModal({ open, onClose, item, onConfirm, saving }) {
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function SeleccionTab() {
   const { hasPermission, isAdmin, isGerencia } = useAuth();
+  const { formato } = useFormato('registro_sel_proveedores');   // RE-GR-05 desde Gestión Documental
   const {
     selecciones, loading, saving,
     createSeleccion, updateSeleccion, deleteSeleccion,
@@ -422,7 +399,8 @@ export default function SeleccionTab() {
 
   const handleExport = async (seleccion) => {
     setExporting(true);
-    try { await exportSeleccion(seleccion); }
+    try { await exportSeleccion(seleccion, formato); }
+    catch (e) { alert(`No se pudo generar el Excel: ${e.message}`); }
     finally { setExporting(false); }
   };
 

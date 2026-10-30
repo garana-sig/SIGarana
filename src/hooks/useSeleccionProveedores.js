@@ -1,32 +1,54 @@
 // src/hooks/useSeleccionProveedores.js
-// CRUD selección de proveedores (RE-GR-05) — Garana SIG
+// CRUD selección de proveedores (RE-GR-05 v2) — Garana SIG
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 
-// ── Pesos del formato RE-GR-05 ───────────────────────────────────────────────
-export const PESOS_SELECCION = {
-  precio:          0.50,
-  entrega:         0.25,
-  descuento_vol:   0.0625,
-  descuento_pp:    0.0625,
-  sgsst:           0.0625,
-  rendimiento:     0.0625,
-  composicion:     0.00, // criterio libre sin peso fijo
-};
+// ── Criterios del formato RE-GR-05 v2 (oct 2026) ─────────────────────────────
+// Escala 1–3 por criterio. Resultado = Σ puntaje × peso.
+// Clasificación: AAA = 3 · AA = 2,1 a 2,9 · A ≤ 2
+export const CRITERIOS_SELECCION = [
+  { key: 'certificado_score', label: 'Certificado de seguridad', corto: 'Cert. seg.', peso: 0.15 },
+  { key: 'sgsst_score',       label: 'Implementación SST',       corto: 'SST',        peso: 0.15 },
+  { key: 'calidad_score',     label: 'Calidad',                  corto: 'Calidad',    peso: 0.25 },
+  { key: 'precio_score',      label: 'Precio',                   corto: 'Precio',     peso: 0.15 },
+  { key: 'entrega_score',     label: 'Tiempo de entrega',        corto: 'Entrega',    peso: 0.15 },
+  { key: 'pago_score',        label: 'Facilidad de pago',        corto: 'Pago',       peso: 0.15 },
+];
 
-// ── Calcular puntaje total ponderado ─────────────────────────────────────────
+export const PESOS_SELECCION = Object.fromEntries(CRITERIOS_SELECCION.map(c => [c.key, c.peso]));
+
+// ── Calcular resultado ponderado ─────────────────────────────────────────────
 export function calcularPuntajeSeleccion(option) {
-  return (
-    (option.precio_score        || 0) * PESOS_SELECCION.precio        +
-    (option.entrega_score       || 0) * PESOS_SELECCION.entrega       +
-    (option.descuento_vol_score || 0) * PESOS_SELECCION.descuento_vol +
-    (option.descuento_pp_score  || 0) * PESOS_SELECCION.descuento_pp  +
-    (option.sgsst_score         || 0) * PESOS_SELECCION.sgsst         +
-    (option.rendimiento_score   || 0) * PESOS_SELECCION.rendimiento
-  );
+  return CRITERIOS_SELECCION.reduce((s, c) => s + (Number(option?.[c.key]) || 0) * c.peso, 0);
 }
+
+// ── Clasificación del proveedor según el resultado ───────────────────────────
+export function clasificarSeleccion(resultado) {
+  const r = Number(resultado) || 0;
+  if (r <= 0) return null;
+  if (r >= 3) return 'AAA';
+  if (r > 2)  return 'AA';
+  return 'A';
+}
+
+// Fila de supplier_selection_option a partir de una opción del formulario
+const opcionPayload = (o, selectionId, idx) => {
+  const resultado = calcularPuntajeSeleccion(o);
+  return {
+    selection_id:      selectionId,
+    supplier_id:       o.supplier_id || null,
+    proveedor_nombre:  o.proveedor_nombre?.trim() || null,
+    orden:             idx + 1,
+    ...Object.fromEntries(CRITERIOS_SELECCION.map(c => [c.key, Number(o[c.key]) || 0])),
+    // Criterios de la versión anterior del formato (ya no se usan)
+    descuento_vol_score: 0, descuento_pp_score: 0, rendimiento_score: 0, composicion_score: 0,
+    puntaje_total:     Number(resultado.toFixed(2)),
+    clasificacion:     clasificarSeleccion(resultado),
+    es_seleccionado:   o.es_seleccionado || false,
+  };
+};
 
 // ════════════════════════════════════════════════════════════════════════════
 export function useSeleccionProveedores() {
@@ -92,21 +114,7 @@ export function useSeleccionProveedores() {
 
       // 2. Insertar opciones
       if (opciones && opciones.length > 0) {
-        const opcionesToInsert = opciones.map((o, idx) => ({
-          selection_id:         selData.id,
-          supplier_id:          o.supplier_id      || null,
-          proveedor_nombre:     o.proveedor_nombre?.trim() || null,
-          orden:                idx + 1,
-          precio_score:         o.precio_score        || 0,
-          entrega_score:        o.entrega_score       || 0,
-          descuento_vol_score:  o.descuento_vol_score || 0,
-          descuento_pp_score:   o.descuento_pp_score  || 0,
-          sgsst_score:          o.sgsst_score         || 0,
-          rendimiento_score:    o.rendimiento_score   || 0,
-          composicion_score:    o.composicion_score   || 0,
-          puntaje_total:        calcularPuntajeSeleccion(o),
-          es_seleccionado:      o.es_seleccionado || false,
-        }));
+        const opcionesToInsert = opciones.map((o, idx) => opcionPayload(o, selData.id, idx));
 
         const { error: opcionesErr } = await supabase
           .from('supplier_selection_option')
@@ -153,21 +161,7 @@ export function useSeleccionProveedores() {
       if (delErr) throw delErr;
 
       if (opciones && opciones.length > 0) {
-        const opcionesToInsert = opciones.map((o, idx) => ({
-          selection_id:         id,
-          supplier_id:          o.supplier_id      || null,
-          proveedor_nombre:     o.proveedor_nombre?.trim() || null,
-          orden:                idx + 1,
-          precio_score:         o.precio_score        || 0,
-          entrega_score:        o.entrega_score       || 0,
-          descuento_vol_score:  o.descuento_vol_score || 0,
-          descuento_pp_score:   o.descuento_pp_score  || 0,
-          sgsst_score:          o.sgsst_score         || 0,
-          rendimiento_score:    o.rendimiento_score   || 0,
-          composicion_score:    o.composicion_score   || 0,
-          puntaje_total:        calcularPuntajeSeleccion(o),
-          es_seleccionado:      o.es_seleccionado || false,
-        }));
+        const opcionesToInsert = opciones.map((o, idx) => opcionPayload(o, id, idx));
 
         const { error: opcionesErr } = await supabase
           .from('supplier_selection_option')

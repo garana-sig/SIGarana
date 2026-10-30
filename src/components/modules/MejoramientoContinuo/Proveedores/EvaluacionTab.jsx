@@ -24,6 +24,7 @@ import { useUsers }         from '@/hooks/useUsers';
 import { useAuth }          from '@/context/AuthContext';
 import EvaluacionModal      from './EvaluacionModal';
 import { exportEvaluacion } from '@/utils/exportEvaluacion';
+import { useFormato } from '@/hooks/useFormatoVinculado';
 
 const C = { green: '#2e5244', mint: '#6dbd96', olive: '#6f7b2c', amber: '#d97706' };
 
@@ -355,6 +356,7 @@ function ConfirmDeleteModal({ open, onClose, item, onConfirm, saving }) {
 // ── Componente principal ──────────────────────────────────────────────────────
 export default function EvaluacionTab() {
   const { hasPermission, isAdmin, isGerencia } = useAuth();
+  const { formato } = useFormato('registro_eval_proveedores');   // RE-GR-01 desde Gestión Documental
   const {
     evaluaciones, loading, saving,
     createEvaluacion, updateEvaluacion, deleteEvaluacion,
@@ -400,7 +402,9 @@ export default function EvaluacionTab() {
   const handleExport = async (evaluacion) => {
     setExporting(true);
     try {
-      await exportEvaluacion(evaluacion);
+      await exportEvaluacion(evaluacion, formato);
+    } catch (e) {
+      alert(`No se pudo generar el Excel: ${e.message}`);
     } finally {
       setExporting(false);
     }
@@ -531,7 +535,7 @@ export default function EvaluacionTab() {
                             onClick={() => handleExport(ev)}
                             disabled={exporting}
                             className="p-1.5 rounded-lg hover:bg-green-50 transition-colors"
-                            title="Exportar RE-GR-01"
+                            title="Descargar en el formato de Gestión Documental"
                           >
                             {exporting
                               ? <Loader2 className="h-4 w-4 animate-spin text-gray-400" />

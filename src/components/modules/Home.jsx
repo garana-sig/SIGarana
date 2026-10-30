@@ -21,8 +21,10 @@ import {
   Send,
   ClipboardCheck as CheckIcon,
   Wrench,
+  Search,
+  Scale,
 } from 'lucide-react';
-import { CARACTERIZACION_PROCESOS, DOC_TYPE_LABELS } from '@/data/caracterizacionProcesos';
+import { CARACTERIZACION_PROCESOS, DOC_TYPE_LABELS, DOC_COLUMNAS } from '@/data/caracterizacionProcesos';
 import { useDocuments, useProcesses } from '@/hooks/useDocuments';
 import DocumentViewerModal from './GestionDocumental/DocumentViewerModal';
 
@@ -169,25 +171,55 @@ function CelTabla({ titulo, icon: Icon, items, vacio = 'No aplica / no definido.
 // 🆕 Modal de Caracterización de Proceso — versión completa (todo el contenido del
 // documento oficial, en formato tabla) + documentos asociados EN VIVO desde
 // Gestión Documental (Supabase), agrupados por tipo y clicables.
+const TIPO_SINGULAR = { MN: 'Manual', PL: 'Plan', GU: 'Guía', IN: 'Instructivo', RE: 'Registro', FO: 'Formato' };
+
+function ColumnaDocs({ titulo, cantidad, icon: Icon = FileText, children }) {
+  return (
+    <div className="rounded-xl flex flex-col" style={{ background: 'white', border: `1px solid ${C.sand}`, minWidth: 0 }}>
+      <div
+        className="flex items-center justify-between gap-2 px-3 py-2"
+        style={{ borderBottom: `1px solid ${C.sand}` }}
+      >
+        <div className="flex items-center gap-1.5" style={{ minWidth: 0 }}>
+          <Icon size={13} style={{ color: C.mint, flexShrink: 0 }} />
+          <p style={{ fontSize: 11, fontWeight: 700, color: C.green, margin: 0, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            {titulo}
+          </p>
+        </div>
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: C.green, background: '#eef3ef', borderRadius: 999, padding: '1px 8px' }}>
+          {cantidad}
+        </span>
+      </div>
+      <div className="p-1.5 space-y-0.5 overflow-y-auto" style={{ maxHeight: 320 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function CaracterizacionModal({ code, onClose }) {
   const p = CARACTERIZACION_PROCESOS[code];
   const { processes } = useProcesses();
   const processRow = processes.find((pr) => pr.code === code);
   const { documents, loading: loadingDocs } = useDocuments({ processId: processRow?.id });
   const [docViewer, setDocViewer] = useState(null);
+  const [busquedaDoc, setBusquedaDoc] = useState('');
 
   if (!p) return null;
 
-  // Solo documentos publicados (vigentes) del proceso, agrupados por tipo
-  const publicados = (documents || []).filter((d) => d.status === 'published');
-  const porTipo = {};
-  publicados.forEach((d) => {
-    const tCode = d.document_type?.code;
-    if (!tCode) return;
-    if (!porTipo[tCode]) porTipo[tCode] = [];
-    porTipo[tCode].push(d);
-  });
-  const tiposConDocs = Object.keys(porTipo).filter((t) => DOC_TYPE_LABELS[t]);
+  // Solo documentos publicados (vigentes) en Gestión Documental — nada de pendientes.
+  // Se organizan en las mismas columnas del Anexo 1, ordenados por código.
+  const q = busquedaDoc.trim().toLowerCase();
+  const publicados = (documents || [])
+    .filter((d) => d.status === 'published')
+    .filter((d) => !q || `${d.code} ${d.name}`.toLowerCase().includes(q))
+    .sort((x, y) => (x.code || '').localeCompare(y.code || '', 'es', { numeric: true }));
+  const columnas = DOC_COLUMNAS.map((col) => ({
+    ...col,
+    docs: publicados.filter((d) => col.tipos.includes(d.document_type?.code)),
+  }));
+  const externos = (p.documentosExternos || []).filter((e) => !q || e.toLowerCase().includes(q));
+  const totalPublicados = (documents || []).filter((d) => d.status === 'published').length;
 
   return (
     <>
@@ -303,53 +335,96 @@ function CaracterizacionModal({ code, onClose }) {
               <CelTabla titulo="Recursos" icon={Wrench} items={p.recursos} />
             </div>
 
-            {/* Documentos asociados — EN VIVO desde Gestión Documental */}
-            <div className="p-5" style={{ borderTop: `1px solid ${C.sand}` }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 10px' }}>
-                Documentos asociados (Gestión Documental)
-              </p>
+            {/* Documentos asociados — EN VIVO desde Gestión Documental, columnas del Anexo 1 */}
+            <div className="p-5" style={{ borderTop: `1px solid ${C.sand}`, background: '#faf9f5' }}>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+                <p style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
+                  Documentos asociados
+                  {!loadingDocs && (
+                    <span style={{ fontWeight: 500, textTransform: 'none', letterSpacing: 0, marginLeft: 6 }}>
+                      · {totalPublicados} vigente{totalPublicados === 1 ? '' : 's'} en Gestión Documental
+                    </span>
+                  )}
+                </p>
+                <div className="relative" style={{ width: '100%', maxWidth: 260 }}>
+                  <Search size={13} className="absolute" style={{ left: 9, top: 8, color: '#9ca3af' }} />
+                  <input
+                    type="text"
+                    value={busquedaDoc}
+                    onChange={(e) => setBusquedaDoc(e.target.value)}
+                    placeholder="Buscar código o nombre…"
+                    style={{
+                      width: '100%', fontSize: 12, padding: '6px 10px 6px 28px', borderRadius: 8,
+                      border: `1px solid ${C.sand}`, background: 'white', outline: 'none',
+                    }}
+                  />
+                </div>
+              </div>
 
-              {loadingDocs && (
+              {loadingDocs ? (
                 <div className="flex items-center gap-2 py-2">
                   <Loader2 size={14} className="animate-spin" style={{ color: C.mint }} />
                   <span style={{ fontSize: 12, color: '#9ca3af' }}>Cargando documentos vigentes…</span>
                 </div>
-              )}
-
-              {!loadingDocs && tiposConDocs.length === 0 && (
-                <p style={{ fontSize: 12, color: '#b0b0a5', fontStyle: 'italic', margin: 0 }}>
-                  Aún no hay documentos publicados en Gestión Documental para este proceso.
-                </p>
-              )}
-
-              {!loadingDocs && tiposConDocs.length > 0 && (
-                <div className="space-y-3">
-                  {tiposConDocs.map((tCode) => (
-                    <div key={tCode}>
-                      <p style={{ fontSize: 11, fontWeight: 600, color: C.green, margin: '0 0 6px' }}>
-                        {DOC_TYPE_LABELS[tCode].emoji} {DOC_TYPE_LABELS[tCode].label}
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {porTipo[tCode].map((doc) => (
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {columnas.map((col) => (
+                    <ColumnaDocs key={col.key} titulo={col.label} cantidad={col.docs.length}>
+                      {col.docs.length === 0 ? (
+                        <p style={{ fontSize: 11.5, color: '#b0b0a5', fontStyle: 'italic', margin: 0, padding: '4px 2px' }}>
+                          {q ? 'Sin coincidencias.' : 'Sin documentos publicados.'}
+                        </p>
+                      ) : (
+                        col.docs.map((doc) => (
                           <button
                             key={doc.id}
                             onClick={() => setDocViewer(doc)}
-                            className="flex items-center gap-1.5 transition-colors"
-                            style={{
-                              fontSize: 11.5, fontWeight: 500, padding: '5px 10px', borderRadius: 8,
-                              background: '#f2f1e9', border: `1px solid ${C.sand}`, color: '#374151',
-                              cursor: 'pointer',
-                            }}
-                            title={doc.name}
+                            className="w-full text-left flex items-start gap-1.5 rounded-md px-1.5 py-1 transition-colors hover:bg-[#f2f1e9]"
+                            style={{ cursor: 'pointer', background: 'transparent', border: 'none' }}
+                            title={`${doc.code} — ${doc.name}`}
                           >
-                            <span style={{ color: C.green, fontWeight: 700 }}>{doc.code}</span>
-                            <span>{doc.name}</span>
-                            <ExternalLink size={11} style={{ color: C.mint }} />
+                            <span
+                              style={{
+                                fontSize: 8.5, fontWeight: 700, color: C.green, background: '#eef3ef',
+                                borderRadius: 4, padding: '1px 4px', minWidth: 50, textAlign: 'center',
+                                flexShrink: 0, fontFamily: 'ui-monospace, monospace',
+                              }}
+                            >
+                              {doc.code}
+                            </span>
+                            <span style={{ fontSize: 9.5, color: '#374151', lineHeight: 1.3, flex: 1, textTransform: 'uppercase', letterSpacing: '0.01em' }}>
+                              {doc.name}
+                              {col.tipos.length > 1 && DOC_TYPE_LABELS[doc.document_type?.code] && (
+                                <span style={{ display: 'block', fontSize: 8.5, color: '#9ca3af', textTransform: 'none' }}>
+                                  {TIPO_SINGULAR[doc.document_type.code] || DOC_TYPE_LABELS[doc.document_type.code].label}
+                                  {doc.version ? ` · v${doc.version}` : ''}
+                                </span>
+                              )}
+                              {col.tipos.length === 1 && doc.version && (
+                                <span style={{ display: 'block', fontSize: 8.5, color: '#9ca3af', textTransform: 'none' }}>v{doc.version}</span>
+                              )}
+                            </span>
+                            <ExternalLink size={11} style={{ color: C.mint, marginTop: 3, flexShrink: 0 }} />
                           </button>
-                        ))}
-                      </div>
-                    </div>
+                        ))
+                      )}
+                    </ColumnaDocs>
                   ))}
+
+                  <ColumnaDocs titulo="Documentos externos" cantidad={externos.length} icon={Scale}>
+                    {externos.length === 0 ? (
+                      <p style={{ fontSize: 11.5, color: '#b0b0a5', fontStyle: 'italic', margin: 0, padding: '4px 2px' }}>
+                        {q ? 'Sin coincidencias.' : 'No aplica.'}
+                      </p>
+                    ) : (
+                      externos.map((e, i) => (
+                        <div key={i} className="flex items-start gap-1.5 px-2 py-1">
+                          <div className="mt-1.5 w-1 h-1 rounded-full flex-shrink-0" style={{ background: C.olive }} />
+                          <span style={{ fontSize: 11, color: '#374151', lineHeight: 1.35 }}>{e}</span>
+                        </div>
+                      ))
+                    )}
+                  </ColumnaDocs>
                 </div>
               )}
             </div>
@@ -357,7 +432,7 @@ function CaracterizacionModal({ code, onClose }) {
 
           <div className="px-5 py-3 border-t" style={{ borderColor: C.sand, flexShrink: 0 }}>
             <p style={{ fontSize: 11, color: '#9ca3af', margin: 0 }}>
-              📄 Contenido tomado de "Caracterización de Procesos 2026". Los documentos se sincronizan en vivo con Gestión Documental.
+              📄 Contenido tomado del Anexo 1 "Caracterización de Procesos" (Manual MC-DP-01). Los documentos internos se muestran en vivo desde Gestión Documental (solo vigentes).
             </p>
           </div>
         </div>

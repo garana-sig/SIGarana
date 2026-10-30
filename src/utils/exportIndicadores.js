@@ -22,6 +22,7 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { supabase } from '@/lib/supabase';
+import { descargarPlantilla } from '@/hooks/useFormatoVinculado';
 import { FREQUENCIES, PERSPECTIVES } from '@/hooks/useIndicadores';
 
 const perspLabel = (v) => PERSPECTIVES.find(p => p.value === v)?.label || '';
@@ -99,6 +100,16 @@ const fetchQuarterResults = async (indicatorIds, year) => {
   return result;
 };
 
+// ¿El formato trae columnas de trimestre (M..P) en el encabezado BSC?
+// El RE-DP-02 v01 de Gestión Documental llega hasta L; si una versión nueva
+// agrega los trimestres, se llenan solos.
+const tieneTrimestres = (ws) => {
+  for (let c = Q_FIRST_COL; c < Q_FIRST_COL + 4; c++) {
+    if (String(ws.getRow(BSC_FIRST_ROW - 1).getCell(c).value ?? '').trim()) return true;
+  }
+  return false;
+};
+
 // Escribe las 4 columnas de trimestre (M..P) en una fila
 const writeQuarters = (row, quarters) => {
   for (let q = 0; q < 4; q++) {
@@ -159,19 +170,14 @@ const insertRows = (ws, atRow, count) => {
 };
 
 // ─── Exportar ────────────────────────────────────────────────────────────────
-export const exportIndicadores = async (indicators = []) => {
+// v4 (oct 2026): la plantilla es el formato vigente de Gestión Documental
+// (formato_vinculado 'registro_cmi' → hoy RE-DP-02 v01). Antes: templates/RE-DP-02_CUADRO_DE_MANDO_INTEGRAL.xlsx
+export const exportIndicadores = async (indicators = [], formato) => {
 
-  // 1️⃣ Descargar plantilla desde Storage (mismo patrón que AccionesMejora)
-  const { data: fileData, error: dlError } = await supabase.storage
-    .from('templates')
-    .download('RE-DP-02_CUADRO_DE_MANDO_INTEGRAL.xlsx');
-
-  if (dlError || !fileData) {
-    throw new Error(`Error descargando plantilla: ${dlError?.message || 'archivo no encontrado'}`);
-  }
+  // 1️⃣ Descargar el formato desde Gestión Documental
+  const arrayBuffer = await descargarPlantilla(formato);
 
   // 2️⃣ Cargar en ExcelJS
-  const arrayBuffer = await fileData.arrayBuffer();
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(arrayBuffer);
 
@@ -184,9 +190,12 @@ export const exportIndicadores = async (indicators = []) => {
   const bscRows  = indicators.filter(i => i.indicator_type === 'bsc');
   const procRows = indicators.filter(i => i.indicator_type === 'process');
 
-  // 🆕 Resultados por trimestre del año en curso
+  // Resultados por trimestre del año en curso (solo si el formato tiene esas columnas)
   const year = new Date().getFullYear();
-  const quartersByInd = await fetchQuarterResults(indicators.map(i => i.id).filter(Boolean), year);
+  const conTrimestres = tieneTrimestres(ws);
+  const quartersByInd = conTrimestres
+    ? await fetchQuarterResults(indicators.map(i => i.id).filter(Boolean), year)
+    : {};
 
   // 4️⃣ Preparar filas — separar G combinadas y agregar filas si hacen falta
   const bscLast  = BSC_FIRST_ROW + BSC_SLOTS - 1;               // 20
@@ -225,7 +234,7 @@ export const exportIndicadores = async (indicators = []) => {
     row.getCell(10).value = ind.definition           || '';
     row.getCell(11).value = ind.goal                 || ''; // K = META
     row.getCell(12).value = ind.disclosed_to         || ''; // L = A QUIÉN SE DIVULGA
-    writeQuarters(row, quartersByInd[ind.id]);              // 🆕 M..P = I..IV TRIMESTRE
+    if (conTrimestres) writeQuarters(row, quartersByInd[ind.id]); // M..P = I..IV TRIMESTRE
     row.height = 30;
   });
 
@@ -242,7 +251,7 @@ export const exportIndicadores = async (indicators = []) => {
     row.getCell(10).value = ind.definition           || '';
     row.getCell(11).value = ind.goal                 || ''; // K = META
     row.getCell(12).value = ind.disclosed_to         || ''; // L = A QUIÉN SE DIVULGA
-    writeQuarters(row, quartersByInd[ind.id]);              // 🆕 M..P = I..IV TRIMESTRE
+    if (conTrimestres) writeQuarters(row, quartersByInd[ind.id]); // M..P = I..IV TRIMESTRE
     row.height = 30;
   });
 
@@ -250,6 +259,6 @@ export const exportIndicadores = async (indicators = []) => {
   const buffer = await wb.xlsx.writeBuffer();
   saveAs(
     new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
-    `RE-DP-02_CMI_${year}.xlsx`
+    `${formato?.code || 'RE-DP-02'}_CMI_${year}.xlsx`
   );
 };

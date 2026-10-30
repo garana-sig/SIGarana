@@ -1,128 +1,74 @@
 // src/utils/exportSeleccion.js
-// Exporta selección de proveedores al formato RE-GR-05
-// Patrón idéntico a exportAccionesMejora.js — descarga plantilla de Storage y la llena con ExcelJS
-
-import ExcelJS   from 'exceljs';
+// ═══════════════════════════════════════════════════════════════════════
+// v2 (oct 2026) — Selección de proveedores sobre el formato vigente de
+// Gestión Documental (formato_vinculado 'registro_sel_proveedores' → hoy
+// RE-GR-05 v02, hoja "V2"). El encabezado (código, versión, fecha) no se toca.
+//
+// Hoja V2: B7 FECHA · fila 13 pesos · fila 14 encabezados · datos desde la 15:
+//   B insumo · C proveedor · D certificado de seguridad · E implementación SST
+//   F calidad · G precio · H tiempo de entrega · I facilidad de pago
+//   J resultado (fórmula del formato) · K clasificación (AAA / AA / A)
+// ═══════════════════════════════════════════════════════════════════════
+import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-import { supabase } from '@/lib/supabase';
+import { descargarPlantilla } from '@/hooks/useFormatoVinculado';
+import { CRITERIOS_SELECCION, calcularPuntajeSeleccion, clasificarSeleccion } from '@/hooks/useSeleccionProveedores';
 
-const TEMPLATE_NAME = 'RE-GR-05_SELECCION_DE_PROVEEDORES.xlsx';
+const PRIMERA = 15;
+const ULTIMA = 35;                          // filas con formato en la hoja V2
+const COLS = ['D', 'E', 'F', 'G', 'H', 'I']; // mismo orden que CRITERIOS_SELECCION
 
-function fmt(date) {
-  if (!date) return '';
-  return new Date(date + 'T00:00:00').toLocaleDateString('es-CO', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-  });
-}
+const fmt = (d) => (d ? new Date(String(d).slice(0, 10) + 'T00:00:00')
+  .toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '');
 
-export async function exportSeleccion(seleccion) {
-  try {
-    // 1. Descargar plantilla desde Storage
-    const { data: fileData, error } = await supabase.storage
-      .from('templates')
-      .download(TEMPLATE_NAME);
+export async function exportSeleccion(seleccion, formato) {
+  const buf = await descargarPlantilla(formato);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const ws = wb.getWorksheet('V2') || wb.worksheets[wb.worksheets.length - 1];
+  if (!ws) throw new Error(`No se encontró la hoja V2 en ${formato?.code || 'el formato'}.`);
+  wb.worksheets.filter((s) => s.id !== ws.id).forEach((s) => wb.removeWorksheet(s.id));
+  ws.state = 'visible';
+  wb.views = [{ x: 0, y: 0, width: 20000, height: 12000, firstSheet: 0, activeTab: 0, visibility: 'visible' }];
 
-    if (error) throw new Error(`No se pudo descargar la plantilla: ${error.message}`);
+  const opciones = [...(seleccion.opciones || [])]
+    .sort((a, b) => calcularPuntajeSeleccion(b) - calcularPuntajeSeleccion(a));
+  const capacidad = ULTIMA - PRIMERA + 1;
+  if (opciones.length > capacidad) throw new Error(`El formato tiene espacio para ${capacidad} proveedores.`);
 
-    const arrayBuffer = await fileData.arrayBuffer();
+  ws.getCell('B7').value = `FECHA: ${fmt(seleccion.fecha_realizacion)}`;
 
-    // 2. Cargar en ExcelJS
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(arrayBuffer);
-
-    const ws = wb.worksheets[0];
-    if (!ws) throw new Error('No se encontró hoja en la plantilla');
-
-    const opciones = [...(seleccion.opciones || [])]
-      .sort((a, b) => a.orden - b.orden);
-
-    // 3. Fecha de realización — fila 6
-    ws.getCell('B6').value = fmt(seleccion.fecha_realizacion);
-
-    // 4. Encabezados de pesos — fila 9 (ya están en plantilla, solo confirmar)
-    // Pesos: Precio 0.5 | Entrega 0.25 | Dto Vol 0.0625 | Dto PP 0.0625 | SGSST 0.0625 | Rendimiento 0.0625
-
-    // 5. Escribir datos de cada opción a partir de fila 11
-    // Columnas del formato RE-GR-05:
-    // A = Insumo/Contratista  B = Proveedor Potencial
-    // C = SGSST  D = Rendimiento  E = Composición
-    // F = Precio (score)  G = Precio (ponderado)
-    // H = Entrega (score) I = Entrega (ponderado)
-    // J = Dto Vol (score) K = Dto Vol (ponderado)
-    // L = Dto PP (score)  M = Dto PP (ponderado)
-    // N = Puntaje total
-
-    const START_ROW = 11;
-
-    // Escribir nombre del insumo en primera fila (fusionado en el formato)
-    ws.getCell(`A${START_ROW}`).value = seleccion.insumo_nombre || '';
-
-    opciones.forEach((opcion, idx) => {
-      const row = START_ROW + idx;
-
-      // Nombre del proveedor
-      const nombreProveedor = opcion.supplier?.nombre || opcion.proveedor_nombre || '';
-      ws.getCell(`B${row}`).value = nombreProveedor;
-
-      // Criterios con score y ponderado
-      ws.getCell(`C${row}`).value = opcion.sgsst_score          || 0;
-      ws.getCell(`D${row}`).value = opcion.rendimiento_score     || 0;
-      ws.getCell(`E${row}`).value = opcion.composicion_score     || 0;
-
-      // Precio
-      ws.getCell(`F${row}`).value = opcion.precio_score          || 0;
-      ws.getCell(`G${row}`).value = ((opcion.precio_score || 0) * 0.5).toFixed(3);
-
-      // Entrega
-      ws.getCell(`H${row}`).value = opcion.entrega_score         || 0;
-      ws.getCell(`I${row}`).value = ((opcion.entrega_score || 0) * 0.25).toFixed(3);
-
-      // Descuento volumen
-      ws.getCell(`J${row}`).value = opcion.descuento_vol_score   || 0;
-      ws.getCell(`K${row}`).value = ((opcion.descuento_vol_score || 0) * 0.0625).toFixed(4);
-
-      // Descuento pronto pago
-      ws.getCell(`L${row}`).value = opcion.descuento_pp_score    || 0;
-      ws.getCell(`M${row}`).value = ((opcion.descuento_pp_score  || 0) * 0.0625).toFixed(4);
-
-      // Puntaje total
-      ws.getCell(`N${row}`).value = parseFloat((opcion.puntaje_total || 0).toFixed(3));
-
-      // Marcar seleccionado con fondo verde si aplica
-      if (opcion.es_seleccionado) {
-        ['A','B','C','D','E','F','G','H','I','J','K','L','M','N'].forEach(col => {
-          const cell = ws.getCell(`${col}${row}`);
-          cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFD1FAE5' }, // verde claro
-          };
-        });
-      }
-    });
-
-    // 6. Realizado por / Aprobado por — última fila del formato (fila 47)
-    const lastRow = START_ROW + opciones.length + 2;
-    ws.getCell(`A${lastRow}`).value = `Realizado por: ${seleccion.realizado_por_profile?.full_name || ''}`;
-    ws.getCell(`H${lastRow}`).value = `Aprobado por: ${seleccion.aprobado_por_profile?.full_name  || ''}`;
-
-    // Observaciones si las hay
-    if (seleccion.observaciones) {
-      ws.getCell(`A${lastRow + 1}`).value = `Observaciones: ${seleccion.observaciones}`;
-    }
-
-    // 7. Exportar
-    const buffer = await wb.xlsx.writeBuffer();
-    const blob   = new Blob([buffer], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-
-    const fechaHoy = new Date().toLocaleDateString('es-CO').replace(/\//g, '-');
-    saveAs(blob, `RE-GR-05_SELECCION_${seleccion.consecutive || 'PROVEEDORES'}_${fechaHoy}.xlsx`);
-
-    return { success: true };
-  } catch (e) {
-    console.error('exportSeleccion error:', e);
-    return { success: false, error: e.message };
+  // Limpiar los ejemplos que trae el formato
+  for (let r = PRIMERA; r <= ULTIMA; r++) {
+    for (const c of ['B', 'C', ...COLS, 'J', 'K']) ws.getCell(`${c}${r}`).value = null;
   }
+
+  opciones.forEach((o, i) => {
+    const r = PRIMERA + i;
+    if (i === 0) ws.getCell(`B${r}`).value = seleccion.insumo_nombre || null;
+    const nombre = o.supplier?.nombre || o.proveedor_nombre || `Proveedor ${i + 1}`;
+    ws.getCell(`C${r}`).value = o.es_seleccionado ? `${nombre} ★` : nombre;
+    CRITERIOS_SELECCION.forEach((c, k) => {
+      const v = Number(o[c.key]) || 0;
+      ws.getCell(`${COLS[k]}${r}`).value = v > 0 ? v : null;
+    });
+    const resultado = calcularPuntajeSeleccion(o);
+    ws.getCell(`J${r}`).value = {
+      formula: `D${r}*D$13+E${r}*E$13+F${r}*F$13+G${r}*G$13+H${r}*H$13+I${r}*I$13`,
+      result: Number(resultado.toFixed(2)),
+    };
+    ws.getCell(`K${r}`).value = clasificarSeleccion(resultado);
+  });
+
+  if (seleccion.observaciones) {
+    ws.getCell(`B${ULTIMA + 2}`).value = `Observaciones: ${seleccion.observaciones}`;
+  }
+
+  const out = await wb.xlsx.writeBuffer();
+  const hoy = new Date().toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
+  saveAs(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    `${formato?.code || 'RE-GR-05'}_SELECCION_${seleccion.consecutive || 'PROVEEDORES'}_${hoy}.xlsx`);
+  return true;
 }
+
+export default exportSeleccion;

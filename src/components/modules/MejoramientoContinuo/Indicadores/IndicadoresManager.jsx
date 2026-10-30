@@ -16,6 +16,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import IndicadorModal from './IndicadorModal';
 import { exportIndicadores } from '@/utils/exportIndicadores';
+import { useFormato, etiquetaFormato } from '@/hooks/useFormatoVinculado';
 import MedicionModal  from './MedicionModal';
 
 // ─── Colores del formato CMI (fiel al Excel RE-DP-02) ────────────────────────
@@ -175,6 +176,7 @@ function Pagination({ currentPage, totalPages, totalRows, pageSize, onPage, onPa
 // ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
 export default function IndicadoresManager({ onBack }) {
   const { profile } = useAuth();
+  const { formato: formatoCMI } = useFormato('registro_cmi');   // RE-DP-02 desde Gestión Documental
   const {
     indicators, loading, error,
     fetchIndicators, createIndicator, updateIndicator,
@@ -262,7 +264,7 @@ export default function IndicadoresManager({ onBack }) {
     if (exporting) return;
     setExporting(true);
     try {
-      await exportIndicadores(indicators);
+      await exportIndicadores(indicators, formatoCMI);
       showMsg('success', `✅ Excel generado con ${indicators.length} indicador(es).`);
     } catch (err) {
       showMsg('error', `❌ ${err.message}`);
@@ -369,7 +371,7 @@ export default function IndicadoresManager({ onBack }) {
             <h2 style={{ color:'#2e5244', fontWeight:700, fontSize:18, display:'flex', alignItems:'center', gap:8 }}>
               <TrendingUp size={20} /> Indicadores CMI
             </h2>
-            <p style={{ color:'#6B7280', fontSize:12 }}>RE-DP-02 — Cuadro de Mando Integral</p>
+            <p style={{ color:'#6B7280', fontSize:12 }}>{etiquetaFormato(formatoCMI)} — Cuadro de Mando Integral</p>
           </div>
         </div>
         <div style={{ display:'flex', gap:8 }}>

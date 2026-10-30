@@ -9,36 +9,29 @@ import { Badge }  from '@/app/components/ui/badge';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/app/components/ui/dialog';
-import { calcularPuntajeSeleccion, PESOS_SELECCION } from '@/hooks/useSeleccionProveedores';
+import { calcularPuntajeSeleccion, clasificarSeleccion, CRITERIOS_SELECCION } from '@/hooks/useSeleccionProveedores';
 
 const C = { green: '#2e5244', mint: '#6dbd96', olive: '#6f7b2c' };
 
-// ── Criterios con sus pesos ───────────────────────────────────────────────────
-const CRITERIOS = [
-  { key: 'precio_score',        label: 'Precio',                peso: PESOS_SELECCION.precio,        color: '#dcfce7' },
-  { key: 'entrega_score',       label: 'Tiempo de entrega',     peso: PESOS_SELECCION.entrega,        color: '#dbeafe' },
-  { key: 'descuento_vol_score', label: 'Descuento por volumen', peso: PESOS_SELECCION.descuento_vol,  color: '#fef9c3' },
-  { key: 'descuento_pp_score',  label: 'Descuento pronto pago', peso: PESOS_SELECCION.descuento_pp,   color: '#fef9c3' },
-  { key: 'sgsst_score',         label: 'Cumplimiento SGSST',    peso: PESOS_SELECCION.sgsst,          color: '#fce7f3' },
-  { key: 'rendimiento_score',   label: 'Rendimiento',           peso: PESOS_SELECCION.rendimiento,    color: '#ede9fe' },
-  { key: 'composicion_score',   label: 'Composición',           peso: 0,                              color: '#f0f9ff' },
-];
+// ── Criterios RE-GR-05 v2 (definidos en el hook) ─────────────────────────────
+const COLORES = ['#fce7f3', '#ede9fe', '#dcfce7', '#fef9c3', '#dbeafe', '#f0f9ff'];
+const CRITERIOS = CRITERIOS_SELECCION.map((c, i) => ({ ...c, color: COLORES[i % COLORES.length] }));
 
-const PUNTUACIONES = [0, 1, 2, 3, 4, 5];
+const PUNTUACIONES = [0, 1, 2, 3];   // 0 = sin calificar · 1 a 3 según el formato
+
+export const CLASIF_COLOR = {
+  AAA: { bg: '#dcfce7', color: '#15803d' },
+  AA:  { bg: '#fef9c3', color: '#a16207' },
+  A:   { bg: '#fee2e2', color: '#b91c1c' },
+};
 
 // ── Opción vacía ──────────────────────────────────────────────────────────────
 const emptyOpcion = () => ({
-  supplier_id:          '',
-  proveedor_nombre:     '',
-  precio_score:         0,
-  entrega_score:        0,
-  descuento_vol_score:  0,
-  descuento_pp_score:   0,
-  sgsst_score:          0,
-  rendimiento_score:    0,
-  composicion_score:    0,
-  puntaje_total:        0,
-  es_seleccionado:      false,
+  supplier_id:      '',
+  proveedor_nombre: '',
+  ...Object.fromEntries(CRITERIOS_SELECCION.map(c => [c.key, 0])),
+  puntaje_total:    0,
+  es_seleccionado:  false,
 });
 
 // ── Card por opción de proveedor ──────────────────────────────────────────────
@@ -74,7 +67,11 @@ function OpcionCard({ index, opcion, proveedores, onChange, onRemove, onSelect, 
         <div className="flex items-center gap-2">
           {puntaje > 0 && (
             <span className="text-sm font-bold" style={{ color: C.green }}>
-              {puntaje.toFixed(3)} pts
+              {puntaje.toFixed(2)}
+              <span className="ml-1.5 text-xs px-2 py-0.5 rounded-full"
+                style={{ backgroundColor: CLASIF_COLOR[clasificarSeleccion(puntaje)]?.bg, color: CLASIF_COLOR[clasificarSeleccion(puntaje)]?.color }}>
+                {clasificarSeleccion(puntaje)}
+              </span>
             </span>
           )}
           <button
@@ -138,14 +135,14 @@ function OpcionCard({ index, opcion, proveedores, onChange, onRemove, onSelect, 
             <tr style={{ backgroundColor: C.green, color: '#fff' }}>
               <th className="px-3 py-2 text-left">Criterio</th>
               <th className="px-3 py-2 text-center">Peso</th>
-              <th className="px-3 py-2 text-center">Score (0-5)</th>
+              <th className="px-3 py-2 text-center">Puntaje (1-3)</th>
               <th className="px-3 py-2 text-center">Ponderado</th>
             </tr>
           </thead>
           <tbody>
             {CRITERIOS.map((criterio, idx) => {
               const score      = opcion[criterio.key] || 0;
-              const ponderado  = criterio.peso > 0 ? (score * criterio.peso).toFixed(3) : '—';
+              const ponderado  = (score * criterio.peso).toFixed(2);
               return (
                 <tr
                   key={criterio.key}
@@ -154,7 +151,7 @@ function OpcionCard({ index, opcion, proveedores, onChange, onRemove, onSelect, 
                 >
                   <td className="px-3 py-2 text-gray-700">{criterio.label}</td>
                   <td className="px-3 py-2 text-center text-gray-400">
-                    {criterio.peso > 0 ? `${(criterio.peso * 100).toFixed(2)}%` : '—'}
+                    {`${Math.round(criterio.peso * 100)}%`}
                   </td>
                   <td className="px-3 py-2 text-center">
                     <select
@@ -176,10 +173,10 @@ function OpcionCard({ index, opcion, proveedores, onChange, onRemove, onSelect, 
             {/* Total */}
             <tr className="border-t" style={{ backgroundColor: `${C.mint}15` }}>
               <td colSpan={3} className="px-3 py-2 font-bold text-right" style={{ color: C.green }}>
-                Puntaje Total
+                Resultado · Clasificación
               </td>
               <td className="px-3 py-2 text-center font-bold text-base" style={{ color: C.green }}>
-                {puntaje.toFixed(3)}
+                {puntaje.toFixed(2)} {clasificarSeleccion(puntaje) || ''}
               </td>
             </tr>
           </tbody>
@@ -214,17 +211,11 @@ export default function SeleccionModal({ open, onClose, initial, onSave, saving,
       });
       if (initial.opciones?.length > 0) {
         setOpciones(initial.opciones.map(o => ({
-          supplier_id:          o.supplier_id          || '',
-          proveedor_nombre:     o.proveedor_nombre     || '',
-          precio_score:         o.precio_score         || 0,
-          entrega_score:        o.entrega_score        || 0,
-          descuento_vol_score:  o.descuento_vol_score  || 0,
-          descuento_pp_score:   o.descuento_pp_score   || 0,
-          sgsst_score:          o.sgsst_score          || 0,
-          rendimiento_score:    o.rendimiento_score    || 0,
-          composicion_score:    o.composicion_score    || 0,
-          puntaje_total:        o.puntaje_total        || 0,
-          es_seleccionado:      o.es_seleccionado      || false,
+          supplier_id:      o.supplier_id      || '',
+          proveedor_nombre: o.proveedor_nombre || '',
+          ...Object.fromEntries(CRITERIOS_SELECCION.map(c => [c.key, Number(o[c.key]) || 0])),
+          puntaje_total:    o.puntaje_total    || 0,
+          es_seleccionado:  o.es_seleccionado  || false,
         })));
       }
     } else {
@@ -278,7 +269,7 @@ export default function SeleccionModal({ open, onClose, initial, onSave, saving,
           <DialogTitle style={{ color: C.green }}>
             {initial?.id ? `Editar ${initial.consecutive}` : 'Nueva Selección de Proveedor'}
           </DialogTitle>
-          <p className="text-xs text-gray-400">RE-GR-05 · Comparativo de proveedores potenciales por insumo</p>
+          <p className="text-xs text-gray-400">Comparativo de proveedores por insumo · Puntaje 1 a 3 · AAA = 3 · AA = 2,1 a 2,9 · A ≤ 2</p>
         </DialogHeader>
 
         <div className="space-y-5 py-2">

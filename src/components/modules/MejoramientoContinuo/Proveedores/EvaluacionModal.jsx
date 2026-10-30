@@ -17,7 +17,7 @@ import {
 
 const C = { green: '#2e5244', mint: '#6dbd96', olive: '#6f7b2c' };
 
-// ── Criterios del formato RE-GR-01 ───────────────────────────────────────────
+// ── Criterios del formato RE-GR-01 v2 (oct 2026: + BASC en Calidad; sin bloque de contratistas) ───────────────────────────────────────────
 const CRITERIOS = {
   calidad: {
     label: 'CALIDAD',
@@ -25,9 +25,10 @@ const CRITERIOS = {
     headerColor: '#16a34a',
     peso: 0.40,
     subcategorias: [
-      { key: 'no_conforme',   label: 'El insumo ha generado producto no conforme' },
-      { key: 'devoluciones',  label: 'Se han realizado devoluciones por calidad' },
-      { key: 'sst',           label: 'El proveedor tiene implementado el SST' },
+      { key: 'no_conforme',   label: 'El insumo o el servicio ha generado producto no conforme' },
+      { key: 'devoluciones',  label: 'Se han realizado devoluciones por calidad o llamado por garantía' },
+      { key: 'sst',           label: 'El proveedor tiene implementado el sistema de SST' },
+      { key: 'basc',          label: 'Seguridad en la cadena de suministro (BASC)' },
     ],
   },
   servicio: {
@@ -51,15 +52,6 @@ const CRITERIOS = {
       { key: 'competitividad', label: 'Competitividad' },
       { key: 'forma_pago',     label: 'Forma de pago' },
       { key: 'descuentos',     label: 'Descuentos' },
-    ],
-  },
-  contratista: {
-    label: 'SOLO PARA CONTRATISTAS',
-    color: '#fce7f3',
-    headerColor: '#be185d',
-    peso: 0.00,
-    subcategorias: [
-      { key: 'peligros', label: 'Grado de conocimiento de peligros y forma de controlarlos' },
     ],
   },
 };
@@ -103,13 +95,11 @@ function recalcularScore(score) {
   const calidad    = calcularResultadoCriterio(score.calidad.subcats,    CRITERIOS.calidad.peso);
   const servicio   = calcularResultadoCriterio(score.servicio.subcats,   CRITERIOS.servicio.peso);
   const precio     = calcularResultadoCriterio(score.precio.subcats,     CRITERIOS.precio.peso);
-  const contratista = score.is_contractor
-    ? calcularResultadoCriterio(score.contratista.subcats, 1)
-    : { promedio: 0, resultado: 0 };
+  // RE-GR-01 v2 ya no tiene el bloque "Solo para contratistas"
+  const contratista = { promedio: 0, resultado: 0 };
 
   const total = parseFloat((
-    calidad.resultado + servicio.resultado + precio.resultado +
-    (score.is_contractor ? contratista.resultado * 0.10 : 0)
+    calidad.resultado + servicio.resultado + precio.resultado
   ).toFixed(2));
 
   return {
@@ -220,21 +210,9 @@ function ProveedorCard({ index, score, proveedores, onChange, onRemove, canRemov
         </select>
       </div>
 
-      {/* ¿Es contratista? */}
-      <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={score.is_contractor}
-          onChange={e => onChange(recalcularScore({ ...score, is_contractor: e.target.checked }))}
-          className="rounded"
-        />
-        Es contratista (activa criterio SST adicional)
-      </label>
-
       {/* Criterios */}
       <div className="space-y-2">
         {Object.entries(CRITERIOS).map(([key, criterio]) => {
-          if (key === 'contratista' && !score.is_contractor) return null;
           return (
             <CriterioSection
               key={key}
@@ -352,7 +330,7 @@ export default function EvaluacionModal({ open, onClose, initial, onSave, saving
           <DialogTitle style={{ color: C.green }}>
             {initial?.id ? `Editar ${initial.consecutive}` : 'Nueva Evaluación de Proveedores'}
           </DialogTitle>
-          <p className="text-xs text-gray-400">RE-GR-01 · Escala: 5 Excelente · 4 Bueno · 3 Aceptable · 2 Deficiente · 1 Muy deficiente</p>
+          <p className="text-xs text-gray-400">Escala: 5 Excelente · 4 Bueno · 3 Aceptable · 2 Deficiente · 1 Muy deficiente</p>
         </DialogHeader>
 
         <div className="space-y-5 py-2">

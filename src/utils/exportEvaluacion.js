@@ -1,167 +1,90 @@
 // src/utils/exportEvaluacion.js
-// Exporta evaluación de proveedores al formato RE-GR-01
-// Patrón idéntico a exportAccionesMejora.js — descarga plantilla de Storage y la llena con ExcelJS
-
-import ExcelJS  from 'exceljs';
+// ═══════════════════════════════════════════════════════════════════════
+// v2 (oct 2026) — Evaluación de proveedores sobre el formato vigente de
+// Gestión Documental (formato_vinculado 'registro_eval_proveedores' → hoy
+// RE-GR-01 v02, hoja "V2"). El encabezado (código, versión, fecha) no se toca.
+//
+// Hoja V2: fila 9 = proveedores (C, E, G, I, K, M, O) · fila 10 PUNTUACIÓN/RESULTADO
+//   11 CALIDAD (12 no conforme · 13 devoluciones · 14 SST · 15 BASC)
+//   16 SERVICIO (17 cantidad · 18 oportunidad · 19 reclamos · 20 documentación)
+//   21 PRECIO (22 competitividad · 23 forma de pago · 24 descuentos)
+//   25 totales · 29–35 confiabilidad por proveedor (E nombre · G confiabilidad · I aspectos)
+//   40–42 análisis por criterio · 44 conclusiones · 47 realizado / aprobado
+// ═══════════════════════════════════════════════════════════════════════
+import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-import { supabase } from '@/lib/supabase';
+import { descargarPlantilla } from '@/hooks/useFormatoVinculado';
 
-const TEMPLATE_NAME = 'RE-GR-01_EVALUACION_DE_PROVEEDORES.xls';
+const PROV_COLS = [['C', 'D'], ['E', 'F'], ['G', 'H'], ['I', 'J'], ['K', 'L'], ['M', 'N'], ['O', 'P']];
+const CRITERIOS = {
+  calidad:  { fila: 11, peso: 0.40, sub: { no_conforme: 12, devoluciones: 13, sst: 14, basc: 15 } },
+  servicio: { fila: 16, peso: 0.35, sub: { cantidad: 17, oportunidad: 18, reclamos: 19, documentacion: 20 } },
+  precio:   { fila: 21, peso: 0.25, sub: { competitividad: 22, forma_pago: 23, descuentos: 24 } },
+};
+const CONF = { confiable: 'CONFIABLE', aceptable: 'ACEPTABLE', deficiente: 'DEFICIENTE' };
 
-function fmt(date) {
-  if (!date) return '';
-  return new Date(date + 'T00:00:00').toLocaleDateString('es-CO', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-  });
-}
+const fmt = (d) => (d ? new Date(String(d).slice(0, 10) + 'T00:00:00')
+  .toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '');
+const num = (v) => (v === null || v === undefined || v === '' ? null : Number(Number(v).toFixed(2)));
 
-function confiabilidadLabel(valor) {
-  const map = { confiable: 'CONFIABLE', aceptable: 'ACEPTABLE', deficiente: 'DEFICIENTE' };
-  return map[valor] || '';
-}
+export async function exportEvaluacion(evaluacion, formato) {
+  const buf = await descargarPlantilla(formato);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const ws = wb.getWorksheet('V2') || wb.worksheets[wb.worksheets.length - 1];
+  if (!ws) throw new Error(`No se encontró la hoja V2 en ${formato?.code || 'el formato'}.`);
+  // El archivo trae también la versión anterior (hoja V1): se exporta solo la vigente
+  wb.worksheets.filter((s) => s.id !== ws.id).forEach((s) => wb.removeWorksheet(s.id));
+  ws.state = 'visible';
+  wb.views = [{ x: 0, y: 0, width: 20000, height: 12000, firstSheet: 0, activeTab: 0, visibility: 'visible' }];
 
-export async function exportEvaluacion(evaluacion) {
-  try {
-    // 1. Descargar plantilla desde Storage
-    const { data: fileData, error } = await supabase.storage
-      .from('templates')
-      .download(TEMPLATE_NAME);
+  const set = (addr, v) => { ws.getCell(addr).value = v ?? null; };
+  const scores = [...(evaluacion.scores || [])].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0)).slice(0, 7);
 
-    if (error) throw new Error(`No se pudo descargar la plantilla: ${error.message}`);
+  set('A6', `Periodo a evaluar: ${fmt(evaluacion.fecha_inicio)} al ${fmt(evaluacion.fecha_fin)}`);
+  set('E6', `Fecha de evaluación: ${fmt(evaluacion.fecha_evaluacion)}`);
 
-    const arrayBuffer = await fileData.arrayBuffer();
+  // Pesos por criterio (columna PESO)
+  Object.values(CRITERIOS).forEach((c) => set(`B${c.fila}`, c.peso));
 
-    // 2. Cargar en ExcelJS
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(arrayBuffer);
-
-    const ws = wb.worksheets[0];
-    if (!ws) throw new Error('No se encontró hoja en la plantilla');
-
-    const scores = evaluacion.scores || [];
-
-    // 3. Escribir período y fecha de evaluación
-    // Fila 6 — Periodo a evaluar
-    const periodoStr = `${fmt(evaluacion.fecha_inicio)} al ${fmt(evaluacion.fecha_fin)}`;
-    const cellPeriodo = ws.getCell('B6');
-    cellPeriodo.value = periodoStr;
-
-    // Fecha de evaluación
-    const cellFecha = ws.getCell('H6');
-    cellFecha.value = fmt(evaluacion.fecha_evaluacion);
-
-    // 4. Escribir puntajes por proveedor
-    // El formato tiene columnas para 7 proveedores a partir de la columna C
-    // Estructura: C=Prov1 Puntuación, D=Prov1 Resultado, E=Prov2 Puntuación, F=Prov2 Resultado, etc.
-    const provCols = [
-      { puntuacion: 'C', resultado: 'D' }, // Proveedor 1
-      { puntuacion: 'E', resultado: 'F' }, // Proveedor 2
-      { puntuacion: 'G', resultado: 'H' }, // Proveedor 3
-      { puntuacion: 'I', resultado: 'J' }, // Proveedor 4
-      { puntuacion: 'K', resultado: 'L' }, // Proveedor 5
-      { puntuacion: 'M', resultado: 'N' }, // Proveedor 6
-      { puntuacion: 'O', resultado: 'P' }, // Proveedor 7
-    ];
-
-    // Fila 9 — nombres de proveedores (encabezado)
-    scores.forEach((score, idx) => {
-      if (idx >= provCols.length) return;
-      const nombreCell = ws.getCell(`${provCols[idx].puntuacion}9`);
-      nombreCell.value = score.supplier?.nombre || `Proveedor ${idx + 1}`;
-    });
-
-    // Filas de criterios — mapeo fijo según estructura del formato
-    // Calidad: fila 11 (no conforme), 12 (devoluciones), 13 (SST)
-    // Servicio: fila 15 (cantidad), 16 (oportunidad), 17 (reclamos), 18 (documentación)
-    // Precio: fila 20 (competitividad), 21 (forma pago), 22 (descuentos)
-    // Contratista: fila 28 (peligros)
-
-    const SUBCRIT_ROWS = {
-      calidad: {
-        no_conforme:   11,
-        devoluciones:  12,
-        sst:           13,
-      },
-      servicio: {
-        cantidad:      15,
-        oportunidad:   16,
-        reclamos:      17,
-        documentacion: 18,
-      },
-      precio: {
-        competitividad: 20,
-        forma_pago:     21,
-        descuentos:     22,
-      },
-      contratista: {
-        peligros: 28,
-      },
-    };
-
-    scores.forEach((score, idx) => {
-      if (idx >= provCols.length) return;
-      const cols = provCols[idx];
-
-      // Escribir subcategorías por criterio
-      Object.entries(SUBCRIT_ROWS).forEach(([criterioKey, subcats]) => {
-        Object.entries(subcats).forEach(([subKey, rowNum]) => {
-          const val = score[criterioKey]?.subcats?.[subKey] || 0;
-          if (val > 0) {
-            ws.getCell(`${cols.puntuacion}${rowNum}`).value = val;
-          }
-        });
+  scores.forEach((s, i) => {
+    const [cP, cR] = PROV_COLS[i];
+    const nombre = s.supplier?.nombre || `Proveedor ${i + 1}`;
+    set(`${cP}9`, nombre);
+    Object.entries(CRITERIOS).forEach(([k, c]) => {
+      const crit = s[k] || {};
+      set(`${cP}${c.fila}`, num(crit.puntuacion));   // promedio del criterio (1–5)
+      set(`${cR}${c.fila}`, num(crit.resultado));    // promedio × peso
+      Object.entries(c.sub).forEach(([sk, fila]) => {
+        const v = crit.subcats?.[sk];
+        set(`${cP}${fila}`, v > 0 ? Number(v) : null);
       });
-
-      // Resultados por criterio (filas resumen)
-      // Calidad fila 10, Servicio fila 14, Precio fila 19
-      ws.getCell(`${cols.resultado}10`).value = score.calidad?.resultado   || 0;
-      ws.getCell(`${cols.resultado}14`).value = score.servicio?.resultado  || 0;
-      ws.getCell(`${cols.resultado}19`).value = score.precio?.resultado    || 0;
-
-      // Total score — fila 31
-      ws.getCell(`${cols.puntuacion}31`).value = score.total_score || 0;
-
-      // Confiabilidad — fila 35 en adelante (una por proveedor)
-      const confRow = 35 + idx;
-      ws.getCell(`C${confRow}`).value = score.supplier?.nombre || `Proveedor ${idx + 1}`;
-      ws.getCell(`D${confRow}`).value = (score.total_score || 0).toFixed(2);
-      ws.getCell(`E${confRow}`).value = confiabilidadLabel(score.confiabilidad);
-      ws.getCell(`F${confRow}`).value = score.aspectos_mejorar || '';
     });
+    // Confiabilidad (filas 29–35)
+    const f = 29 + i;
+    set(`E${f}`, nombre);
+    set(`G${f}`, `${CONF[s.confiabilidad] || ''} (${(Number(s.total_score) || 0).toFixed(2)})`.trim());
+    set(`I${f}`, s.aspectos_mejorar || evaluacion.aspectos_por_mejorar || null);
+  });
+  // Columnas y filas de confiabilidad sin proveedor: se limpian
+  for (let i = scores.length; i < 7; i++) set(`${PROV_COLS[i][0]}9`, null);
+  for (let i = scores.length; i < 7; i++) { set(`E${29 + i}`, null); set(`G${29 + i}`, null); set(`I${29 + i}`, null); }
 
-    // 5. Análisis por criterio (fila 46 aprox)
-    // Calcular promedios de criterios entre todos los proveedores
-    if (scores.length > 0) {
-      const avgCalidad  = scores.reduce((s, sc) => s + (sc.calidad?.resultado  || 0), 0) / scores.length;
-      const avgServicio = scores.reduce((s, sc) => s + (sc.servicio?.resultado || 0), 0) / scores.length;
-      const avgPrecio   = scores.reduce((s, sc) => s + (sc.precio?.resultado   || 0), 0) / scores.length;
+  // Análisis por criterio: promedio (1–5) entre los proveedores evaluados
+  const prom = (k) => (scores.length
+    ? Number((scores.reduce((t, s) => t + (Number(s[k]?.puntuacion) || 0), 0) / scores.length).toFixed(2))
+    : null);
+  set('H40', prom('calidad')); set('H41', prom('servicio')); set('H42', prom('precio'));
 
-      ws.getCell('D46').value = avgCalidad.toFixed(2);
-      ws.getCell('D47').value = avgServicio.toFixed(2);
-      ws.getCell('D48').value = avgPrecio.toFixed(2);
-    }
+  set('A44', evaluacion.conclusiones || null);
+  set('A47', `Realizado por: ${evaluacion.realizado_por_profile?.full_name || '____________________'}`);
+  set('H47', `Aprobado por: ${evaluacion.aprobado_por_profile?.full_name || '____________________'}`);
 
-    // 6. Conclusiones — fila 49
-    if (evaluacion.conclusiones) {
-      ws.getCell('B50').value = evaluacion.conclusiones;
-    }
-
-    // 7. Realizado por / Aprobado por — fila 53
-    ws.getCell('B53').value = evaluacion.realizado_por_profile?.full_name || '';
-    ws.getCell('H53').value = evaluacion.aprobado_por_profile?.full_name  || '';
-
-    // 8. Exportar
-    const buffer = await wb.xlsx.writeBuffer();
-    const blob   = new Blob([buffer], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    });
-
-    const fechaHoy = new Date().toLocaleDateString('es-CO').replace(/\//g, '-');
-    saveAs(blob, `RE-GR-01_EVALUACION_${evaluacion.consecutive || 'PROVEEDORES'}_${fechaHoy}.xlsx`);
-
-    return { success: true };
-  } catch (e) {
-    console.error('exportEvaluacion error:', e);
-    return { success: false, error: e.message };
-  }
+  const out = await wb.xlsx.writeBuffer();
+  const hoy = new Date().toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-');
+  saveAs(new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    `${formato?.code || 'RE-GR-01'}_EVALUACION_${evaluacion.consecutive || 'PROVEEDORES'}_${hoy}.xlsx`);
+  return true;
 }
+
+export default exportEvaluacion;
