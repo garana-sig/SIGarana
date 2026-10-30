@@ -5,7 +5,7 @@
 //   tipo (de la tabla reporte_tipo) → descripción, área, foto, anónimo
 //   → crear_reporte() → consecutivo REP-AAAA-NNNN + correo a responsables.
 // Se monta una sola vez en Layout.jsx. Imagen: public/hoja-garana.png
-// v2 (30-oct-2026): ícono ⛑️ → casco SST dibujado; nombre "… · SST" → chip SST.
+// v2 (30-oct-2026): ícono ⛑️ → casco SST dibujado; nombre "… · SST" o "… · BASC" → chip.
 // ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useReporteTipos, crearReporte } from '@/hooks/useReportes';
@@ -96,15 +96,20 @@ function IconoTipo({ icono, size }) {
   if (icono === '⛑️' || icono === '⛑') return <CascoSST size={size} />;
   return <>{icono}</>;
 }
-// Etiqueta "SST" cuando el nombre del tipo termina en "· SST"
+// Etiqueta (chip) cuando el nombre del tipo termina en "· SST" o "· BASC"
+const ETIQUETAS = {
+  SST:  { color: '#92400e', background: '#fef3c7', border: '#fcd34d' },
+  BASC: { color: '#1e3a8a', background: '#dbeafe', border: '#93c5fd' },
+};
 function partirNombre(nombre = '') {
-  const m = nombre.match(/^(.*?)\s*·\s*SST\s*$/i);
-  return m ? { texto: m[1], sst: true } : { texto: nombre, sst: false };
+  const m = nombre.match(/^(.*?)\s*·\s*(SST|BASC)\s*$/i);
+  return m ? { texto: m[1], sst: m[2].toUpperCase() } : { texto: nombre, sst: null };
 }
-function ChipSST() {
+function ChipSST({ tag = 'SST' }) {
+  const e = ETIQUETAS[tag] || ETIQUETAS.SST;
   return (
     <span style={{ display: 'inline-block', marginLeft: 6, verticalAlign: 'middle', fontSize: 10.5, fontWeight: 800, letterSpacing: .5,
-      color: '#92400e', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 20, padding: '1px 7px' }}>SST</span>
+      color: e.color, background: e.background, border: `1px solid ${e.border}`, borderRadius: 20, padding: '1px 7px' }}>{tag}</span>
   );
 }
 
@@ -285,7 +290,7 @@ export default function AyudanosAMejorar() {
                       <span style={{ width: 46, height: 46, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, background: `${t.color}14` }}><IconoTipo icono={t.icono} size={28} /></span>
                       <span style={{ minWidth: 0 }}>
                         <b style={{ display: 'block', fontSize: 14.5, color: C.dark }}>
-                          {partirNombre(t.nombre).texto}{partirNombre(t.nombre).sst && <ChipSST />}
+                          {partirNombre(t.nombre).texto}{partirNombre(t.nombre).sst && <ChipSST tag={partirNombre(t.nombre).sst} />}
                         </b>
                         <span style={{ fontSize: 12, color: '#6b7280' }}>{t.descripcion}</span>
                       </span>
@@ -304,7 +309,7 @@ export default function AyudanosAMejorar() {
             </>)}
 
             {paso === 'form' && tipo && (<>
-              <Header titulo={<>{partirNombre(tipo.nombre).texto}{partirNombre(tipo.nombre).sst && <ChipSST />}</>} sub="Solo lo básico: el responsable completará el registro oficial." icono={tipo.icono} onClose={cerrar} />
+              <Header titulo={<>{partirNombre(tipo.nombre).texto}{partirNombre(tipo.nombre).sst && <ChipSST tag={partirNombre(tipo.nombre).sst} />}</>} sub="Solo lo básico: el responsable completará el registro oficial." icono={tipo.icono} onClose={cerrar} />
               <div style={{ padding: '18px 20px 20px' }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: C.green, marginBottom: 5 }}>Descripción *</label>
                 <textarea className="aam-input" rows={4} autoFocus value={desc} maxLength={4000}
