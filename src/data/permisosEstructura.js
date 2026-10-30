@@ -125,8 +125,11 @@ export const ESTRUCTURA_PERMISOS = [
           extras: [{ code: 'auditorias:evaluacion_competencias:manage', label: 'Configurar periodos y preguntas' }] },
         // Registros de "Ayúdanos a mejorar": se manejan como RESPONSABLE del tipo
         { id: 'reg_sugerencias',      nombre: 'Registro Sugerencias (RE-GH-05)',      responsable: 'sugerencia' },
-        { id: 'reg_actos_inseguros',  nombre: 'Registro Actos Inseguros (RE-GS-02)',  responsable: 'acto_inseguro' },
+        { id: 'reg_actos_inseguros',  nombre: 'Registro Actos Inseguros · SST (RE-GS-02)', responsable: 'acto_inseguro' },
         { id: 'reg_operacion_inusual',nombre: 'Registro Operación Inusual (RE-GF-10)',responsable: 'operacion_inusual' },
+        // (30-oct-2026) Solo bandeja por ahora
+        { id: 'reg_seguridad_fisica',      nombre: 'Reporte Seguridad Física · BASC (bandeja)',  responsable: 'seguridad_fisica' },
+        { id: 'reg_amenazas_informaticas', nombre: 'Reporte Amenazas Informáticas (bandeja)',    responsable: 'amenaza_informatica' },
       ] },
       { nombre: 'Mantenimiento', submodulos: [
         { id: 'mant_equipos',        nombre: 'Equipos de cómputo', ...crud('mantenimiento:computadores'),

@@ -99,7 +99,7 @@ function IconoTipo({ icono, size }) {
 // Etiqueta (chip) cuando el nombre del tipo termina en "· SST" o "· BASC"
 const ETIQUETAS = {
   SST:  { color: '#92400e', background: '#fef3c7', border: '#fcd34d' },
-  BASC: { color: '#1e3a8a', background: '#dbeafe', border: '#93c5fd' },
+  BASC: { color: '#92400e', background: '#fef3c7', border: '#fcd34d' },   // mismo estilo que SST
 };
 function partirNombre(nombre = '') {
   const m = nombre.match(/^(.*?)\s*·\s*(SST|BASC)\s*$/i);

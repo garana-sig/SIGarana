@@ -12,6 +12,24 @@ import { useResponsablesReportes } from '@/hooks/useReportes';
 
 const C = { green: '#2e5244', mint: '#6dbd96', olive: '#6f7b2c', sand: '#dedecc', dark: '#1a2e25' };
 
+// (30-oct-2026) Mismo estilo que la hoja: ⛑️ → casco SST; "· SST" / "· BASC" → chip amarillo
+function IconoTipo({ icono }) {
+  if (icono === '⛑️' || icono === '⛑') return (
+    <svg width="22" height="22" viewBox="0 0 48 48" aria-hidden="true">
+      <path d="M8 31c0-9.4 7.2-17 16-17s16 7.6 16 17z" fill="#f59e0b" />
+      <rect x="21.5" y="9" width="5" height="22" rx="1.5" fill="#fbbf24" />
+      <rect x="4" y="30" width="40" height="6" rx="3" fill="#d97706" />
+    </svg>
+  );
+  return <>{icono}</>;
+}
+function NombreTipo({ nombre = '' }) {
+  const m = nombre.match(/^(.*?)\s*·\s*(SST|BASC)\s*$/i);
+  if (!m) return <>{nombre}</>;
+  return (<>{m[1]}<span style={{ display: 'inline-block', marginLeft: 6, verticalAlign: 'middle', fontSize: 10.5, fontWeight: 800, letterSpacing: .5,
+    color: '#92400e', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 20, padding: '1px 7px' }}>{m[2].toUpperCase()}</span></>);
+}
+
 export default function ResponsablesReportes({ open, onClose, onToast }) {
   const { tipos, usuarios, loading, error, agregar, quitar, toggleActivo } = useResponsablesReportes(open);
   const [sel, setSel]       = useState({});     // { tipo_codigo: user_id }
@@ -42,13 +60,14 @@ export default function ResponsablesReportes({ open, onClose, onToast }) {
           {loading && <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin" style={{ color: C.mint }} /></div>}
           {error && <p style={{ color: '#b91c1c', fontSize: 13 }}>{error}</p>}
 
-          {!loading && tipos.map((t) => {
+          {!loading && [...tipos].sort((a, b) => (b.is_active - a.is_active) || (a.orden - b.orden)).map((t) => {
             const disponibles = usuarios.filter((u) => !t.responsables.some((r) => r.user_id === u.id));
             return (
               <div key={t.codigo} style={{ border: `1px solid ${C.sand}`, borderLeft: `5px solid ${t.color}`, borderRadius: 14, padding: '12px 14px', opacity: t.is_active ? 1 : 0.6 }}>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span style={{ fontSize: 20 }}>{t.icono}</span>
-                  <span style={{ fontWeight: 700, color: C.dark, fontSize: 14 }}>{t.nombre}</span>
+                  <span style={{ fontSize: 20, display: 'flex' }}><IconoTipo icono={t.icono} /></span>
+                  <span style={{ fontWeight: 700, color: C.dark, fontSize: 14 }}><NombreTipo nombre={t.nombre} /></span>
+                  {!t.is_active && <span style={{ fontSize: 11, color: '#6b7280', background: '#f3f4f6', borderRadius: 20, padding: '1px 8px' }}>Oculto en la hoja</span>}
                   <label className="flex items-center gap-1.5 ml-auto" style={{ fontSize: 12, color: '#4b5563', cursor: 'pointer' }}>
                     <input type="checkbox" checked={t.is_active} disabled={ocupado === `act-${t.codigo}`}
                       onChange={(e) => run(`act-${t.codigo}`, () => toggleActivo(t.codigo, e.target.checked),
