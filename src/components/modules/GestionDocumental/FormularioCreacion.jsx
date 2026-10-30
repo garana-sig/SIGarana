@@ -305,7 +305,7 @@ export default function FormularioCreacion({
           responsible: formData.responsible || null, // ⬅️ NUEVO: Campo responsable
           document_type_id: formData.document_type_id,
           process_id: formData.process_id,
-          file_path: uploadData.path,
+          file_path: filePath,
           version: version,
           status: documentStatus,
           storage_location: formData.storage_location || null,
