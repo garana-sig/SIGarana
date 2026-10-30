@@ -66,7 +66,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
     retention_central: '',
     file_type_magnetic: false,
     file_type_physical: false,
-    retention_management: false,
+    retention_management: '',
     disposition_total_conservation: false,
     disposition_selection: false,
     disposition_elimination: false
@@ -101,7 +101,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
         retention_central: document.retention_central || '',
         file_type_magnetic: document.file_type_magnetic || false,
         file_type_physical: document.file_type_physical || false,
-        retention_management: document.retention_management || false,
+        retention_management: document.retention_management ?? '',
         disposition_total_conservation: document.disposition_total_conservation || false,
         disposition_selection: document.disposition_selection || false,
         disposition_elimination: document.disposition_elimination || false
@@ -172,7 +172,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
       formData.retention_central !== (document.retention_central || '') ||
       formData.file_type_magnetic !== (document.file_type_magnetic || false) ||
       formData.file_type_physical !== (document.file_type_physical || false) ||
-      formData.retention_management !== (document.retention_management || false) ||
+      String(formData.retention_management ?? '') !== String(document.retention_management ?? '') ||
       formData.disposition_total_conservation !== (document.disposition_total_conservation || false) ||
       formData.disposition_selection !== (document.disposition_selection || false) ||
       formData.disposition_elimination !== (document.disposition_elimination || false)
@@ -258,7 +258,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
           retention_central: formData.retention_central ? parseInt(formData.retention_central) : null, // ✅ Convertir a número
           file_type_magnetic: formData.file_type_magnetic,
           file_type_physical: formData.file_type_physical,
-          retention_management: formData.retention_management,
+          retention_management: formData.retention_management !== '' && formData.retention_management != null ? parseInt(formData.retention_management) : null,
           disposition_total_conservation: formData.disposition_total_conservation,
           disposition_selection: formData.disposition_selection,
           disposition_elimination: formData.disposition_elimination,
@@ -312,7 +312,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
           retention_central: formData.retention_central ? parseInt(formData.retention_central) : (document.retention_central || null), // ✅ Convertir a número
           file_type_magnetic: formData.file_type_magnetic ?? document.file_type_magnetic ?? false,
           file_type_physical: formData.file_type_physical ?? document.file_type_physical ?? false,
-          retention_management: formData.retention_management ?? document.retention_management ?? false,
+          retention_management: formData.retention_management !== '' && formData.retention_management != null ? parseInt(formData.retention_management) : null,
           disposition_total_conservation: formData.disposition_total_conservation ?? document.disposition_total_conservation ?? false,
           disposition_selection: formData.disposition_selection ?? document.disposition_selection ?? false,
           disposition_elimination: formData.disposition_elimination ?? document.disposition_elimination ?? false,
@@ -463,7 +463,7 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
         retention_central: formData.retention_central ? parseInt(formData.retention_central) : null,
         file_type_magnetic: formData.file_type_magnetic,
         file_type_physical: formData.file_type_physical,
-        retention_management: formData.retention_management,
+        retention_management: formData.retention_management !== '' && formData.retention_management != null ? parseInt(formData.retention_management) : null,
         disposition_total_conservation: formData.disposition_total_conservation,
         disposition_selection: formData.disposition_selection,
         disposition_elimination: formData.disposition_elimination,
@@ -963,17 +963,19 @@ const EditDocumentModal = ({ document, isOpen, onClose, onSuccess }) => {
                 />
               </div>
 
-              <div className="flex items-end pb-2">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={formData.retention_management}
-                    onChange={(e) => setFormData({ ...formData, retention_management: e.target.checked })}
-                    className="rounded border-gray-300 text-green-600 focus:ring-green-500"
-                    disabled={loading || !controlArchivoAplica}
-                  />
-                  <span>Retención en gestión</span>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Retención gestión (años)
                 </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.retention_management}
+                  onChange={(e) => setFormData({ ...formData, retention_management: e.target.value })}
+                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  disabled={loading || !controlArchivoAplica}
+                  placeholder="Ej: 1, 2..."
+                />
               </div>
 
               {/* 4. Disposición Final */}

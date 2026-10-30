@@ -19,7 +19,7 @@
 // Reglas de datos:
 //   - v01  → E = fecha del documento; control de cambios vacío.
 //   - v02+ → E vacía; O = versión anterior, P = vigente, Q = fecha, R = motivo.
-//   - Gestión (retention_management) es Sí/No en el sistema → "X".
+//   - Gestión (retention_management) = años, igual que Central (oct 2026).
 //   - Fechas date-only tomadas tal cual (sin desfase de zona horaria).
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -139,7 +139,7 @@ export function fillListadoMaestro(wb, { documentos, procesos = [] }) {
         d.responsible || '',                          // F
         d.storage_location || '',                     // G
         d.retention_central ?? '',                    // H central (años)
-        X(d.retention_management),                    // I gestión
+        d.retention_management ?? '',                 // I gestión (años)
         X(d.file_type_magnetic),                      // J
         X(d.file_type_physical),                      // K
         X(d.disposition_selection),                   // L

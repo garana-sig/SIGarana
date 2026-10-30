@@ -40,6 +40,7 @@ import {
 
 // ── Opciones de página ────────────────────────────────────────────────────────
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+const ORDEN_TIPOS = ['MN', 'PR', 'PL', 'GU', 'IN', 'RE'];   // orden del RE-GS-07
 
 // ── Paginación (inline, mismo patrón que RiskMatrixManager) ──────────────────
 function Pagination({ currentPage, totalPages, totalRows, pageSize, onPage, onPageSize, label = 'documento(s)' }) {
@@ -265,30 +266,37 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
   // ── Documentos activos (excluye archivados) ───────────────────────────────
   // 🆕 Orden: por proceso (orden de la tabla process) y dentro de cada proceso
   // por CÓDIGO en orden natural (GU-DP-01, GU-DP-02 … PR-DP-10), no por fecha.
+  // v4 (oct 2026): procesos en el orden del RE-GS-07 (process.display_order) y,
+  // dentro de cada proceso, por tipo MN → PR → PL → GU → IN → RE y luego número.
   const activeDocuments = useMemo(() => {
-    const ordenProc = new Map(processes.map((p, i) => [p.id, i]));
+    const ordenProc = new Map(
+      [...processes]
+        .sort((a, b) => (a.display_order ?? 99) - (b.display_order ?? 99) || String(a.name).localeCompare(String(b.name)))
+        .map((p, i) => [p.id, i])
+    );
+    const tipo = (d) => {
+      const t = d.document_type?.code || d.document_type_code || String(d.code || '').slice(0, 2);
+      const i = ORDEN_TIPOS.indexOf(t);
+      return i === -1 ? 99 : i;
+    };
     return documents
       .filter(doc => doc.status !== 'archived')
       .sort((a, b) =>
         (ordenProc.get(a.process_id) ?? 999) - (ordenProc.get(b.process_id) ?? 999) ||
+        tipo(a) - tipo(b) ||
         String(a.code || '').localeCompare(String(b.code || ''), 'es', { numeric: true })
       );
   }, [documents, processes]);
 
-  // ── Paginación: slice de la lista plana ───────────────────────────────────
-  const totalPages = Math.max(1, Math.ceil(activeDocuments.length / pageSize));
-  const safePage   = Math.min(currentPage, totalPages);
-  const pageDocuments = activeDocuments.slice((safePage - 1) * pageSize, safePage * pageSize);
-
-  // ── Agrupar por proceso SOLO los docs de la página actual ─────────────────
+  // ── v4: sin paginación — se ven todos, agrupados por proceso ──────────────
   const groupedByProcess = useMemo(() =>
-    pageDocuments.reduce((acc, doc) => {
+    activeDocuments.reduce((acc, doc) => {
       const processName = doc?.process?.name || 'Sin Proceso';
       if (!acc[processName]) acc[processName] = [];
       acc[processName].push(doc);
       return acc;
     }, {}),
-    [pageDocuments]
+    [activeDocuments]
   );
 
   // Resetear página al cambiar filtros
@@ -297,15 +305,21 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
   const handleProcessChange = (v) => { setSelectedProcess(v); setCurrentPage(1); };
   const handleStatusChange  = (v) => { setSelectedStatus(v);  setCurrentPage(1); };
 
+  // Los procesos se ven abiertos por defecto; solo se guarda el que se contrae
+  const isOpen = (name) => expandedProcesses[name] !== false;
   const toggleProcess = (name) =>
-    setExpandedProcesses(prev => ({ ...prev, [name]: !prev[name] }));
+    setExpandedProcesses(prev => ({ ...prev, [name]: !isOpen(name) }));
 
-  const expandAll = () => {
+  const expandAll = () => setExpandedProcesses({});
+  const collapseAll = () => {
     const all = {};
-    Object.keys(groupedByProcess).forEach(k => { all[k] = true; });
+    Object.keys(groupedByProcess).forEach(k => { all[k] = false; });
     setExpandedProcesses(all);
   };
-  const collapseAll = () => setExpandedProcesses({});
+  const irAProceso = (name) => {
+    setExpandedProcesses(prev => ({ ...prev, [name]: true }));
+    setTimeout(() => window.document.getElementById(`lm-proc-${name}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
 
   const clearFilters = () => {
     setSearchTerm(''); setSelectedType(null);
@@ -513,6 +527,19 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
             <Button onClick={collapseAll} variant="ghost" size="sm">Contraer Todo</Button>
           </div>
 
+          {/* Acceso rápido a cada proceso (orden RE-GS-07) */}
+          {Object.keys(groupedByProcess).length > 1 && (
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(groupedByProcess).map(([name, docs]) => (
+                <button key={name} type="button" onClick={() => irAProceso(name)}
+                  className="text-xs px-2.5 py-1 rounded-full border transition-colors hover:bg-[#f0f4e8]"
+                  style={{ borderColor: '#dedecc', color: '#2e5244' }}>
+                  {name} <span className="text-gray-500">({docs.length})</span>
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Tabla */}
           <div className="border rounded-lg overflow-hidden" style={{ fontSize: '85%', zoom: '0.75' }}>
             {loading ? (
@@ -528,33 +555,36 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
             ) : (
               <table className="w-full text-xs table-auto">
                 <thead>
-                  {/* Fila 1: Grupos principales */}
+                  {/* Encabezados en el orden del RE-GS-07 */}
                   <tr className="bg-gray-100 text-xs uppercase" style={{ color: '#2e5244' }}>
-                    <th rowSpan="2" className="p-1 text-left border font-bold w-4" style={{ borderColor: '#dedecc' }}></th>
-                    <th colSpan="3" className="p-1 text-center border font-bold" style={{ borderColor: '#dedecc' }}>IDENTIFICACIÓN</th>
-                    <th colSpan="3" className="p-1 text-center border font-bold" style={{ borderColor: '#dedecc' }}>ARCHIVO</th>
-                    <th colSpan="3" className="p-1 text-center border font-bold" style={{ borderColor: '#dedecc' }}>RETENCIÓN (años)</th>
-                    <th colSpan="3" className="p-1 text-center border font-bold" style={{ borderColor: '#dedecc' }}>DISPOSICIÓN</th>
-                    <th colSpan="3" className="p-1 text-center border font-bold" style={{ borderColor: '#dedecc' }}>CAMBIOS</th>
-                    <th rowSpan="2" className="p-1 text-center border font-bold w-16" style={{ borderColor: '#dedecc' }}>ESTADO</th>
-                    <th rowSpan="2" className="p-1 text-center border font-bold w-20" style={{ borderColor: '#dedecc' }}>ACCIONES</th>
+                    <th colSpan="6" className="p-1 text-center border font-bold" style={{ borderColor: '#dedecc' }}>A. Control de documentos</th>
+                    <th colSpan="10" className="p-1 text-center border font-bold" style={{ borderColor: '#dedecc' }}>B. Control de registros</th>
+                    <th rowSpan="3" className="p-1 text-center border font-bold w-16" style={{ borderColor: '#dedecc' }}>Estado</th>
+                    <th rowSpan="3" className="p-1 text-center border font-bold w-20" style={{ borderColor: '#dedecc' }}>Acciones</th>
                   </tr>
                   <tr className="bg-gray-50 text-[10px] uppercase" style={{ color: '#2e5244' }}>
-                    <th className="p-1 text-left border font-medium w-20"   style={{ borderColor: '#dedecc' }}>Código</th>
-                    <th className="p-1 text-left border font-medium"        style={{ borderColor: '#dedecc' }}>Nombre</th>
-                    <th className="p-1 text-center border font-medium w-20" style={{ borderColor: '#dedecc' }}>Resp.</th>
-                    <th className="p-1 text-center border font-medium w-12" style={{ borderColor: '#dedecc' }}>Tipo</th>
-                    <th className="p-1 text-center border font-medium w-12" style={{ borderColor: '#dedecc' }}>Ver.</th>
-                    <th className="p-1 text-center border font-medium w-16" style={{ borderColor: '#dedecc' }}>Fecha</th>
+                    <th rowSpan="2" className="p-1 text-left border font-medium w-20" style={{ borderColor: '#dedecc' }}>Código</th>
+                    <th rowSpan="2" className="p-1 text-left border font-medium" style={{ borderColor: '#dedecc' }}>Nombre</th>
+                    <th rowSpan="2" className="p-1 text-center border font-medium w-12" style={{ borderColor: '#dedecc' }}>Tipo</th>
+                    <th rowSpan="2" className="p-1 text-center border font-medium w-12" style={{ borderColor: '#dedecc' }}>Ver.</th>
+                    <th rowSpan="2" className="p-1 text-center border font-medium w-16" style={{ borderColor: '#dedecc' }}>Fecha</th>
+                    <th rowSpan="2" className="p-1 text-center border font-medium w-20" style={{ borderColor: '#dedecc' }}>Resp.</th>
+                    <th rowSpan="2" className="p-1 text-center border font-medium w-20" style={{ borderColor: '#dedecc' }}>Ubicación</th>
+                    <th colSpan="2" className="p-1 text-center border font-medium" style={{ borderColor: '#dedecc' }}>Archivo</th>
+                    <th colSpan="2" className="p-1 text-center border font-medium" style={{ borderColor: '#dedecc' }}>Retención (años)</th>
+                    <th colSpan="3" className="p-1 text-center border font-medium" style={{ borderColor: '#dedecc' }}>Disposición</th>
+                    <th colSpan="2" className="p-1 text-center border font-medium" style={{ borderColor: '#dedecc' }}>Cambios</th>
+                  </tr>
+                  <tr className="bg-gray-50 text-[10px] uppercase" style={{ color: '#2e5244' }}>
+                    <th className="p-1 text-center border font-medium w-10" style={{ borderColor: '#dedecc' }}>Dig.</th>
+                    <th className="p-1 text-center border font-medium w-10" style={{ borderColor: '#dedecc' }}>Fís.</th>
                     <th className="p-1 text-center border font-medium w-12" style={{ borderColor: '#dedecc' }}>Cent.</th>
                     <th className="p-1 text-center border font-medium w-12" style={{ borderColor: '#dedecc' }}>Gest.</th>
-                    <th className="p-1 text-center border font-medium w-12" style={{ borderColor: '#dedecc' }}>Tot.</th>
+                    <th className="p-1 text-center border font-medium w-12" style={{ borderColor: '#dedecc' }}>Cons. total</th>
                     <th className="p-1 text-center border font-medium w-12" style={{ borderColor: '#dedecc' }}>Sel.</th>
-                    <th className="p-1 text-center border font-medium w-12" style={{ borderColor: '#dedecc' }}>Con.</th>
-                    <th className="p-1 text-center border font-medium w-12" style={{ borderColor: '#dedecc' }}>Eli.</th>
-                    <th className="p-1 text-center border font-medium w-16" style={{ borderColor: '#dedecc' }}>F. Camb.</th>
-                    <th className="p-1 text-left border font-medium w-24"   style={{ borderColor: '#dedecc' }}>Motivo</th>
-                    <th className="p-1 text-center border font-medium w-20" style={{ borderColor: '#dedecc' }}>Ubic.</th>
+                    <th className="p-1 text-center border font-medium w-12" style={{ borderColor: '#dedecc' }}>Elim.</th>
+                    <th className="p-1 text-center border font-medium w-16" style={{ borderColor: '#dedecc' }}>Fecha</th>
+                    <th className="p-1 text-left border font-medium w-24" style={{ borderColor: '#dedecc' }}>Motivo</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -562,12 +592,12 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
                     <React.Fragment key={processName}>
 
                       {/* Fila de encabezado de proceso */}
-                      <tr className="cursor-pointer hover:bg-gray-50 transition-colors"
+                      <tr id={`lm-proc-${processName}`} className="cursor-pointer hover:bg-gray-50 transition-colors"
                         onClick={() => toggleProcess(processName)}
                         style={{ backgroundColor: '#f0f4e8' }}>
-                        <td colSpan="19" className="p-1.5 border" style={{ borderColor: '#dedecc' }}>
+                        <td colSpan="18" className="p-1.5 border" style={{ borderColor: '#dedecc' }}>
                           <div className="flex items-center gap-2">
-                            {expandedProcesses[processName]
+                            {isOpen(processName)
                               ? <ChevronDown  className="h-3.5 w-3.5" style={{ color: '#2e5244' }} />
                               : <ChevronRight className="h-3.5 w-3.5" style={{ color: '#2e5244' }} />}
                             <FileText className="h-3.5 w-3.5" style={{ color: '#6dbd96' }} />
@@ -580,10 +610,8 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
                       </tr>
 
                       {/* Filas de documentos */}
-                      {expandedProcesses[processName] && processDocs.map(doc => (
+                      {isOpen(processName) && processDocs.map(doc => (
                         <tr key={doc.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="p-1 border" style={{ borderColor: '#dedecc' }}></td>
-
                           {/* CÓDIGO */}
                           <td className="p-1 border" style={{ borderColor: '#dedecc' }}>
                             <span className="font-mono text-[10px] font-bold" style={{ color: '#2e5244' }}>{doc.code}</span>
@@ -592,13 +620,6 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
                           {/* NOMBRE */}
                           <td className="p-1 border max-w-[150px]" style={{ borderColor: '#dedecc' }}>
                             <p className="font-medium text-[10px] truncate" style={{ color: '#2e5244' }}>{(doc.name || '').toUpperCase()}</p>
-                          </td>
-
-                          {/* RESPONSABLE */}
-                          <td className="p-1 text-[10px] text-gray-600 border" style={{ borderColor: '#dedecc' }}>
-                            <span className="truncate block max-w-[80px]">
-                              {doc.responsible || (typeof doc.created_by_profile === 'object' ? doc.created_by_profile?.full_name : doc.created_by_profile) || '-'}
-                            </span>
                           </td>
 
                           {/* TIPO */}
@@ -621,19 +642,35 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
                             {fmtFechaDoc(doc.change_date, doc.created_at)}
                           </td>
 
-                          {/* RETENCIÓN */}
-                          <td className="p-1 text-center text-[10px] border" style={{ borderColor: '#dedecc' }}>{doc.retention_central || '-'}</td>
-                          <td className="p-1 text-center text-[10px] border" style={{ borderColor: '#dedecc' }}>{doc.retention_management || '-'}</td>
-                          <td className="p-1 text-center text-[10px] font-medium border" style={{ borderColor: '#dedecc', color: '#2e5244' }}>
-                            {(parseInt(doc.retention_central || 0) + parseInt(doc.retention_management || 0)) || '-'}
+                          {/* RESPONSABLE */}
+                          <td className="p-1 text-[10px] text-gray-600 border" style={{ borderColor: '#dedecc' }}>
+                            <span className="truncate block max-w-[80px]">
+                              {doc.responsible || (typeof doc.created_by_profile === 'object' ? doc.created_by_profile?.full_name : doc.created_by_profile) || '-'}
+                            </span>
                           </td>
 
-                          {/* DISPOSICIÓN */}
+                          {/* UBICACIÓN */}
+                          <td className="p-1 text-[10px] text-gray-600 border" style={{ borderColor: '#dedecc' }}>
+                            <span className="truncate block max-w-[80px]" title={doc.storage_location || ''}>{doc.storage_location || '-'}</span>
+                          </td>
+
+                          {/* TIPO DE ARCHIVO */}
                           <td className="p-1 text-center border" style={{ borderColor: '#dedecc' }}>
-                            {doc.disposition_selection ? <span className="text-green-600 font-bold text-xs">✓</span> : <span className="text-gray-300 text-xs">-</span>}
+                            {doc.file_type_magnetic ? <span className="text-green-600 font-bold text-xs">✓</span> : <span className="text-gray-300 text-xs">-</span>}
                           </td>
                           <td className="p-1 text-center border" style={{ borderColor: '#dedecc' }}>
+                            {doc.file_type_physical ? <span className="text-green-600 font-bold text-xs">✓</span> : <span className="text-gray-300 text-xs">-</span>}
+                          </td>
+
+                          {/* RETENCIÓN */}
+                          <td className="p-1 text-center text-[10px] border" style={{ borderColor: '#dedecc' }}>{doc.retention_central ?? '-'}</td>
+                          <td className="p-1 text-center text-[10px] border" style={{ borderColor: '#dedecc' }}>{doc.retention_management ?? '-'}</td>
+                          {/* DISPOSICIÓN */}
+                          <td className="p-1 text-center border" style={{ borderColor: '#dedecc' }}>
                             {doc.disposition_total_conservation ? <span className="text-green-600 font-bold text-xs">✓</span> : <span className="text-gray-300 text-xs">-</span>}
+                          </td>
+                          <td className="p-1 text-center border" style={{ borderColor: '#dedecc' }}>
+                            {doc.disposition_selection ? <span className="text-green-600 font-bold text-xs">✓</span> : <span className="text-gray-300 text-xs">-</span>}
                           </td>
                           <td className="p-1 text-center border" style={{ borderColor: '#dedecc' }}>
                             {doc.disposition_elimination ? <span className="text-red-600 font-bold text-xs">✗</span> : <span className="text-gray-300 text-xs">-</span>}
@@ -645,9 +682,6 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
                           </td>
                           <td className="p-1 text-[10px] text-gray-600 border max-w-[100px]" style={{ borderColor: '#dedecc' }}>
                             <span className="truncate block">{doc.change_reason || '-'}</span>
-                          </td>
-                          <td className="p-1 text-[10px] text-gray-600 border" style={{ borderColor: '#dedecc' }}>
-                            <span className="truncate block max-w-[80px]">{doc.storage_location || '-'}</span>
                           </td>
 
                           {/* ESTADO */}
@@ -709,19 +743,6 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
               </table>
             )}
           </div>
-
-          {/* ── Paginación ── */}
-          {!loading && activeDocuments.length > 0 && (
-            <Pagination
-              currentPage={safePage}
-              totalPages={totalPages}
-              totalRows={activeDocuments.length}
-              pageSize={pageSize}
-              onPage={setCurrentPage}
-              onPageSize={(s) => { setPageSize(s); setCurrentPage(1); }}
-              label="documento(s)"
-            />
-          )}
 
         </CardContent>
       </Card>

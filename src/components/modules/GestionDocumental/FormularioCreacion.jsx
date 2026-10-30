@@ -55,7 +55,7 @@ export default function FormularioCreacion({
     file_type_magnetic: true,
     file_type_physical: false,
     retention_central: '',
-    retention_management: false,
+    retention_management: '',
     disposition_total_conservation: false,
     disposition_selection: false,
     disposition_elimination: false,
@@ -94,7 +94,7 @@ export default function FormularioCreacion({
         file_type_magnetic: true,
         file_type_physical: false,
         retention_central: '',
-        retention_management: false,
+        retention_management: '',
         disposition_total_conservation: false,
         disposition_selection: false,
         disposition_elimination: false,
@@ -310,7 +310,7 @@ export default function FormularioCreacion({
           file_type_magnetic: formData.file_type_magnetic,
           file_type_physical: formData.file_type_physical,
           retention_central: formData.retention_central ? parseInt(formData.retention_central) : null,
-          retention_management: formData.retention_management,
+          retention_management: formData.retention_management !== '' && formData.retention_management != null ? parseInt(formData.retention_management) : null,
           disposition_total_conservation: formData.disposition_total_conservation,
           disposition_selection: formData.disposition_selection,
           disposition_elimination: formData.disposition_elimination,
@@ -363,7 +363,7 @@ export default function FormularioCreacion({
           file_type_magnetic: true,
           file_type_physical: false,
           retention_central: '',
-          retention_management: false,
+          retention_management: '',
           disposition_total_conservation: false,
           disposition_selection: false,
           disposition_elimination: false,
@@ -651,36 +651,7 @@ export default function FormularioCreacion({
             />
           </div>
 
-          {/* 🆕 Objetivo y Alcance: NO aplican para Formatos (FO) ni Registros (RE) */}
-          {!controlArchivoAplica && (
-            <>
-            {/* Objetivo */}
-            <div>
-              <Label htmlFor="objective">Objetivo</Label>
-              <Textarea
-                id="objective"
-                name="objective"
-                value={formData.objective}
-                onChange={handleChange}
-                placeholder="Objetivo del documento..."
-                rows={2}
-              />
-            </div>
-
-            {/* Alcance */}
-            <div>
-              <Label htmlFor="scope">Alcance</Label>
-              <Textarea
-                id="scope"
-                name="scope"
-                value={formData.scope}
-                onChange={handleChange}
-                placeholder="Alcance del documento..."
-                rows={2}
-              />
-            </div>
-            </>
-          )}
+          {/* Objetivo y Alcance: retirados del formulario (oct 2026) */}
 
           {/* Responsable */}
           <div>
@@ -844,19 +815,18 @@ export default function FormularioCreacion({
                 disabled={!controlArchivoAplica}
               />
             </div>
-            <div className="flex items-center space-x-2 mt-6">
-              <Checkbox
+            <div>
+              <Label htmlFor="retention_management">Tiempo Retención Gestión (años)</Label>
+              <Input
                 id="retention_management"
                 name="retention_management"
-                checked={formData.retention_management}
+                type="number"
+                min="0"
+                value={formData.retention_management}
+                onChange={handleChange}
+                placeholder="Ej: 1"
                 disabled={!controlArchivoAplica}
-                onCheckedChange={(checked) =>
-                  setFormData(prev => ({ ...prev, retention_management: checked }))
-                }
               />
-              <Label htmlFor="retention_management" className="cursor-pointer">
-                Retención en Gestión
-              </Label>
             </div>
           </div>
 
