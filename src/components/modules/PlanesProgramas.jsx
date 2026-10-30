@@ -16,7 +16,6 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import ModuleHero from '@/components/ModuleHero';
-import DocumentViewerModal from '@/components/modules/GestionDocumental/DocumentViewerModal';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { generarPdfPlanSST } from '@/utils/pdfPlanSST';
@@ -50,7 +49,7 @@ const PLANES_SST = [
     cols: ['Actividad', 'Responsable', 'Recursos'], unidad: 'actividades' },
   { id: 'gerencia', label: 'Plan de Gerencia', color: '#6f7b2c', code: 'RE-DP-06', perm: 'sst_bienestar:gerencia',
     desc: 'Plan de trabajo anual de gerencia.',
-    cols: ['Actividad', 'Responsable', 'Recursos'], unidad: 'actividades' },
+    cols: ['Actividad', 'Presupuesto', 'Cronograma'], unidad: 'actividades' },
 ];
 
 const norm = (s = '') => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -238,14 +237,6 @@ export default function PlanesProgramas({ onNavigate }) {
   const [generando, setGenerando]   = useState(null);   // id del plan en generación
   const [visor, setVisor]           = useState(null);   // { url, title, fileName, color }
 
-  // ── Planes PL ──
-  const [planes, setPlanes]   = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
-  const [query, setQuery]     = useState('');
-  const [proceso, setProceso] = useState('todos');
-  const [abierto, setAbierto] = useState(null);
-
   useEffect(() => {
     (async () => {
       setLoadingSst(true);
@@ -253,28 +244,6 @@ export default function PlanesProgramas({ onNavigate }) {
       if (e) setErrorSst(e.message || 'No se pudieron cargar los planes SST.');
       else setResumen(data || []);
       setLoadingSst(false);
-    })();
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const { data, error: e } = await supabase
-          .from('document')
-          .select(`
-            id, code, name, objective, version, status, file_path, file_name, file_size, change_date,
-            document_type:document_type_id!inner ( code, name ),
-            process:process_id ( name )
-          `)
-          .eq('document_type.code', 'PL')
-          .in('status', ['published', 'approved'])
-          .not('file_path', 'is', null);
-        if (e) throw e;
-        setPlanes((data || []).sort((a, b) => a.code.localeCompare(b.code, 'es', { numeric: true })));
-      } catch (e) {
-        setError(e.message || 'No se pudieron cargar los planes.');
-      } finally {
-        setLoading(false);
-      }
     })();
   }, []);
 
@@ -335,27 +304,6 @@ export default function PlanesProgramas({ onNavigate }) {
 
   const diligenciar = (plan) => onNavigate?.('segBienestar', { plan: plan.id });
 
-  // ── Planes PL ──
-  const procesos = useMemo(() => [...new Set(planes.map((p) => p.process?.name).filter(Boolean))], [planes]);
-  const q = norm(query.trim());
-  const lista = planes.filter((p) =>
-    (proceso === 'todos' || p.process?.name === proceso) &&
-    (!q || norm(`${p.code} ${p.name} ${p.objective || ''} ${p.process?.name || ''}`).includes(q))
-  );
-
-  const descargarPL = async (p) => {
-    const { data, error: e } = await supabase.storage.from('documents').download(p.file_path);
-    if (e) { alert('No se pudo descargar: ' + e.message); return; }
-    const url = URL.createObjectURL(data);
-    const a = window.document.createElement('a');
-    a.href = url;
-    a.download = p.file_name || p.file_path.split('/').pop();
-    window.document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <div className="p-3 space-y-6">
       <ModuleHero
@@ -400,110 +348,6 @@ export default function PlanesProgramas({ onNavigate }) {
         )}
       </section>
 
-      {/* ═══════════════ PLANES DOCUMENTADOS (PL) ═══════════════ */}
-      <section className="space-y-3">
-        <SectionTitle extra={!loading && planes.length > 0 && (
-          <span style={{ fontSize: 11, color: '#9ca3af' }}>{planes.length} publicado{planes.length === 1 ? '' : 's'} · Gestión Documental</span>
-        )}>
-          Planes documentados
-        </SectionTitle>
-
-        {planes.length > 0 && (
-          <div className="flex flex-wrap gap-2 items-center">
-            <div className="relative flex-1" style={{ minWidth: 220 }}>
-              <Search size={15} className="absolute" style={{ left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar plan por nombre o código…"
-                style={{ width: '100%', padding: '9px 12px 9px 34px', borderRadius: 12, fontSize: 13, border: `1px solid ${C.sand}`, background: 'white', outline: 'none' }} />
-            </div>
-            {procesos.length > 1 && ['todos', ...procesos].map((p) => (
-              <button key={p} onClick={() => setProceso(p)}
-                style={{
-                  padding: '7px 12px', borderRadius: 20, fontSize: 12, cursor: 'pointer', fontWeight: 600,
-                  border: `1px solid ${proceso === p ? C.green : C.sand}`,
-                  background: proceso === p ? C.green : 'white', color: proceso === p ? 'white' : '#4b5563',
-                }}>
-                {p === 'todos' ? 'Todos' : p}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {loading && (
-          <div className="flex items-center justify-center gap-2 py-10" style={{ color: '#9ca3af', fontSize: 13 }}>
-            <Loader2 size={18} className="animate-spin" style={{ color: C.mint }} /> Cargando planes…
-          </div>
-        )}
-        {error && (
-          <div className="flex items-center gap-2" style={{ background: '#fef3e2', border: '1px solid #f3c98b', color: '#854f0b', borderRadius: 10, padding: '10px 14px', fontSize: 13 }}>
-            <AlertTriangle size={15} /> {error}
-          </div>
-        )}
-        {!loading && !error && lista.length === 0 && (
-          <div className="text-center py-10" style={{ color: '#9ca3af', fontSize: 13, background: 'white', border: `1px dashed ${C.sand}`, borderRadius: 16 }}>
-            <FileText size={28} style={{ margin: '0 auto 8px', opacity: 0.4 }} />
-            {planes.length === 0
-              ? <>Aún no hay planes publicados. Se cargan en <strong style={{ color: C.green }}>Gestión Documental</strong> con el tipo <strong>PL – Planes</strong>.</>
-              : 'Sin resultados para la búsqueda.'}
-          </div>
-        )}
-
-        {!loading && lista.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {lista.map((p) => {
-              const t = tipoArchivo(p.file_path);
-              return (
-                <div key={p.id} className="rounded-2xl overflow-hidden transition-shadow hover:shadow-lg"
-                  style={{ background: 'white', border: `1px solid ${C.sand}`, display: 'flex', flexDirection: 'column' }}>
-                  <button type="button" onClick={() => setAbierto(p)} className="relative text-left"
-                    style={{ background: C.green, padding: '18px 18px 16px', cursor: 'pointer', border: 'none' }}>
-                    <div className="absolute" style={{ top: -30, right: -30, width: 110, height: 110, borderRadius: '50%', background: C.mint, opacity: 0.12 }} />
-                    <div className="flex items-center justify-between relative">
-                      <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11, fontWeight: 700, color: C.mint, background: 'rgba(255,255,255,0.1)', borderRadius: 6, padding: '2px 8px' }}>
-                        {p.code}
-                      </span>
-                      <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.65)' }}>
-                        Versión {String(p.version ?? 1).padStart(2, '0')}{p.change_date ? ` · ${fmtFecha(p.change_date)}` : ''}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 mt-3 relative">
-                      <div style={{ width: 40, height: 40, borderRadius: 11, background: `${C.mint}25`, border: `1px solid ${C.mint}50`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <FileText size={19} style={{ color: C.mint }} />
-                      </div>
-                      <h3 style={{ color: 'white', fontFamily: 'Georgia, serif', fontSize: 16.5, fontWeight: 700, margin: 0, lineHeight: 1.25 }}>{p.name}</h3>
-                    </div>
-                  </button>
-                  <div style={{ padding: '14px 18px', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {p.objective && (
-                      <p style={{ fontSize: 12.5, color: '#4b5563', lineHeight: 1.6, margin: 0 }} className="line-clamp-3">{p.objective}</p>
-                    )}
-                    <div className="flex flex-wrap gap-1.5 items-center">
-                      {p.process?.name && (
-                        <span className="flex items-center gap-1" style={{ fontSize: 11, fontWeight: 600, color: C.green, background: `${C.mint}1f`, borderRadius: 20, padding: '2px 9px' }}>
-                          <Layers size={11} />{p.process.name}
-                        </span>
-                      )}
-                      <span style={{ fontSize: 10.5, fontWeight: 800, color: t.color, border: `1px solid ${t.color}55`, borderRadius: 6, padding: '1px 7px' }}>{t.label}</span>
-                    </div>
-                    <div className="flex gap-2 mt-auto pt-1">
-                      <button type="button" onClick={() => setAbierto(p)}
-                        className="flex-1 flex items-center justify-center gap-1.5"
-                        style={{ background: C.green, color: 'white', borderRadius: 10, padding: '8px 10px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer' }}>
-                        <Eye size={15} /> Ver plan
-                      </button>
-                      <button type="button" onClick={() => descargarPL(p)} title="Descargar"
-                        className="flex items-center justify-center"
-                        style={{ background: 'white', color: C.olive, border: `1px solid ${C.olive}`, borderRadius: 10, padding: '8px 12px', cursor: 'pointer' }}>
-                        <Download size={15} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
       {/* ═══════════════ PROGRAMAS (en definición) ═══════════════ */}
       <section className="space-y-3">
         <SectionTitle>Programas</SectionTitle>
@@ -525,7 +369,6 @@ export default function PlanesProgramas({ onNavigate }) {
         </div>
       </section>
 
-      <DocumentViewerModal document={abierto} isOpen={!!abierto} onClose={() => setAbierto(null)} />
       {visor && <VisorPdf visor={visor} onClose={() => setVisor(null)} />}
     </div>
   );

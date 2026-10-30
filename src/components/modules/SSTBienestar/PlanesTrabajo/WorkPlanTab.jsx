@@ -23,6 +23,7 @@ import {
   XCircle, Clock, Calendar,
 } from 'lucide-react';
 import { exportWorkPlan } from '@/utils/exportWorkPlan';
+import { exportPlanGerencia } from '@/utils/exportPlanGerencia';
 import { useFormato } from '@/hooks/useFormatoVinculado';
 
 // ─── Paleta ──────────────────────────────────────────────────────────
@@ -66,6 +67,7 @@ const PLAN_CONFIG = {
     perm:     'sst_bienestar:gerencia',
     color:    '#6f7b2c',
     code:     'RE-DP-06',
+    soloFormato: true,   // RE-DP-06: Actividad · Presupuesto · Cronograma (sin responsable, recursos, personas ni horas)
   },
   promocion_prevencion: {
     title:    'Promoción y Prevención',
@@ -313,7 +315,7 @@ const EMPTY = {
   evidence_text:'', evidence_date:'', is_executed: false,
 };
 
-function ItemModal({ open, onClose, item, planId, onSave }) {
+function ItemModal({ open, onClose, item, planId, onSave, soloFormato = false }) {
   const [form, setForm]     = useState({ ...EMPTY });
   const [loading, setLoading] = useState(false);
   const [err, setErr]       = useState('');
@@ -371,6 +373,7 @@ function ItemModal({ open, onClose, item, planId, onSave }) {
               placeholder="Describe la actividad a realizar" />
           </div>
 
+          {!soloFormato && (<>
           {/* Responsable */}
           <div>
             <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>Responsable</label>
@@ -385,13 +388,15 @@ function ItemModal({ open, onClose, item, planId, onSave }) {
               className="text-sm" disabled={loading} placeholder="Ej: Humano, Administrativo, Tecnológico" />
           </div>
 
+          </>)}
+
           {/* Fila: Personas + Horas + Presupuesto */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
+          <div style={{ display:'grid', gridTemplateColumns: soloFormato ? '1fr' : '1fr 1fr 1fr', gap:10 }}>
             {[
               { key:'num_persons', label:'# Personas', placeholder:'0' },
               { key:'hours',       label:'Horas',       placeholder:'0' },
               { key:'budget',      label:'Presupuesto (COP)', placeholder:'0' },
-            ].map(f => (
+            ].filter(f => !soloFormato || f.key === 'budget').map(f => (
               <div key={f.key}>
                 <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>{f.label}</label>
                 <Input type="number" min={0} value={form[f.key] || ''}
@@ -507,7 +512,8 @@ export default function WorkPlanTab({ planType }) {
     setExporting(true); setExportErr('');
     try {
       // Forzar plan_type desde props para evitar estado desincronizado
-      await exportWorkPlan(items, { ...activePlan, plan_type: planType }, trazabilidad);
+      if (planType === 'gerencia') await exportPlanGerencia(items, activePlan, formato);
+      else await exportWorkPlan(items, { ...activePlan, plan_type: planType }, trazabilidad);
     } catch (e) {
       setExportErr(e.message);
     } finally {
@@ -610,7 +616,7 @@ export default function WorkPlanTab({ planType }) {
             background: 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)',
             display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <p style={{ color:'#fff', fontWeight:800, fontSize:13, letterSpacing:'0.03em' }}>
-              PROPUESTA PLAN DE TRABAJO — {cfg.title.toUpperCase()} {activePlan.year}
+              {cfg.soloFormato ? 'PLAN DE TRABAJO ANUAL' : 'PROPUESTA PLAN DE TRABAJO'} — {cfg.title.toUpperCase()} {activePlan.year}
             </p>
             <span style={{ fontSize:11, color:'rgba(255,255,255,0.75)' }}>
               {formato ? `${formato.code} · v${String(formato.version ?? 1).padStart(2, '0')}` : `${cfg.code} · v1`}
@@ -623,10 +629,12 @@ export default function WorkPlanTab({ planType }) {
                 {/* Grupos */}
                 <tr style={{ background:'#fffbeb' }}>
                   <Th w={200} rowSpan={2} style={{ borderLeft:'none' }}>ACTIVIDADES</Th>
+                  {!cfg.soloFormato && (<>
                   <Th w={110} rowSpan={2}>RESPONSABLE</Th>
                   <Th w={120} rowSpan={2}>RECURSOS</Th>
                   <Th w={55}  rowSpan={2} center># PERS.</Th>
                   <Th w={50}  rowSpan={2} center>HORAS</Th>
+                  </>)}
                   <Th w={90}  rowSpan={2} center>PRESUPUESTO</Th>
                   <Th w={432} colSpan={12} center
                     style={{ background:'#fef3c7', color:'#92400e', fontWeight:800 }}>
@@ -655,6 +663,7 @@ export default function WorkPlanTab({ planType }) {
                           </span>
                         )}
                       </Td>
+                      {!cfg.soloFormato && (<>
                       <Td>
                         <span style={{ fontSize:11, color:'#374151' }}>
                           {item.responsible || <em style={{ color:'#9ca3af' }}>—</em>}
@@ -667,6 +676,7 @@ export default function WorkPlanTab({ planType }) {
                       </Td>
                       <Td center><span style={{ fontSize:11 }}>{item.num_persons ?? '—'}</span></Td>
                       <Td center><span style={{ fontSize:11 }}>{item.hours ?? '—'}</span></Td>
+                      </>)}
                       <Td center>
                         <span style={{ fontWeight:700, color: item.budget ? C.olive : '#9ca3af' }}>
                           {fmtCOP(item.budget)}
@@ -711,7 +721,7 @@ export default function WorkPlanTab({ planType }) {
 
                 {/* Fila total presupuesto */}
                 <tr style={{ background:'#fffbeb', borderTop:`2px solid #f59e0b40` }}>
-                  <td colSpan={5} style={{ padding:'10px 14px', textAlign:'right',
+                  <td colSpan={cfg.soloFormato ? 1 : 5} style={{ padding:'10px 14px', textAlign:'right',
                     fontWeight:700, fontSize:12, color:'#92400e', borderLeft:'none' }}>
                     TOTAL PRESUPUESTO
                   </td>
@@ -822,6 +832,7 @@ export default function WorkPlanTab({ planType }) {
         onClose={() => setModalItem(null)}
         item={modalItem?.id ? modalItem : null}
         planId={activePlan?.id}
+        soloFormato={!!cfg.soloFormato}
         onSave={async (payload) => {
           if (modalItem?.id) await updateItem(modalItem.id, payload);
           else await createItem(activePlan.id, payload);
