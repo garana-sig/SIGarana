@@ -196,7 +196,7 @@ export default function HomePublico() {
       </nav>
 
       {/* ══════════════════════════════════════════════════════════════
-          HERO — fondo imgfondo + SIG.png como mockup
+          HERO — fondo imgfondo + sig-engranajes.png (Calidad · SGSST · BASC)
       ══════════════════════════════════════════════════════════════ */}
       <section id="inicio" style={s.hero}>
         {/* Fondo textural muy transparente */}
@@ -231,13 +231,8 @@ export default function HomePublico() {
 
           {/* Imagen SIG como mockup flotante */}
           <div style={s.heroRight} className="anim-fade-up-delay">
-            <div style={s.sigCard}>
-              <div style={s.sigCardTop}>
-                <span style={s.sigDot1} /><span style={s.sigDot2} /><span style={s.sigDot3} />
-                <span style={s.sigTitle}> SIGarana</span>
-              </div>
-              <img src="/Estructura_de_proceso.jpg" alt="Sistema Integrado de Gestión " style={s.sigImg} />
-            </div>
+            {/* Solo los engranajes (PNG con fondo transparente), sin marco */}
+            <img src="/sig-engranajes.png" alt="Sistema Integrado de Gestión: Calidad, SGSST y BASC" style={s.sigGears} />
           </div>
         </div>
 
@@ -265,7 +260,7 @@ export default function HomePublico() {
                 aseguramos versatilidad, excelencia y oportunidad en la entrega.
               </p>
               <p style={s.aboutBody}>
-                Llevamos <strong style={{ color: C.mint }}>19 años</strong> en el mercado nacional de trajes de baño,
+                Llevamos <strong style={{ color: C.mint }}>20 años</strong> en el mercado nacional de trajes de baño,
                 con experiencia de exportación en Ecuador, Perú y EE.UU., con nuestra marca propia
                 <strong style={{ color: C.mint }}> GARANA ART</strong> — "Garantizando el realce natural de su belleza".
                 Nuestra planta cuenta con más de <strong style={{ color: C.mint }}>50 mujeres cabeza de hogar</strong> encargadas
@@ -278,7 +273,8 @@ export default function HomePublico() {
                 <p style={s.propuestaText}>
                   Desarrollamos vestidos de baño que se adaptan perfectamente al cuerpo de la mujer,
                   combinando seguridad y comodidad. Empoderamos a nuestras clientas a través de prendas
-                  que realzan su estilo único, brindándoles confianza y bienestar.
+                  que realzan su estilo único, brindándoles confianza y bienestar. Además, garantizamos a nuestros
+                  clientes y distribuidores versatilidad, excelencia en cada diseño y puntualidad en la entrega.
                 </p>
               </div>
             </div>
@@ -707,6 +703,7 @@ const s = {
   sigDot3: { width: 10, height: 10, borderRadius: '50%', backgroundColor: '#22c55e' },
   sigTitle: { color: 'rgba(255,255,255,0.5)', fontSize: 11, marginLeft: 4, fontWeight: 600, letterSpacing: 1 },
   sigImg: { width: '100%', display: 'block', objectFit: 'cover' },
+  sigGears: { width: '100%', maxWidth: 520, display: 'block', margin: '0 auto', filter: 'drop-shadow(0 18px 40px rgba(0,0,0,0.35))' },
   scrollIndicator: {
     position: 'absolute', bottom: 32, left: '50%',
     transform: 'translateX(-50%)', zIndex: 1,

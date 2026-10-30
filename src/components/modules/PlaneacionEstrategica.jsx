@@ -699,9 +699,9 @@ function PlataformaTab() {
     { title: 'Misión',  icon: '🎯', color: G.primary,
       text: 'Confeccionar y comercializar trajes de baño cómodos e innovadores, en una empresa consolidada, versátil, competente y con capacidad de adaptación, enfocada en la satisfacción de sus clientes, el bienestar y la seguridad de sus colaboradores, apoyados en la mejora continua de procesos y la competencia laboral.' },
     { title: 'Visión',  icon: '👁️', color: G.mint,
-      text: 'INDECON tendrá una rentabilidad sostenible mediante el posicionamiento de su marca "Garana Art" y mayor participación en el mercado nacional e internacional, con un ambiente extraordinario de trabajo y un equipo humano altamente motivado.' },
+      text: 'INDECON tendrá una rentabilidad sostenible, mediante el posicionamiento de su marca "Garana Art" y mayor participación en el mercado nacional e internacional, con un ambiente extraordinario de trabajo, un equipo humano altamente motivado y una cultura de excelencia operativa, que garanticen la fidelización de sus clientes.' },
     { title: 'Propuesta de Valor', icon: '💎', color: G.olive,
-      text: 'Ofrecer a las mujeres de hoy prendas que combinan seguridad y comodidad, empoderándolas a través de su estilo. Para nuestros clientes y distribuidores, aseguramos versatilidad, excelencia y oportunidad en la entrega.' },
+      text: 'Nuestra empresa se dedica a desarrollar y ofrecer vestidos de baño que se adaptan perfectamente al cuerpo de la mujer, combinando seguridad y comodidad. Empoderamos a nuestras clientas a través de prendas que realzan su estilo único, brindándoles confianza y bienestar. Además, nos comprometemos a garantizar a nuestros clientes y distribuidores versatilidad, excelencia en cada diseño y puntualidad en la entrega de nuestros productos.' },
   ];
   const VALORES = ['🤝 Honestidad', '✅ Responsabilidad', '🌿 Respeto', '❤️ Amor', '⚓ Lealtad'];
 
@@ -718,7 +718,7 @@ function PlataformaTab() {
             INDECON S.A.S. · Plataforma Estratégica
           </p>
           <h2 style={{ fontSize: 30, fontWeight: 900, letterSpacing: -0.5, marginBottom: 4 }}>Garana Art</h2>
-          <p style={{ opacity: 0.8, fontSize: 13 }}>Riosucio, Caldas · Desde 2006 · 19 años de excelencia</p>
+          <p style={{ opacity: 0.8, fontSize: 13 }}>Riosucio, Caldas · Desde 2006 · 20 años de excelencia</p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {['ISO 9001', 'SELLO SOLAR PREMIUM', 'CEMEX'].map(c => (
@@ -776,7 +776,7 @@ const P26_POLITICAS = [
     title: 'Política del Sistema Integrado de Gestión (SIG + BASC)',
     icon: ShieldCheck,
     color: G.primary,
-    text: 'INDECON S.A.S integra su Sistema de Gestión de Calidad (ISO 9000), el sistema de gestión de Seguridad y Salud en el Trabajo (Decreto 1072) y los estándares de seguridad BASC. Se compromete con la seguridad de la cadena de suministros, la prevención de actividades ilícitas y la integridad de la información, superando las expectativas de clientes, proveedores y socios.',
+    text: 'INDECON S.A.S., empresa manufacturera ubicada en el municipio de Riosucio, Caldas, Colombia, confecciona prendas con calidad, elaboradas por personal idóneo y capacitado mediante procesos en mejora continua, reduciendo los riesgos laborales y promoviendo la salud en el trabajo, comprometidos con la seguridad en la cadena de suministros previniendo actividades ilícitas, garantizando la seguridad del personal, clientes, proveedores y socios de la empresa, con la integridad de la información, cumpliendo con los requisitos legales, estándares BASC y superando las expectativas de nuestros clientes, con una dirección comprometida con el medio ambiente y el bienestar de sus colaboradores. Integra la norma ISO 9001, el SG-SST (Decreto 1072) y los estándares BASC (Manual MC-DP-01, rev. 18/05/2026).',
   },
   {
     id: 'consumo',
@@ -815,7 +815,7 @@ const P26_POLITICAS = [
   },
 ];
 
-const P26_FODA = {
+const P26_DOFA = {
   debilidades: [
     'Falta de seguridad de la información',
     'Falta de conocimiento en el personal administrativo sobre seguridad informática',
@@ -1047,8 +1047,8 @@ function Plan2026Tab() {
         </div>
       </Plan2026Section>
 
-      {/* FODA */}
-      <Plan2026Section title="Diagnóstico Estratégico — FODA" icon={Swords} color={G.olive}>
+      {/* DOFA */}
+      <Plan2026Section title="Diagnóstico Estratégico — DOFA" icon={Swords} color={G.olive}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
           {[
             { key: 'debilidades',    label: 'Debilidades',    color: '#dc2626', bg: '#fef2f2' },
@@ -1059,7 +1059,7 @@ function Plan2026Tab() {
             <div key={box.key} style={{ background: box.bg, borderRadius: 12, padding: '14px 16px' }}>
               <p style={{ fontSize: 13, fontWeight: 800, color: box.color, marginBottom: 10 }}>{box.label}</p>
               <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 7 }}>
-                {P26_FODA[box.key].map((item, i) => (
+                {P26_DOFA[box.key].map((item, i) => (
                   <li key={i} style={{ display: 'flex', gap: 7, fontSize: 12, color: '#374151', lineHeight: 1.5 }}>
                     <span style={{ color: box.color, fontWeight: 900 }}>•</span> {item}
                   </li>

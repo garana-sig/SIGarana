@@ -4,7 +4,8 @@ import React, { useState, useMemo } from 'react';
 import { useDocuments, useDocumentTypes, useProcesses } from '@/hooks/useDocuments';
 import { useFileDownload } from '@/hooks/useFileDownload';
 import ApprovalModal from './ApprovalModal';
-import { exportListadoMaestro } from '@/utils/exportListadoMaestro'; // 🆕 RE-DP-11
+import { exportListadoMaestro } from '@/utils/exportListadoMaestro';
+import { useFormato, etiquetaFormato } from '@/hooks/useFormatoVinculado';
 
 // 🆕 Fechas del documento (change_date) sin desfase de zona horaria.
 // Se guardan como fecha "pura" ('2023-02-22 00:00+00'); con new Date() se
@@ -346,18 +347,19 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
 
   const handleOpenViewerModal = (doc) => { setDocumentToView(doc); setIsViewerModalOpen(true); };
 
-  // 🆕 Descarga en el formato oficial RE-DP-11 (plantilla del bucket templates).
-  // Respeta los filtros de pantalla y exporta TODAS las páginas.
+  // Descarga sobre el formato vigente de Gestión Documental (formato_vinculado
+  // 'listado_maestro' → hoy RE-GS-07). Respeta los filtros de pantalla.
   // Sin filtro de estado → solo documentos vigentes (publicados).
+  const { formato: formatoLM } = useFormato('listado_maestro');
   const [exportingLM, setExportingLM] = useState(false);
   const handleExportRE_DP_11 = async () => {
     const docs = selectedStatus ? activeDocuments : activeDocuments.filter(d => d.status === 'published');
     if (!docs.length) { alert('No hay documentos para exportar con los filtros actuales.'); return; }
     setExportingLM(true);
     try {
-      await exportListadoMaestro({ documentos: docs, procesos: processes });
+      await exportListadoMaestro({ documentos: docs, procesos: processes, formato: formatoLM });
     } catch (err) {
-      console.error('❌ Error exportando RE-DP-11:', err);
+      console.error('❌ Error exportando el Listado Maestro:', err);
       alert(err.message || 'No se pudo generar el Listado Maestro.');
     } finally {
       setExportingLM(false);
@@ -445,18 +447,18 @@ export default function ListadoMaestro({ onCreateNew, onEdit, onView }) {
                   Corrección directa activa
                 </Badge>
               )}
-              {/* 🆕 Descargar RE-DP-11 */}
+              {/* Descargar Listado Maestro (formato de Gestión Documental) */}
               <Button
                 variant="outline"
                 onClick={handleExportRE_DP_11}
-                disabled={exportingLM || loading}
-                title="Descargar el Listado Maestro en el formato RE-DP-11 (respeta los filtros)"
+                disabled={exportingLM || loading || !formatoLM}
+                title={`Descargar el Listado Maestro en el formato ${etiquetaFormato(formatoLM)} (respeta los filtros)`}
                 style={{ borderColor: '#2e5244', color: '#2e5244' }}
               >
                 {exportingLM
                   ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   : <FileSpreadsheet className="h-4 w-4 mr-2" />}
-                Descargar RE-DP-11
+                Descargar {formatoLM?.code || 'Listado Maestro'}
               </Button>
               {onCreateNew && (
                 <Button onClick={onCreateNew} style={{ backgroundColor: '#2e5244' }} className="text-white">
