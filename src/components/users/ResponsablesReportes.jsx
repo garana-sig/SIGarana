@@ -12,6 +12,10 @@ import { useResponsablesReportes } from '@/hooks/useReportes';
 
 const C = { green: '#2e5244', mint: '#6dbd96', olive: '#6f7b2c', sand: '#dedecc', dark: '#1a2e25' };
 
+// Tipos retirados que no se muestran en este modal (operación inusual salió de la hoja 30-oct-2026;
+// su registro RE-GF-10 sigue en Mejoramiento Continuo)
+const OCULTOS = ['operacion_inusual'];
+
 // (30-oct-2026) Mismo estilo que la hoja: ⛑️ → casco SST; "· SST" / "· BASC" → chip amarillo
 function IconoTipo({ icono }) {
   if (icono === '⛑️' || icono === '⛑') return (
@@ -60,7 +64,7 @@ export default function ResponsablesReportes({ open, onClose, onToast }) {
           {loading && <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin" style={{ color: C.mint }} /></div>}
           {error && <p style={{ color: '#b91c1c', fontSize: 13 }}>{error}</p>}
 
-          {!loading && [...tipos].sort((a, b) => (b.is_active - a.is_active) || (a.orden - b.orden)).map((t) => {
+          {!loading && tipos.filter((t) => !OCULTOS.includes(t.codigo)).sort((a, b) => (b.is_active - a.is_active) || (a.orden - b.orden)).map((t) => {
             const disponibles = usuarios.filter((u) => !t.responsables.some((r) => r.user_id === u.id));
             return (
               <div key={t.codigo} style={{ border: `1px solid ${C.sand}`, borderLeft: `5px solid ${t.color}`, borderRadius: 14, padding: '12px 14px', opacity: t.is_active ? 1 : 0.6 }}>
