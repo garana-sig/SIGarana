@@ -112,7 +112,7 @@ export function useEvaluacionProveedores() {
           aspectos_por_mejorar: formData.aspectos_por_mejorar?.trim() || null,
           realizado_por:        formData.realizado_por || null,
           aprobado_por:         formData.aprobado_por  || null,
-          status:               'draft',
+          status:               'approved',   // 31-oct-2026: sin flujo de aprobación
           created_by:           user?.id,
         })
         .select()

@@ -543,7 +543,7 @@ export default function EvaluacionTab() {
                             }
                           </button>
                         )}
-                        {canEdit && ev.status === 'draft' && (
+                        {canEdit && (
                           <button
                             onClick={() => handleOpenEdit(ev)}
                             className="p-1.5 rounded-lg hover:bg-blue-50 transition-colors"
