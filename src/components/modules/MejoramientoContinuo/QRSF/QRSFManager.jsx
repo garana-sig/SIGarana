@@ -912,7 +912,7 @@ export default function QRSFManager({ onBack }) {
         </button>
         <div className="flex-1">
           <h2 className="text-xl font-bold" style={{ color:C.primary }}>QRSF / Devoluciones</h2>
-          <p className="text-sm text-gray-500">Quejas · Reclamos · Sugerencias · Felicitaciones · Devoluciones</p>
+          <p className="text-sm text-gray-500">Quejas · Reclamos · Sugerencias · Felicitaciones </p>
         </div>
         <Button variant="outline" size="sm" onClick={fetchAll} disabled={loading} style={{ borderColor:C.accent, color:C.primary }}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin"/> : <RefreshCw className="h-4 w-4"/>}
