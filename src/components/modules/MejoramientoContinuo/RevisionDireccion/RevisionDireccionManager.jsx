@@ -27,6 +27,10 @@ import {
   ReferenceLine, ComposedChart,
 } from 'recharts';
 import ExcelJS    from 'exceljs';
+
+// (1-nov-2026) Devoluciones OCULTAS por ahora (tarjeta, gráficas, avisos y Excel).
+// Los datos se siguen consultando; para volver a mostrarlas: true.
+const MOSTRAR_DEVOLUCIONES = false;
 import { saveAs } from 'file-saver';
 
 // ─── Tema Power BI oscuro ────────────────────────────────────────────────────
@@ -864,9 +868,11 @@ export default function RevisionDireccionManager({ onBack }) {
       hs(ws1,['Uds NC','Total Prod','% PNC','Meta','Meses sin producción','','']);
       ws1.addRow([pncStats.totalUnidades,pncStats.totalProd,`${fmtNum(pncStats.pctPNC)}%`,'<2,5%',pncStats.mesesSinProd.join(', ')||'—','','']); ws1.addRow([]);
 
+      if (MOSTRAR_DEVOLUCIONES) {
       ws1.addRow(['DEVOLUCIONES']); ws1.getCell(`A${ws1.rowCount}`).font={bold:true,color:{argb:'FF6F7B2C'}};
       hs(ws1,['Registros','Unidades','Ventas','% Devolución','% Respondidas','Meses sin ventas','']);
       ws1.addRow([devStats.registros,devStats.unidades,devStats.totVentas,`${fmtNum(devStats.pct)}%`,`${devStats.pctResp}%`,devStats.mesesSinVentas.join(', ')||'—','']); ws1.addRow([]);
+      }
 
       ws1.addRow(['ENCUESTAS']); ws1.getCell(`A${ws1.rowCount}`).font={bold:true,color:{argb:'FF6F7B2C'}};
       hs(ws1,['Tipo','Respuestas','Score Promedio','Escala','','','']);
@@ -955,7 +961,7 @@ export default function RevisionDireccionManager({ onBack }) {
         <div style={{ padding:'16px 20px', display:'flex', flexDirection:'column', gap:16 }}>
 
           {/* ── Avisos de datos ── */}
-          {(avisos.length>0 || pncStats.mesesSinProd.length>0 || devStats.mesesSinVentas.length>0) && (
+          {(avisos.length>0 || pncStats.mesesSinProd.length>0 || (MOSTRAR_DEVOLUCIONES && devStats.mesesSinVentas.length>0)) && (
             <div style={{ backgroundColor:'rgba(245,158,11,0.08)', border:`1px solid ${T.warning}55`, borderRadius:8, padding:'8px 12px', display:'flex', gap:8, alignItems:'flex-start' }}>
               <AlertTriangle size={14} style={{ color:T.warning, marginTop:1, flexShrink:0 }}/>
               <div style={{ fontSize:11, color:T.textDim, lineHeight:1.5 }}>
@@ -963,7 +969,7 @@ export default function RevisionDireccionManager({ onBack }) {
                 {pncStats.mesesSinProd.length>0 && (
                   <div>PNC: falta la <b>producción mensual</b> de {pncStats.mesesSinProd.join(', ')} — esos meses no entran en el % PNC (cárgala en Producto No Conforme).</div>
                 )}
-                {devStats.mesesSinVentas.length>0 && (
+                {MOSTRAR_DEVOLUCIONES && devStats.mesesSinVentas.length>0 && (
                   <div>Devoluciones: faltan las <b>ventas mensuales</b> de {devStats.mesesSinVentas.join(', ')} — esos meses no entran en el % de devolución.</div>
                 )}
               </div>
@@ -992,9 +998,11 @@ export default function RevisionDireccionManager({ onBack }) {
               title="% Producto No Conforme" value={fmtNum(pncStats.pctPNC)} unit="%"
               sub={`Meta <2,5% · ${pncStats.totalUnidades} uds NC`}
               trend={-(pncStats.pctPNC-2.5)} />
+            {MOSTRAR_DEVOLUCIONES && (
             <KpiTile icon={Activity}      color={T.orange}  delay={0.17}
               title="Devoluciones"           value={fmtNum(devStats.pct)} unit="%"
               sub={`${devStats.unidades} uds · ${devStats.registros} registros`} />
+            )}
             <KpiTile icon={Star}
               color={scoreColor(encStats.satisfaccion.avg)}
               delay={0.19}
@@ -1305,7 +1313,7 @@ export default function RevisionDireccionManager({ onBack }) {
           {/* ════════════════════════════════════════════
               SECCIÓN 4 — QRSF
           ════════════════════════════════════════════ */}
-          <SectionDivider title="QRSF / Devoluciones" icon={HelpCircle} color={T.orange} />
+          <SectionDivider title={MOSTRAR_DEVOLUCIONES ? 'QRSF / Devoluciones' : 'QRSF'} icon={HelpCircle} color={T.orange} />
           <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:12 }}>
             <Panel title="Tendencia Mensual por Tipo" icon={HelpCircle} color={T.orange} delay={0.22}>
               {tendenciaQRSF.length===0 ? (
@@ -1371,6 +1379,7 @@ export default function RevisionDireccionManager({ onBack }) {
             </Panel>
           </div>
 
+          {MOSTRAR_DEVOLUCIONES && (
           <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:12 }}>
             <Panel title="Devoluciones — Unidades y % sobre Ventas" icon={Activity} color={T.orange} delay={0.27}>
               {devStats.tendencia.length===0 ? (
@@ -1412,6 +1421,7 @@ export default function RevisionDireccionManager({ onBack }) {
               </div>
             </Panel>
           </div>
+          )}
 
           {/* ════════════════════════════════════
               PLACEHOLDER — Próximos módulos

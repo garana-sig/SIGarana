@@ -27,6 +27,10 @@ import {
 } from '@/hooks/useQRSF';
 import { useAuth } from '@/context/AuthContext';
 
+// (1-nov-2026) Devoluciones OCULTAS por ahora. Para volver a mostrarlas: true.
+// No se borra nada: datos, código y exportación siguen intactos.
+const MOSTRAR_DEVOLUCIONES = false;
+
 // ── Paleta ──────────────────────────────────────────────────────
 const C = { primary:'#2e5244', secondary:'#6f7b2c', accent:'#6dbd96', beige:'#dedecc' };
 
@@ -279,7 +283,7 @@ function ViewQRSFModal({ reg, onClose }) {
 }
 
 // ═════════════════════════════════════════════════════════════════
-// MODAL VER DEVOLUCIÓN
+// MODAL VER DEVOLUCIÓN (oculto mientras MOSTRAR_DEVOLUCIONES = false)
 // ═════════════════════════════════════════════════════════════════
 function ViewDevModal({ reg, onClose }) {
   if (!reg) return null;
@@ -911,7 +915,7 @@ export default function QRSFManager({ onBack }) {
           <ChevronLeft className="h-5 w-5"/>
         </button>
         <div className="flex-1">
-          <h2 className="text-xl font-bold" style={{ color:C.primary }}>QRSF / Devoluciones</h2>
+          <h2 className="text-xl font-bold" style={{ color:C.primary }}>QRSF </h2>
           <p className="text-sm text-gray-500">Quejas · Reclamos · Sugerencias · Felicitaciones </p>
         </div>
         <Button variant="outline" size="sm" onClick={fetchAll} disabled={loading} style={{ borderColor:C.accent, color:C.primary }}>
@@ -930,9 +934,9 @@ export default function QRSFManager({ onBack }) {
       <div className="flex gap-1 p-1 rounded-xl" style={{ background:'#f5f5ef' }}>
         {[
           { id:'qrsf',         label:'QRSF',         icon:MessageSquare, count:qrsfRegistros.length },
-         // { id:'devoluciones', label:'Devoluciones',  icon:PackageX,      count:devRegistros.length  },
+          MOSTRAR_DEVOLUCIONES && { id:'devoluciones', label:'Devoluciones',  icon:PackageX,      count:devRegistros.length  },
           { id:'indicadores',  label:'Indicadores',   icon:BarChart3,     count:null                 },
-        ].map(t => (
+        ].filter(Boolean).map(t => (
           <button key={t.id} onClick={() => { setTab(t.id); setSearch(''); }}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all"
             style={{ background:tab===t.id?C.primary:'transparent', color:tab===t.id?'#fff':'#6B7280',
@@ -1097,7 +1101,7 @@ export default function QRSFManager({ onBack }) {
       )}
 
       {/* ══════════ TAB DEVOLUCIONES ══════════ */}
-      {tab === 'devoluciones' && (
+      {MOSTRAR_DEVOLUCIONES && tab === 'devoluciones' && (
         <Card className="shadow-sm border-0">
           <CardHeader className="pb-3 px-4 pt-4">
             <div className="flex flex-wrap items-center gap-2">
@@ -1226,13 +1230,13 @@ export default function QRSFManager({ onBack }) {
       {tab === 'indicadores' && (
         <div className="space-y-5">
           {/* KPIs row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className={`grid grid-cols-2 ${MOSTRAR_DEVOLUCIONES ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-3`}>
             {[
               { label:'Total QRSF', value:indicadores.total, sub:`${indicadores.total-indicadores.cerrados} abierto(s)`, icon:MessageSquare, color:C.primary },
               { label:'Tasa Cierre', value:`${indicadores.tasaCierre}%`, sub:`${indicadores.cerrados} cerrado(s)`, icon:CheckCircle, color:indicadores.tasaCierre>=80?'#22C55E':indicadores.tasaCierre>=50?'#F59E0B':'#EF4444' },
               { label:'T. Prom. Respuesta', value:indicadores.tiempoPromedio!==null?`${indicadores.tiempoPromedio} días`:'S/D', sub:'en casos cerrados', icon:AlertCircle, color:semaforoT(indicadores.tiempoPromedio) },
-              { label:'Devoluciones', value:devRegistros.length, sub:`${indicadores.totalDevUds} unidades`, icon:PackageX, color:C.secondary },
-            ].map(k => (
+              MOSTRAR_DEVOLUCIONES && { label:'Devoluciones', value:devRegistros.length, sub:`${indicadores.totalDevUds} unidades`, icon:PackageX, color:C.secondary },
+            ].filter(Boolean).map(k => (
               <Card key={k.label} className="border-0 shadow-sm">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
@@ -1299,7 +1303,7 @@ export default function QRSFManager({ onBack }) {
           </div>
 
           {/* Causas Devoluciones */}
-          {indicadores.reclasifTop.length > 0 && (
+          {MOSTRAR_DEVOLUCIONES && indicadores.reclasifTop.length > 0 && (
             <Card className="border-0 shadow-sm">
               <CardHeader className="pb-2 pt-4 px-4">
                 <CardTitle className="text-sm font-semibold" style={{ color:C.secondary }}>Causas más Comunes — Devoluciones</CardTitle>
@@ -1341,7 +1345,7 @@ export default function QRSFManager({ onBack }) {
           </Card>
 
           {/* Devoluciones vs Ventas */}
-          <Card className="border-0 shadow-sm">
+          {MOSTRAR_DEVOLUCIONES && (<Card className="border-0 shadow-sm">
             <CardHeader className="pb-2 pt-4 px-4">
               <div className="flex items-center gap-2">
                 <TrendingDown className="h-4 w-4" style={{ color:C.secondary }}/>
@@ -1353,7 +1357,7 @@ export default function QRSFManager({ onBack }) {
                 onSave={async(d)=>{ await saveDevVentas(d); await fetchAll(); }}
                 onDelete={async(id)=>{ await deleteDevVentas(id); await fetchAll(); }} />
             </CardContent>
-          </Card>
+          </Card>)}
         </div>
       )}
 

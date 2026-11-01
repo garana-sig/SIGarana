@@ -95,7 +95,7 @@ export const ESTRUCTURA_PERMISOS = [
           ] },
         { id: 'pnc', nombre: 'Producto No Conforme', ...crud('auditorias:producto_no_conforme'),
           extras: [{ code: 'auditorias:producto_no_conforme:export', label: 'Exportar' }] },
-        { id: 'qrsf', nombre: 'QRSF y Devoluciones', ...crud('auditorias:qrsf'),
+        { id: 'qrsf', nombre: 'QRSF', ...crud('auditorias:qrsf'),
           extras: [
             { code: 'auditorias:qrsf:close',  label: 'Cerrar' },
             { code: 'auditorias:qrsf:export', label: 'Exportar' },

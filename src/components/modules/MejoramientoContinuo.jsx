@@ -113,7 +113,7 @@ const SUBMODULES = [
   {
     id: 'qrsf', name: 'QRSF',
     permission: 'auditorias:qrsf:view',
-    description: 'Quejas, reclamos, sugerencias, felicitaciones y devoluciones',
+    description: 'Quejas, reclamos, sugerencias y felicitaciones',
     icon: HelpCircle, color: '#2e5244',
     gradient: 'linear-gradient(135deg, #2e5244 0%, #6dbd96 100%)',
     badge: 'RE-GC-03', enabled: true,
