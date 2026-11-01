@@ -930,7 +930,7 @@ export default function QRSFManager({ onBack }) {
       <div className="flex gap-1 p-1 rounded-xl" style={{ background:'#f5f5ef' }}>
         {[
           { id:'qrsf',         label:'QRSF',         icon:MessageSquare, count:qrsfRegistros.length },
-          { id:'devoluciones', label:'Devoluciones',  icon:PackageX,      count:devRegistros.length  },
+         // { id:'devoluciones', label:'Devoluciones',  icon:PackageX,      count:devRegistros.length  },
           { id:'indicadores',  label:'Indicadores',   icon:BarChart3,     count:null                 },
         ].map(t => (
           <button key={t.id} onClick={() => { setTab(t.id); setSearch(''); }}
