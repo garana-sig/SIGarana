@@ -65,6 +65,8 @@ const PERIOD_LABELS = {
     return `Semestre ${s} ${new Date().getFullYear()}`;
   },
   anual:      () => `${new Date().getFullYear()}`,
+  // Una medición por cada exportación (fecha = hoy)
+  por_exportacion: () => `Exportación ${new Date().toLocaleDateString('es-CO')}`,
 };
 
 export default function MedicionModal({ indicator, onSave, onClose }) {

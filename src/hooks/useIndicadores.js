@@ -15,6 +15,7 @@ export const PERSPECTIVES = [
   { value: 'cliente',                label: 'Cliente' },
   { value: 'procesos_internos',      label: 'Procesos Internos' },
   { value: 'crecimiento_desarrollo', label: 'Crecimiento y Desarrollo' },
+  { value: 'basc',                   label: 'BASC' },   // 2-nov-2026: SGCS BASC
 ];
 
 export const FREQUENCIES = [
@@ -24,6 +25,7 @@ export const FREQUENCIES = [
   { value: 'trimestral', label: 'Trimestral' },
   { value: 'semestral',  label: 'Semestral' },
   { value: 'anual',      label: 'Anual' },
+  { value: 'por_exportacion', label: 'Por exportación' },   // 1-nov-2026 (BASC: inspección de carga)
 ];
 
 export const INDICATOR_TYPES = [

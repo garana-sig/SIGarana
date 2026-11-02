@@ -131,7 +131,7 @@ const IMPACTOS = [
   {
     icon: Award,
     color: '#b45309',
-    titulo: 'Certificaciones',
+    titulo: 'Certificaciones y normas',
     items: [
       'ISO 9001 Sistema de Gestión de Calidad',
       'Sello Solar Premium Quality (SMARTSOLAR)',

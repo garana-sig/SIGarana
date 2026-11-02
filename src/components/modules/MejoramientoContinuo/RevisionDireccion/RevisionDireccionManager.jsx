@@ -61,8 +61,9 @@ const PERSP = {
   cliente:                { label:'Clientes',          color:'#38bdf8', icon:'🤝' },
   procesos_internos:      { label:'Procesos Internos', color:'#22c55e', icon:'⚙️'  },
   crecimiento_desarrollo: { label:'Aprendizaje',       color:'#a78bfa', icon:'🚀' },
+  basc:                   { label:'BASC',              color:'#60a5fa', icon:'🛡️' },
 };
-const PERSP_ORDER = ['financiera','cliente','procesos_internos','crecimiento_desarrollo'];
+const PERSP_ORDER = ['financiera','cliente','procesos_internos','crecimiento_desarrollo','basc'];
 
 const STATUS_MAP = {
   good:    { label:'Cumple',      color:T.good,      icon:'🟢' },

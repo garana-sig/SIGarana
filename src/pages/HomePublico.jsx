@@ -47,7 +47,7 @@ const VALORES = [
 const CIFRAS = [
   { num: '20',   suffix: ' años', label: 'en el mercado nacional de trajes de baño' },
   { num: '+50',  suffix: '',      label: 'mujeres cabeza de hogar en nuestra planta' },
-  { num: '3',    suffix:  '',        label: 'países de exportación: Ecuador, Perú y EE.UU.' },
+  { num: '1',    suffix:  '',        label: 'país de exportación: Ecuador' },
   { num: '100%', suffix: '',      label: 'energía solar en nuestra planta de producción' },
 ];
 
@@ -261,7 +261,7 @@ export default function HomePublico() {
               </p>
               <p style={s.aboutBody}>
                 Llevamos <strong style={{ color: C.mint }}>20 años</strong> en el mercado nacional de trajes de baño,
-                con experiencia de exportación en Ecuador, Perú y EE.UU., con nuestra marca propia
+                con experiencia de exportación a Ecuador, con nuestra marca propia
                 <strong style={{ color: C.mint }}> GARANA ART</strong> — "Garantizando el realce natural de su belleza".
                 Nuestra planta cuenta con más de <strong style={{ color: C.mint }}>50 mujeres cabeza de hogar</strong> encargadas
                 de diseñar y producir prendas de alta calidad, innovación y horma.

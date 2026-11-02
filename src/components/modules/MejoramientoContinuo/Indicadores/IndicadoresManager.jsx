@@ -79,6 +79,7 @@ const PerspBadge = ({ value }) => {
     cliente:                { label: 'Cliente',            bg: '#E3F2FD', color: '#1565C0' },
     procesos_internos:      { label: 'Procesos Internos',  bg: '#E8F5E9', color: '#2E7D32' },
     crecimiento_desarrollo: { label: 'Crecimiento y Des.', bg: '#F3E5F5', color: '#6A1B9A' },
+    basc:                   { label: 'BASC',               bg: '#E0E7FF', color: '#1E3A8A' },
   };
   const p = map[value];
   if (!p) return <span style={{ color: '#9CA3AF', fontSize: 9 }}>—</span>;

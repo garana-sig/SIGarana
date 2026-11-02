@@ -57,7 +57,9 @@ const formatValue = (value, unit) => {
  * Devuelve { [indicator_id]: [q1, q2, q3, q4] } con el texto de cada celda.
  * Usa measurement_date del año indicado.
  */
-const fetchQuarterResults = async (indicatorIds, year) => {
+// porExportacion: Set de ids con frecuencia 'por_exportacion' → cada medición
+// cuenta (no se toma solo la última del mes) y el trimestre es su promedio.
+const fetchQuarterResults = async (indicatorIds, year, porExportacion = new Set()) => {
   if (!indicatorIds.length) return {};
   const { data, error } = await supabase
     .from('indicator_measurement')
@@ -76,7 +78,9 @@ const fetchQuarterResults = async (indicatorIds, year) => {
   (data || []).forEach(m => {
     if (m.measured_value === null || m.measured_value === undefined || !m.measurement_date) return;
     const month = parseInt(m.measurement_date.slice(5, 7), 10);
-    const key = `${m.indicator_id}|${month}`;
+    const key = porExportacion.has(m.indicator_id)
+      ? `${m.indicator_id}|${month}|${m.measurement_date}|${m.created_at}`
+      : `${m.indicator_id}|${month}`;
     const prev = byMonth[key];
     if (!prev || new Date(m.created_at) > new Date(prev.created_at)) byMonth[key] = m;
   });
@@ -194,7 +198,9 @@ export const exportIndicadores = async (indicators = [], formato) => {
   const year = new Date().getFullYear();
   const conTrimestres = tieneTrimestres(ws);
   const quartersByInd = conTrimestres
-    ? await fetchQuarterResults(indicators.map(i => i.id).filter(Boolean), year)
+    ? await fetchQuarterResults(
+        indicators.map(i => i.id).filter(Boolean), year,
+        new Set(indicators.filter(i => i.frequency === 'por_exportacion').map(i => i.id)))
     : {};
 
   // 4️⃣ Preparar filas — separar G combinadas y agregar filas si hacen falta

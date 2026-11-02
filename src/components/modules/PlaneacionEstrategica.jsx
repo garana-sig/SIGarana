@@ -83,6 +83,15 @@ const PERSP = [
     bg:    '#fdf8ee',
     ring:  '#f0c070',
   },
+  {
+    key:   'basc',          // 2-nov-2026: SGCS BASC
+    label: 'BASC',
+    long:  'Perspectiva BASC (Control y Seguridad)',
+    icon:  ShieldCheck,
+    color: '#1e3a8a',
+    bg:    '#eef2ff',
+    ring:  '#a5b4fc',
+  },
 ];
 
 const TABS = [
@@ -382,7 +391,7 @@ function PerspTab({ indicators, hook, profiles, canManage, canMeasure }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
       {/* Selector perspectiva */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
         {PERSP.map(p => {
           const PI = p.icon;
           const isActive = selPersp === p.key;
@@ -815,22 +824,25 @@ const P26_POLITICAS = [
   },
 ];
 
-const P26_DOFA = {
+const P26_DOFA = {   // actualizado 2-nov-2026
   debilidades: [
     'Falta de seguridad de la información',
     'Falta de conocimiento en el personal administrativo sobre seguridad informática',
     'Poca seguridad de datos',
-    'Falta de formación auditores ISO 19011',
+    'Falta de formación de auditores ISO 19011 / BASC',
     'Falta de un sistema documental para el SIG',
     'Falta de integralidad de datos de producción, insumos y ventas para toma efectiva de decisiones',
+    'Falta de identificación del personal, visitantes y contratistas',
+    'Falta de capacitación en ciberseguridad',
   ],
   oportunidades: [
     'Nuevos mercados: México, España, USA',
     'Convocatorias del gobierno nacional para mejoramiento e inversión',
-    'Creciente interés en producto como fajas',
+    'Creciente interés en productos como fajas',
     'Creciente demanda del mercado de trajes de baño',
     'Implementación de software de producción como Busint',
-    'Participación en macro rueda de las Américas, Colombia Tex, Colombia Moda, Eje Moda y Rioesmoda',
+    'Participación en Macrorrueda de las Américas, Colombiatex, Colombiamoda, Eje Moda y Rioesmoda',
+    'Implementar el SG e integrarlo con BASC, con apoyo de la Cámara de Comercio de Manizales',
   ],
   fortalezas: [
     'Equipo administrativo altamente capacitado',
@@ -839,6 +851,8 @@ const P26_DOFA = {
     'Alta satisfacción del cliente',
     'Marca reconocida en Colombia',
     'Proactividad de la junta directiva',
+    'Implementación de política social y ambiental con paneles solares y su mantenimiento',
+    'Implementación de código de ética',
   ],
   amenazas: [
     'Tensión financiera a nivel mundial por guerra en Irán/USA/Israel',
@@ -847,6 +861,7 @@ const P26_DOFA = {
     'Fenómenos naturales: terremoto y maremoto',
     'Cambios en tratados de libre comercio con Ecuador y arancel que afecte la venta',
     'Tasa de cambio',
+    'Ciberataques a la información',
   ],
 };
 
@@ -880,17 +895,18 @@ const P26_INDICADORES = [
   { nombre: '% de incidentes',                            meta2025: '<5%',      resultado2025: '2,40',    meta2026: '<3%'  },
 ];
 
-const P26_ESTRATEGIAS = [
+const P26_ESTRATEGIAS = [   // actualizado 2-nov-2026
   'Mantener los inventarios mínimos (30 días de telas) para reducir el riesgo de endeudamiento.',
   'Aprovechar al 100% las convocatorias del gobierno, alcaldía y cámara de comercio para crecer en productividad, transformación digital y capacitación.',
-  'Generar políticas de protección de la información, con procesos y responsables designados.',
+  'Generar políticas de protección de la información, generar el proceso y designar responsables.',
   'Planificar reportes quincenales de días de cartera para gestión de cobro más asertiva.',
   'Adoptar un software/ERP que integre insumos, producción y ventas con trazabilidad total.',
   'Desarrollar una app para control del SIG que prevenga el uso de documentos obsoletos.',
   'Participar en eventos y ruedas de negocio para comercializar al exterior.',
-  'Implementar estándares BASC para mejorar la seguridad de la cadena de suministros y la posibilidad de exportar.',
+  'Implementar los estándares BASC, en busca de la excelencia en la seguridad de la cadena de suministros, para aprovechar las negociaciones y mejorar la posibilidad de exportar.',
+  'Tener formación como auditores internos en estándares BASC.',
   'Capacitar al personal en seguridad de la información para prevenir ataques cibernéticos.',
-  'Implementar medidas de seguridad en la cadena de suministros, desde insumos hasta despacho.',
+  'Implementar medidas de seguridad de la cadena de suministros desde los insumos hasta el empaque y despacho de la mercancía.',
   'Tener rotación más rápida para Medellín y reducir la presencia de Nikelena en el mercado.',
   'Tener aprobación de tonos según sugerencias del mercado de Medellín para subir las ventas.',
   'Mantener las redes sociales con información de planta y motivación empresarial.',
