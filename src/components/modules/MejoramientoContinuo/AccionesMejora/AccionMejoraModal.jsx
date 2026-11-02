@@ -164,7 +164,8 @@ export default function AccionMejoraModal({ isOpen, mode, accion, onClose, onSuc
       });
       setF2({
         action_correction:  !!accion.action_correction,
-        action_corrective:  !!accion.action_corrective,
+        // 'Acción correctiva/mejora' agrupa también las marcadas antes como "de mejora"
+        action_corrective:  !!(accion.action_corrective || accion.action_improvement),
         action_preventive:  !!accion.action_preventive,
         causes:             accion.causes             || '',
         action_description: accion.action_description || '',
