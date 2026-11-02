@@ -12,6 +12,8 @@
 //   - Word / PPT → respaldo con Google Docs Viewer.
 //   - PDF → visor nativo del navegador (sin cambios).
 // Usado en: Procedimientos.jsx, PorArea.jsx, Home.jsx (props sin cambios).
+// v3 (2-nov-2026): prop soloVer → sin botones de descarga y PDF sin barra del
+//   navegador (Manuales y Planes). Documento sin archivo → aviso, no queda cargando.
 // ═══════════════════════════════════════════════════════════════════
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -35,7 +37,7 @@ function getFileType(path) {
   return 'unknown';
 }
 
-const DocumentViewerModal = ({ document, isOpen, onClose }) => {
+const DocumentViewerModal = ({ document, isOpen, onClose, soloVer = false }) => {
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState(null);
   const [signedUrl, setSignedUrl] = useState(null);
@@ -158,7 +160,7 @@ const DocumentViewerModal = ({ document, isOpen, onClose }) => {
   // ── URL del visor según el modo ───────────────────────────────────
   const viewerUrl = (() => {
     if (!signedUrl) return null;
-    if (modo === 'nativo') return signedUrl;
+    if (modo === 'nativo') return soloVer ? `${signedUrl}#toolbar=0&navpanes=0` : signedUrl;
     if (modo === 'microsoft') return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(signedUrl)}`;
     if (modo === 'google') return `https://docs.google.com/viewer?url=${encodeURIComponent(signedUrl)}&embedded=true`;
     return null;
@@ -215,12 +217,14 @@ const DocumentViewerModal = ({ document, isOpen, onClose }) => {
               </div>
             )}
 
+            {!soloVer && document.file_path && (
             <button onClick={handleDownload}
               className="flex items-center gap-2 px-3 py-2 rounded-lg border hover:bg-gray-50 transition-colors"
               style={{ borderColor: C.olive, color: C.olive }} title="Descargar archivo">
               <Download className="h-4 w-4" />
               <span className="hidden sm:inline">Descargar</span>
             </button>
+            )}
 
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors p-2" title="Cerrar">
               <X className="h-5 w-5" />
@@ -230,7 +234,16 @@ const DocumentViewerModal = ({ document, isOpen, onClose }) => {
 
         {/* Contenido */}
         <div className="flex-1 overflow-hidden bg-gray-100 relative">
-          {loading && (
+          {/* Documento del listado maestro que aún no tiene archivo cargado */}
+          {!document.file_path && (
+            <div className="h-full flex flex-col items-center justify-center p-8 text-center">
+              <FileText className="h-12 w-12 text-gray-400 mb-4" />
+              <p className="font-medium mb-1" style={{ color: C.green }}>Este documento aún no tiene archivo cargado</p>
+              <p className="text-gray-500 text-sm">Está registrado en el Listado Maestro; el archivo se sube desde Gestión Documental.</p>
+            </div>
+          )}
+
+          {document.file_path && loading && (
             <div className="h-full flex flex-col items-center justify-center">
               <Loader2 className="h-12 w-12 animate-spin text-gray-400 mb-4" />
               <p className="text-gray-600">Cargando documento...</p>
@@ -242,9 +255,11 @@ const DocumentViewerModal = ({ document, isOpen, onClose }) => {
               <AlertCircle className="h-12 w-12 mb-4" style={{ color: C.amber }} />
               <p className="font-medium mb-2" style={{ color: '#854f0b' }}>Error al cargar el documento</p>
               <p className="text-gray-600 text-sm mb-4">{error}</p>
+              {!soloVer && (
               <button onClick={handleDownload} className="flex items-center gap-2 px-4 py-2 rounded-lg text-white" style={{ backgroundColor: C.mint }}>
                 <Download className="h-4 w-4" />Descargar Documento
               </button>
+              )}
             </div>
           )}
 
@@ -273,8 +288,10 @@ const DocumentViewerModal = ({ document, isOpen, onClose }) => {
                   <button onClick={() => setModo(respaldo)} className="text-sm font-semibold underline" style={{ color: C.green }}>
                     {fileType === 'excel' ? 'Ver como tabla' : 'Probar visor alterno'}
                   </button>
+                  {!soloVer && <>
                   <span className="text-gray-400">·</span>
                   <button onClick={handleDownload} className="text-sm font-semibold underline" style={{ color: C.olive }}>Descargar</button>
+                  </>}
                 </div>
               )}
             </>
@@ -293,9 +310,11 @@ const DocumentViewerModal = ({ document, isOpen, onClose }) => {
                 <div className="flex-1 flex flex-col items-center justify-center p-8">
                   <AlertCircle className="h-10 w-10 mb-3" style={{ color: C.amber }} />
                   <p className="text-sm mb-4" style={{ color: '#854f0b' }}>{errorDatos}</p>
+                  {!soloVer && (
                   <button onClick={handleDownload} className="flex items-center gap-2 px-4 py-2 rounded-lg text-white" style={{ backgroundColor: C.mint }}>
                     <Download className="h-4 w-4" />Descargar
                   </button>
+                  )}
                 </div>
               )}
               {hojas && !cargandoDatos && (
@@ -329,15 +348,17 @@ const DocumentViewerModal = ({ document, isOpen, onClose }) => {
             <div className="h-full flex flex-col items-center justify-center p-8">
               <FileText className="h-12 w-12 text-gray-400 mb-4" />
               <p className="text-gray-600 font-medium mb-2">No se puede visualizar este tipo de archivo</p>
+              {!soloVer && (
               <button onClick={handleDownload} className="flex items-center gap-2 px-4 py-2 rounded-lg text-white mt-2" style={{ backgroundColor: C.mint }}>
                 <Download className="h-4 w-4" />Descargar Archivo
               </button>
+              )}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        {!loading && !error && (
+        {document.file_path && !loading && !error && (
           <div className="p-3 border-t bg-gray-50" style={{ borderColor: C.sand }}>
             <p className="text-xs text-gray-500 text-center">
               {modo === 'nativo' && '📄 Visualizando PDF'}
@@ -345,7 +366,7 @@ const DocumentViewerModal = ({ document, isOpen, onClose }) => {
               {modo === 'google' && '📊 Visualizando con visor alterno (Google)'}
               {modo === 'datos' && '📋 Vista de datos: muestra el contenido sin el formato visual del Excel'}
               {excedeMS && ' • El archivo supera el tamaño que admite el visor de Microsoft'}
-              {' • '}Si no se visualiza correctamente, usa el botón "Descargar"
+              {soloVer ? ' • Solo visualización' : <>{' • '}Si no se visualiza correctamente, usa el botón "Descargar"</>}
             </p>
           </div>
         )}

@@ -1,5 +1,5 @@
 // src/hooks/useDocuments.js
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
 /**
@@ -14,7 +14,11 @@ export const useDocuments = ({ searchTerm, documentTypeId, processId, status } =
     byStatus: { draft: 0, pending_approval: 0, published: 0, archived: 0 }
   });
 
+  // 2-nov-2026: si llegan dos respuestas, solo cuenta la última pedida
+  const reqRef = useRef(0);
+
   const fetchDocuments = async () => {
+    const reqId = ++reqRef.current;
     try {
       setLoading(true);
       console.log('📄 Cargando documentos...');
@@ -58,6 +62,7 @@ export const useDocuments = ({ searchTerm, documentTypeId, processId, status } =
 
       const { data, error: fetchError } = await query;
 
+      if (reqId !== reqRef.current) return;   // respuesta vieja: se ignora
       if (fetchError) throw fetchError;
 
       console.log('✅ Documentos cargados:', data?.length || 0);
@@ -82,7 +87,7 @@ export const useDocuments = ({ searchTerm, documentTypeId, processId, status } =
       setError(err.message);
       setDocuments([]);
     } finally {
-      setLoading(false);
+      if (reqId === reqRef.current) setLoading(false);
     }
   };
 

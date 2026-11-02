@@ -114,20 +114,13 @@ function VisorPdf({ visor, onClose }) {
             <p style={{ color: 'white', fontFamily: 'Georgia, serif', fontSize: 16, fontWeight: 700, margin: 0 }} className="truncate">{visor.title}</p>
             <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11.5, margin: 0 }}>Generado ahora desde SST y Bienestar</p>
           </div>
-          <button type="button" onClick={() => window.open(visor.url, '_blank')} title="Abrir en otra pestaña"
-            className="flex items-center gap-1.5" style={{ background: 'rgba(255,255,255,0.12)', color: 'white', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 10, padding: '7px 11px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
-            <ExternalLink size={14} /> <span className="hidden sm:inline">Abrir</span>
-          </button>
-          <button type="button" onClick={descargar} title="Descargar PDF"
-            className="flex items-center gap-1.5" style={{ background: 'white', color: C.green, border: 'none', borderRadius: 10, padding: '7px 11px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
-            <Download size={14} /> <span className="hidden sm:inline">Descargar</span>
-          </button>
+          {/* 2-nov-2026: solo visualización (sin Abrir/Descargar) */}
           <button type="button" onClick={onClose} title="Cerrar"
             style={{ background: 'transparent', color: 'white', border: 'none', cursor: 'pointer', padding: 4 }}>
             <X size={20} />
           </button>
         </div>
-        <iframe title={visor.title} src={visor.url} style={{ flex: 1, width: '100%', border: 'none', background: '#525659' }} />
+        <iframe title={visor.title} src={`${visor.url}#toolbar=0&navpanes=0`} style={{ flex: 1, width: '100%', border: 'none', background: '#525659' }} />
       </div>
     </div>
   );
@@ -213,11 +206,6 @@ function PlanCard({ plan, years, totalPorAnio, onVer, onDescargar, onDiligenciar
                 fontSize: 13, fontWeight: 600, cursor: puedeDiligenciar ? 'pointer' : 'not-allowed',
               }}>
               {puedeDiligenciar ? <PenLine size={15} /> : <Lock size={14} />} Diligenciar
-            </button>
-            <button type="button" onClick={() => onDescargar(plan, year)} disabled={disabled || generando} title="Descargar PDF"
-              className="flex items-center justify-center"
-              style={{ background: 'white', color: C.olive, border: `1px solid ${C.olive}`, borderRadius: 10, padding: '8px 12px', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1 }}>
-              <Download size={15} />
             </button>
           </div>
         )}

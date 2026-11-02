@@ -197,6 +197,10 @@ function ColumnaDocs({ titulo, cantidad, icon: Icon = FileText, children }) {
   );
 }
 
+// 2-nov-2026: mientras se completa el Listado Maestro los documentos de la
+// caracterización solo se listan (sin enlace). Para volver a enlazarlos: true.
+const ENLAZAR_DOCUMENTOS = false;
+
 function CaracterizacionModal({ code, onClose }) {
   const p = CARACTERIZACION_PROCESOS[code];
   const { processes } = useProcesses();
@@ -210,7 +214,10 @@ function CaracterizacionModal({ code, onClose }) {
   // Solo documentos publicados (vigentes) en Gestión Documental — nada de pendientes.
   // Se organizan en las mismas columnas del Anexo 1, ordenados por código.
   const q = busquedaDoc.trim().toLowerCase();
-  const publicados = (documents || [])
+  // 2-nov-2026: solo los del proceso abierto (antes podía colarse la primera
+  // carga sin filtro, con documentos de todos los procesos)
+  const delProceso = (documents || []).filter((d) => processRow && d.process_id === processRow.id);
+  const publicados = delProceso
     .filter((d) => d.status === 'published')
     .filter((d) => !q || `${d.code} ${d.name}`.toLowerCase().includes(q))
     .sort((x, y) => (x.code || '').localeCompare(y.code || '', 'es', { numeric: true }));
@@ -219,7 +226,7 @@ function CaracterizacionModal({ code, onClose }) {
     docs: publicados.filter((d) => col.tipos.includes(d.document_type?.code)),
   }));
   const externos = (p.documentosExternos || []).filter((e) => !q || e.toLowerCase().includes(q));
-  const totalPublicados = (documents || []).filter((d) => d.status === 'published').length;
+  const totalPublicados = delProceso.filter((d) => d.status === 'published').length;
 
   return (
     <>
@@ -378,9 +385,11 @@ function CaracterizacionModal({ code, onClose }) {
                         col.docs.map((doc) => (
                           <button
                             key={doc.id}
-                            onClick={() => setDocViewer(doc)}
-                            className="w-full text-left flex items-start gap-1.5 rounded-md px-1.5 py-1 transition-colors hover:bg-[#f2f1e9]"
-                            style={{ cursor: 'pointer', background: 'transparent', border: 'none' }}
+                            // 2-nov-2026: mientras se completa el listado, ningún documento se enlaza
+                            onClick={() => ENLAZAR_DOCUMENTOS && doc.file_path && setDocViewer(doc)}
+                            disabled={!(ENLAZAR_DOCUMENTOS && doc.file_path)}
+                            className={`w-full text-left flex items-start gap-1.5 rounded-md px-1.5 py-1 transition-colors ${ENLAZAR_DOCUMENTOS && doc.file_path ? 'hover:bg-[#f2f1e9]' : ''}`}
+                            style={{ cursor: ENLAZAR_DOCUMENTOS && doc.file_path ? 'pointer' : 'default', background: 'transparent', border: 'none' }}
                             title={`${doc.code} — ${doc.name}`}
                           >
                             <span
@@ -404,7 +413,7 @@ function CaracterizacionModal({ code, onClose }) {
                                 <span style={{ display: 'block', fontSize: 8.5, color: '#9ca3af', textTransform: 'none' }}>v{doc.version}</span>
                               )}
                             </span>
-                            <ExternalLink size={11} style={{ color: C.mint, marginTop: 3, flexShrink: 0 }} />
+                            {ENLAZAR_DOCUMENTOS && doc.file_path && <ExternalLink size={11} style={{ color: C.mint, marginTop: 3, flexShrink: 0 }} />}
                           </button>
                         ))
                       )}

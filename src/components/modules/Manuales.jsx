@@ -195,11 +195,6 @@ export default function Manuales() {
                       style={{ background: C.green, color: 'white', borderRadius: 10, padding: '8px 10px', fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer' }}>
                       <Eye size={15} /> Ver manual
                     </button>
-                    <button type="button" onClick={() => descargar(m)} title="Descargar"
-                      className="flex items-center justify-center"
-                      style={{ background: 'white', color: C.olive, border: `1px solid ${C.olive}`, borderRadius: 10, padding: '8px 12px', cursor: 'pointer' }}>
-                      <Download size={15} />
-                    </button>
                   </div>
                 </div>
               </div>
@@ -208,7 +203,8 @@ export default function Manuales() {
         </div>
       )}
 
-      <DocumentViewerModal document={abierto} isOpen={!!abierto} onClose={() => setAbierto(null)} />
+      {/* 2-nov-2026: en Manuales solo se visualiza (sin descarga) */}
+      <DocumentViewerModal document={abierto} isOpen={!!abierto} onClose={() => setAbierto(null)} soloVer />
     </div>
   );
 }
