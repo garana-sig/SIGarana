@@ -7,7 +7,8 @@
 // Hoja "v3" — filas 6-8 encabezados, datos desde la fila 9 (9–19 formateadas):
 //   A Consecutivo · B Fecha · C Proceso
 //   D Auditoría · E QRS · F Satisfacción · G Autocontrol · H Análisis riesgos · I Pto no conforme (X)
-//   J Descripción del hallazgo · K Corrección · L Correctiva · M Preventiva (X) · N Causas
+//   J Descripción del hallazgo · K Corrección · L Acción correctiva · M Acción de mejora (X) · N Causas
+//   (2-nov-2026: Preventiva sale del formulario; M8 se rotula "DE MEJORA" hasta que el formato se actualice)
 //   O Descripción acciones · P Logros · Q Recursos · R Responsable · S Fecha propuesta
 //   T Criterios verificación · U:W Hallazgo de verificación · X Fecha verificación · Y Fecha eficacia
 //   Z Cierre SI · AA Cierre NO · AB Auditor
@@ -47,6 +48,9 @@ export const exportAccionesMejora = async (acciones, getProcess, formato, sufijo
   const ws = wb.getWorksheet(SHEET_NAME) || wb.worksheets[0];
   if (!ws) throw new Error(`No se encontró la hoja "${SHEET_NAME}" en ${formato.code}.`);
 
+  // Encabezado de la columna M: Preventiva → De mejora (se conserva el estilo)
+  { const h = ws.getCell('M8'); if (/PREVENT/i.test(String(h.value ?? ''))) h.value = 'DE MEJORA'; }
+
   // Limpiar los ejemplos que trae el formato (solo valores, se conserva el estilo)
   for (let r = DATA_START_ROW; r < DATA_START_ROW + FILAS_FORMATO; r++)
     for (let c = 1; c <= ULTIMA_COL; c++) ws.getRow(r).getCell(c).value = null;
@@ -79,8 +83,8 @@ export const exportAccionesMejora = async (acciones, getProcess, formato, sufijo
     // ANÁLISIS
     poner(g('J'), a.finding_description || null);
     poner(g('K'), X(a.action_correction), 'center');
-    poner(g('L'), X(a.action_corrective || a.action_improvement), 'center');
-    poner(g('M'), X(a.action_preventive), 'center');
+    poner(g('L'), X(a.action_corrective), 'center');
+    poner(g('M'), X(a.action_improvement), 'center');
     poner(g('N'), a.causes || null);
     // PLAN DE ACCIÓN
     poner(g('O'), a.action_description || null);

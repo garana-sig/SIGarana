@@ -457,7 +457,7 @@ export default function AccionesMejoraManager({ onBack }) {
                       <VHead w={26}>Auditoría</VHead><VHead w={26}>QRS</VHead>
                       <VHead w={26}>Satisfacción</VHead><VHead w={26}>Autocontrol /|Gest. cambio</VHead>
                       <VHead w={26}>Análisis de|riesgos</VHead><VHead w={26}>Pto no conforme</VHead>
-                      <VHead w={26}>Corrección</VHead><VHead w={26}>Correctiva /|Mejora</VHead><VHead w={26}>Preventiva</VHead>
+                      <VHead w={26}>Corrección</VHead><VHead w={26}>Correctiva</VHead><VHead w={26}>Mejora</VHead>
                       <VHead w={50}>Verificación</VHead><VHead w={50}>Eficacia</VHead>
                       <VHead w={30}>SI</VHead><VHead w={30}>NO</VHead>
                     </tr>
@@ -560,8 +560,8 @@ export default function AccionesMejoraManager({ onBack }) {
                           <Cell center><Tick v={a.origin_nonconforming} /></Cell>
                           <Cell><Clamp v={a.finding_description} /></Cell>
                           <Cell center><Tick v={a.action_correction} /></Cell>
-                          <Cell center><Tick v={a.action_corrective || a.action_improvement} /></Cell>
-                          <Cell center><Tick v={a.action_preventive} /></Cell>
+                          <Cell center><Tick v={a.action_corrective} /></Cell>
+                          <Cell center><Tick v={a.action_improvement} /></Cell>
                           <Cell><Clamp v={a.causes} muted /></Cell>
                           <Cell><Clamp v={a.action_description} /></Cell>
                           <Cell><Clamp v={a.expected_results} muted /></Cell>

@@ -63,10 +63,10 @@ const SUBMODULES = [
   {
     id: 'acciones_mejora', name: 'Acciones de Mejora',
     permission: 'auditorias:acciones_mejora:view',
-    description: 'Seguimiento de correcciones, acciones correctivas/mejora y preventivas',
+    description: 'Seguimiento de correcciones, acciones correctivas y de mejora',
     icon: CheckCircle2, color: '#6dbd96',
     gradient: 'linear-gradient(135deg, #6dbd96 0%, #2e5244 100%)',
-    badge: 'Correctivas/Mejora · Preventivas', enabled: true,
+    badge: 'Correctivas · Mejora', enabled: true,
   },
   {
     id: 'indicadores', name: 'Indicadores',

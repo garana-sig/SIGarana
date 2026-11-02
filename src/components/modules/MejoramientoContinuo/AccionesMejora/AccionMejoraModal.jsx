@@ -116,7 +116,8 @@ const M1_INIT = {
   finding_description: '',
 };
 const M2_INIT = {
-  action_correction: false, action_corrective: false, action_preventive: false,
+  // 2-nov-2026: tipos = Corrección · Acción correctiva · Acción de mejora (sin Preventiva)
+  action_correction: false, action_corrective: false, action_improvement: false,
   causes: '', action_description: '', expected_results: '',
   resources_budget: '', responsible_id: '', proposed_date: '',
 };
@@ -164,9 +165,8 @@ export default function AccionMejoraModal({ isOpen, mode, accion, onClose, onSuc
       });
       setF2({
         action_correction:  !!accion.action_correction,
-        // 'Acción correctiva/mejora' agrupa también las marcadas antes como "de mejora"
-        action_corrective:  !!(accion.action_corrective || accion.action_improvement),
-        action_preventive:  !!accion.action_preventive,
+        action_corrective:  !!accion.action_corrective,
+        action_improvement: !!accion.action_improvement,
         causes:             accion.causes             || '',
         action_description: accion.action_description || '',
         expected_results:   accion.expected_results   || '',
@@ -204,7 +204,7 @@ export default function AccionMejoraModal({ isOpen, mode, accion, onClose, onSuc
     const e = {};
     if (!f2.responsible_id) e.responsible_id = 'Obligatorio';
     if (!f2.proposed_date)  e.proposed_date  = 'Obligatorio';
-    const hasType = f2.action_correction || f2.action_corrective || f2.action_preventive;
+    const hasType = f2.action_correction || f2.action_corrective || f2.action_improvement;
     if (!hasType) e.action_type = 'Selecciona al menos uno';
     setErrors(e); return Object.keys(e).length === 0;
   };
@@ -346,9 +346,9 @@ export default function AccionMejoraModal({ isOpen, mode, accion, onClose, onSuc
               <Field label="Tipo de acción" required error={errors.action_type}>
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    ['action_correction', 'Corrección'],
-                    ['action_corrective', 'Acción correctiva/mejora'],
-                    ['action_preventive', 'Acción Preventiva'],
+                    ['action_correction',  'Corrección'],
+                    ['action_corrective',  'Acción correctiva'],
+                    ['action_improvement', 'Acción de mejora'],
                   ].map(([key, lbl]) => (
                     <CheckItem key={key} label={lbl} checked={f2[key]} disabled={m2Lock}
                       onChange={() => s2(key, !f2[key])} />

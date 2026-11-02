@@ -172,7 +172,7 @@ export function useAccionesMejora() {
         // Tipo de acción
         action_correction:  !!formData.action_correction,
         action_corrective:  !!formData.action_corrective,
-        action_preventive:  !!formData.action_preventive,
+        action_improvement: !!formData.action_improvement,
         // Análisis
         causes:             formData.causes || '',
         action_description: formData.action_description || '',
