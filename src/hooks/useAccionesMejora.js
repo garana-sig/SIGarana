@@ -1,4 +1,4 @@
-// src/hooks/useAccionesMejora.js — v2.0 con 3 momentos
+// src/hooks/useAccionesMejora.js — v3.0 con 3 momentos · RE-GS-06 v2 (13-nov-2026)
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -22,6 +22,26 @@ const sendEmail = async (to, type, data) => {
     if (error) console.warn(`⚠️ Email [${type}] → ${to}:`, error.message);
     else       console.log (`📧 Email [${type}] → ${to}`);
   } catch (err) { console.warn(`⚠️ Email no enviado a ${to}:`, err.message); }
+};
+
+// RE-GS-06 v2: normaliza el bloque de análisis antes de guardar
+//  - Corrección ⇒ Acción correctiva
+//  - Listas vacías → null (las acciones históricas conservan causes/action_description)
+const limpiarLista = (arr) => {
+  if (!Array.isArray(arr)) return null;
+  const a = arr.map(x => String(x ?? '').trim());
+  return a.some(Boolean) ? a : null;
+};
+export const limpiarM2 = (f) => {
+  const out = { ...f };
+  if (out.action_correction) out.action_corrective = true;
+  if ('causes_whys' in out)
+    out.causes_whys = out.action_corrective ? limpiarLista(out.causes_whys) : null;
+  if ('corrective_actions' in out)
+    out.corrective_actions = out.action_corrective ? limpiarLista(out.corrective_actions)?.filter(Boolean) ?? null : null;
+  if ('correction_description' in out && !out.action_correction) out.correction_description = null;
+  if ('improvement_description' in out && !out.action_improvement) out.improvement_description = null;
+  return out;
 };
 
 const getGerenciaEmails = async () => {
@@ -152,7 +172,7 @@ export function useAccionesMejora() {
     try {
       const { error: e } = await supabase
         .from('improvement_action')
-        .update({ ...formData, status: 'in_progress' })
+        .update({ ...limpiarM2(formData), status: 'in_progress' })
         .eq('id', id);
       if (e) throw e;
 
@@ -174,9 +194,10 @@ export function useAccionesMejora() {
         action_corrective:  !!formData.action_corrective,
         action_improvement: !!formData.action_improvement,
         // Análisis
-        causes:             formData.causes || '',
-        action_description: formData.action_description || '',
-        expected_results:   formData.expected_results || '',
+        correction_description:  formData.action_correction ? (formData.correction_description || '') : '',
+        causes_whys:             formData.action_corrective ? (formData.causes_whys || []).filter(x => x?.trim()) : [],
+        corrective_actions:      formData.action_corrective ? (formData.corrective_actions || []).filter(x => x?.trim()) : [],
+        improvement_description: formData.action_improvement ? (formData.improvement_description || '') : '',
         resources_budget:   formData.resources_budget || '',
         proposed_date:      formData.proposed_date
           ? new Date(formData.proposed_date + 'T00:00:00')
@@ -246,7 +267,7 @@ export function useAccionesMejora() {
   const updateAccion = async (id, formData) => {
     try {
       const { error: e } = await supabase
-        .from('improvement_action').update(formData).eq('id', id);
+        .from('improvement_action').update(limpiarM2(formData)).eq('id', id);
       if (e) throw e;
       await fetchAcciones();
       return { success: true };

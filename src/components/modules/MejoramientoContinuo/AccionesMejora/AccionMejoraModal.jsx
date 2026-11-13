@@ -1,9 +1,12 @@
 // src/components/modules/MejoramientoContinuo/AccionesMejora/AccionMejoraModal.jsx
-// v2.0 — Modal con stepper de 3 momentos
+// v3.0 — Modal con stepper de 3 momentos · alineado a RE-GS-06 v2 (13-nov-2026)
+//   - Corrección ⇒ Acción correctiva obligatoria
+//   - Acción correctiva ⇒ 5 porqués obligatorios + mínimo 5 acciones
+//   - Se retira 'Logros esperados' del formulario
 import { useState, useEffect } from 'react';
 import { Button } from '@/app/components/ui/button';
 import { Input }  from '@/app/components/ui/input';
-import { Loader2, X, Save, CheckCircle2, Lock } from 'lucide-react';
+import { Loader2, X, Save, CheckCircle2, Lock, Plus } from 'lucide-react';
 import { useAccionesMejora, useProfiles } from '@/hooks/useAccionesMejora';
 import { useProcesses } from '@/hooks/useDocuments';
 
@@ -64,6 +67,59 @@ function TA({ value, onChange, disabled, rows = 3, placeholder, ring = 'green' }
   );
 }
 
+// Lista numerada de campos (5 porqués / acciones correctivas)
+function ListaNumerada({ items, onChange, disabled, min = 5, fixed = false, prefix, placeholder, error, addLabel }) {
+  const set = (i, v) => onChange(items.map((x, j) => (j === i ? v : x)));
+  const add = () => onChange([...items, '']);
+  const del = (i) => onChange(items.filter((_, j) => j !== i));
+  return (
+    <div className="space-y-1.5">
+      {items.map((v, i) => {
+        const vacio = error && !String(v || '').trim();
+        return (
+          <div key={i} className="flex items-start gap-2">
+            <span className="mt-2 w-16 shrink-0 text-[11px] font-semibold text-gray-600">{prefix} {i + 1}</span>
+            <textarea value={v} disabled={disabled} rows={1}
+              onChange={e => set(i, e.target.value)}
+              placeholder={disabled ? '' : placeholder}
+              className={`flex-1 p-2 border rounded text-sm resize-y focus:outline-none focus:ring-2 focus:ring-yellow-300
+                ${disabled ? 'bg-gray-50 text-gray-600 border-gray-200' : vacio ? 'border-red-400' : 'border-gray-300'}`} />
+            {!fixed && !disabled && items.length > min && (
+              <button type="button" onClick={() => del(i)} title="Quitar"
+                className="mt-1.5 p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        );
+      })}
+      {!fixed && !disabled && (
+        <button type="button" onClick={add}
+          className="ml-[72px] flex items-center gap-1 text-xs font-medium text-[#6f7b2c] hover:underline">
+          <Plus className="h-3.5 w-3.5" /> {addLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
+const vacios = (n) => Array.from({ length: n }, () => '');
+const normLista = (arr, n, fixed) => {
+  const a = Array.isArray(arr) ? arr.map(x => String(x ?? '')) : [];
+  if (fixed) return [...a, ...vacios(n)].slice(0, n);
+  return a.length >= n ? a : [...a, ...vacios(n - a.length)];
+};
+// Texto libre antiguo → lista (una línea por casilla, sin la numeración "1." / "-")
+const textoALista = (txt, n, fixed) => {
+  const lineas = String(txt || '').split(/\r?\n/)
+    .map(l => l.replace(/^\s*(\d+[.)-]|[-•*])\s*/, '').trim()).filter(Boolean);
+  if (fixed && lineas.length > n) lineas.splice(n - 1, lineas.length, lineas.slice(n - 1).join(' '));
+  return normLista(lineas, n, fixed);
+};
+// Acción histórica (antes de RE-GS-06 v2): textos libres, sin listas
+export const esAccionLegacy = (a) =>
+  !!a && !a.causes_whys && !a.corrective_actions && !!(a.causes || a.action_description);
+
 function Stepper({ activeMoment, statusActual }) {
   const m1done = ['open','in_progress','archived'].includes(statusActual);
   const m2done = ['in_progress','archived'].includes(statusActual);
@@ -118,7 +174,12 @@ const M1_INIT = {
 const M2_INIT = {
   // 2-nov-2026: tipos = Corrección · Acción correctiva · Acción de mejora (sin Preventiva)
   action_correction: false, action_corrective: false, action_improvement: false,
-  causes: '', action_description: '', expected_results: '',
+  // 13-nov-2026: RE-GS-06 v2
+  correction_description: '',
+  causes_whys: vacios(5),          // exactamente 5
+  corrective_actions: vacios(5),   // mínimo 5
+  improvement_description: '',
+  causes: '', action_description: '',   // solo acciones históricas
   resources_budget: '', responsible_id: '', proposed_date: '',
 };
 const M3_INIT = {
@@ -167,9 +228,18 @@ export default function AccionMejoraModal({ isOpen, mode, accion, onClose, onSuc
         action_correction:  !!accion.action_correction,
         action_corrective:  !!accion.action_corrective,
         action_improvement: !!accion.action_improvement,
+        correction_description:  accion.correction_description  || '',
+        // Acciones históricas: al editarlas se pasan a los 5 porqués / lista de acciones,
+        // precargando el texto anterior para no perderlo
+        causes_whys:        accion.causes_whys
+                              ? normLista(accion.causes_whys, 5, true)
+                              : textoALista(accion.causes, 5, true),
+        corrective_actions: accion.corrective_actions
+                              ? normLista(accion.corrective_actions, 5, false)
+                              : textoALista(accion.action_description, 5, false),
+        improvement_description: accion.improvement_description || '',
         causes:             accion.causes             || '',
         action_description: accion.action_description || '',
-        expected_results:   accion.expected_results   || '',
         resources_budget:   accion.resources_budget   || '',
         responsible_id:     accion.responsible_id     || '',
         proposed_date:      accion.proposed_date      || '',
@@ -190,6 +260,23 @@ export default function AccionMejoraModal({ isOpen, mode, accion, onClose, onSuc
   const s2 = (f, v) => { setF2(p => ({...p,[f]:v})); setErrors(p => ({...p,[f]:null})); };
   const s3 = (f, v) => { setF3(p => ({...p,[f]:v})); setErrors(p => ({...p,[f]:null})); };
 
+  // Las 18 acciones anteriores a RE-GS-06 v2 se conservan con sus textos libres
+  // Solo en modo consulta se muestra el texto libre de las acciones históricas;
+  // al editarlas se usan los 5 porqués y la lista de acciones (obligatorios)
+  const legacy = esAccionLegacy(accion) && (isView || isCreate || isMom3);
+  // Corrección ⇒ marca y bloquea Acción correctiva
+  const toggleTipo = (key) => {
+    if (key === 'action_correction') {
+      const v = !f2.action_correction;
+      setF2(p => ({ ...p, action_correction: v, action_corrective: v ? true : p.action_corrective }));
+    } else if (key === 'action_corrective' && f2.action_correction) {
+      return; // no se puede desmarcar mientras haya corrección
+    } else {
+      s2(key, !f2[key]);
+    }
+    setErrors(p => ({ ...p, action_type: null }));
+  };
+
   const validateM1 = () => {
     const e = {};
     if (!f1.date)                        e.date               = 'Obligatorio';
@@ -206,6 +293,19 @@ export default function AccionMejoraModal({ isOpen, mode, accion, onClose, onSuc
     if (!f2.proposed_date)  e.proposed_date  = 'Obligatorio';
     const hasType = f2.action_correction || f2.action_corrective || f2.action_improvement;
     if (!hasType) e.action_type = 'Selecciona al menos uno';
+    if (f2.action_correction && !f2.action_corrective)
+      e.action_type = 'Toda corrección debe llevar acción correctiva';
+    if (f2.action_correction && !f2.correction_description?.trim())
+      e.correction_description = 'Describe la corrección';
+    if (f2.action_corrective) {
+      if (f2.causes_whys.some(x => !x?.trim()))
+        e.causes_whys = 'Debes diligenciar los 5 porqués';
+      const llenas = f2.corrective_actions.filter(x => x?.trim()).length;
+      if (llenas < 5 || f2.corrective_actions.some(x => !x?.trim()))
+        e.corrective_actions = 'Mínimo 5 acciones, sin casillas vacías';
+    }
+    if (f2.action_improvement && !f2.improvement_description?.trim())
+      e.improvement_description = 'Describe las acciones de mejora';
     setErrors(e); return Object.keys(e).length === 0;
   };
   const validateM3 = () => {
@@ -342,7 +442,7 @@ export default function AccionMejoraModal({ isOpen, mode, accion, onClose, onSuc
           {/* ── M2 ANÁLISIS + PLAN ────────────────────────────────────── */}
           {showM2 && (
             <Section title="🔬 M2 · Análisis y Plan de Acción" color={M_COLOR[2]}
-              locked={m2Lock} done={m2Lock && !!accion?.action_description}>
+              locked={m2Lock} done={m2Lock && !!(accion?.corrective_actions || accion?.correction_description || accion?.improvement_description || accion?.action_description)}>
               <Field label="Tipo de acción" required error={errors.action_type}>
                 <div className="grid grid-cols-3 gap-2">
                   {[
@@ -350,33 +450,65 @@ export default function AccionMejoraModal({ isOpen, mode, accion, onClose, onSuc
                     ['action_corrective',  'Acción correctiva'],
                     ['action_improvement', 'Acción de mejora'],
                   ].map(([key, lbl]) => (
-                    <CheckItem key={key} label={lbl} checked={f2[key]} disabled={m2Lock}
-                      onChange={() => s2(key, !f2[key])} />
+                    <CheckItem key={key} label={lbl} checked={f2[key]}
+                      disabled={m2Lock || (key === 'action_corrective' && f2.action_correction)}
+                      onChange={() => toggleTipo(key)} />
                   ))}
                 </div>
+                {f2.action_correction && !m2Lock && (
+                  <p className="mt-1 text-[11px] text-gray-500">Toda corrección conlleva una acción correctiva.</p>
+                )}
               </Field>
-              <Field label="Causas (análisis raíz)">
-                <TA value={f2.causes} disabled={m2Lock}
-                  onChange={e => s2('causes', e.target.value)}
-                  placeholder="5 ¿Por qué?, Ishikawa..." ring="yellow" />
-              </Field>
-              <Field label="Descripción de las acciones">
-                <TA value={f2.action_description} disabled={m2Lock}
-                  onChange={e => s2('action_description', e.target.value)}
-                  placeholder="Acciones a implementar..." ring="yellow" />
-              </Field>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Logros esperados">
-                  <TA value={f2.expected_results} disabled={m2Lock} rows={2}
-                    onChange={e => s2('expected_results', e.target.value)}
-                    placeholder="Resultados esperados..." ring="yellow" />
+
+              {f2.action_correction && (
+                <Field label="Descripción de la corrección" required error={errors.correction_description}>
+                  <TA value={f2.correction_description} disabled={m2Lock} rows={2}
+                    onChange={e => s2('correction_description', e.target.value)}
+                    placeholder="¿Qué se hizo para eliminar la no conformidad detectada?" ring="yellow" />
                 </Field>
-                <Field label="Recursos / Presupuesto">
-                  <TA value={f2.resources_budget} disabled={m2Lock} rows={2}
-                    onChange={e => s2('resources_budget', e.target.value)}
-                    placeholder="Recursos requeridos..." ring="yellow" />
+              )}
+
+              {f2.action_corrective && (legacy ? (
+                <>
+                  <Field label="Causas (registro anterior a RE-GS-06 v2)">
+                    <TA value={f2.causes} disabled={m2Lock}
+                      onChange={e => s2('causes', e.target.value)} ring="yellow" />
+                  </Field>
+                  <Field label="Descripción de las acciones (registro anterior)">
+                    <TA value={f2.action_description} disabled={m2Lock}
+                      onChange={e => s2('action_description', e.target.value)} ring="yellow" />
+                  </Field>
+                </>
+              ) : (
+                <>
+                  <Field label="Causa · 5 ¿Por qué?" required error={errors.causes_whys}>
+                    <ListaNumerada items={f2.causes_whys} fixed prefix="¿Por qué?"
+                      disabled={m2Lock} error={errors.causes_whys}
+                      onChange={v => s2('causes_whys', v)}
+                      placeholder="Causa..." />
+                  </Field>
+                  <Field label="Descripción de las acciones correctivas (mínimo 5)" required error={errors.corrective_actions}>
+                    <ListaNumerada items={f2.corrective_actions} min={5} prefix="Acción"
+                      disabled={m2Lock} error={errors.corrective_actions}
+                      onChange={v => s2('corrective_actions', v)}
+                      placeholder="Acción a implementar..." addLabel="Agregar acción" />
+                  </Field>
+                </>
+              ))}
+
+              {f2.action_improvement && (
+                <Field label="Descripción de las acciones de mejora" required error={errors.improvement_description}>
+                  <TA value={f2.improvement_description} disabled={m2Lock}
+                    onChange={e => s2('improvement_description', e.target.value)}
+                    placeholder="Acciones de mejora a implementar..." ring="yellow" />
                 </Field>
-              </div>
+              )}
+
+              <Field label="Presupuesto / Recursos">
+                <TA value={f2.resources_budget} disabled={m2Lock} rows={2}
+                  onChange={e => s2('resources_budget', e.target.value)}
+                  placeholder="Recursos requeridos..." ring="yellow" />
+              </Field>
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Responsable" required error={errors.responsible_id}>
                   <select value={f2.responsible_id} disabled={m2Lock}

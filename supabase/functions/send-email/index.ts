@@ -8,6 +8,7 @@
 //   sst_asignacion_actividad · sst_recordatorio_actividad · sst_actividad_vencida ·
 //   indicador_creacion · indicador_edicion · indicador_critico
 //   Deploy SIEMPRE con verify_jwt = false.
+// v57 (nov 2026): plantilla accion_mejora_m2 alineada a RE-GS-06 v2.
 // v54 (oct 2026): tipo reporte_recibido ("Ayúdanos a mejorar"). Lo envía la
 //   RPC crear_reporte() desde la BD con pg_net, a los responsables del tipo.
 // ══════════════════════════════════════════════════════════════════════
@@ -629,10 +630,13 @@ const getAccionM1Template = (req: EmailRequest): string => {
 // ── Acciones de Mejora: Momento 2 (análisis + plan) ──────────────────
 const getAccionM2Template = (req: EmailRequest): string => {
   const d = req.data!;
+  // v57 (nov 2026): RE-GS-06 v2 — Corrección · Acción correctiva · Acción de mejora
   const tipos = checks([
-    ["Corrección", d.action_correction], ["Acción correctiva/mejora", d.action_corrective],
-    ["Acción Preventiva", d.action_preventive], ["Acción de Mejora", d.action_improvement],
+    ["Corrección", d.action_correction], ["Acción correctiva", d.action_corrective],
+    ["Acción de mejora", d.action_improvement],
   ]);
+  const numerada = (v: unknown): string =>
+    Array.isArray(v) && v.length ? v.map((t, i) => `${i + 1}. ${t}`).join("\n") : "";
   return getBaseTemplate("Acción de Mejora — Plan de acción", `
     <div class="content">
       <div class="title">🛠️ Acción de Mejora — Análisis y plan registrados</div>
@@ -645,10 +649,11 @@ const getAccionM2Template = (req: EmailRequest): string => {
         ${row("Registrado por:", d.created_by_name)}
         <div class="info-row"><div class="info-label">Estado:</div><div class="info-value"><span class="badge badge-amber">En proceso · Momento 2</span></div></div>
       </div>
-      ${block("🔍 Causas:", d.causes)}
-      ${block("📝 Acción a realizar:", d.action_description)}
-      ${block("🎯 Resultados esperados:", d.expected_results)}
-      ${block("💰 Recursos / presupuesto:", d.resources_budget)}
+      ${block("🩹 Corrección:", d.correction_description)}
+      ${block("🔍 Causa · 5 ¿por qué?:", numerada(d.causes_whys) || d.causes)}
+      ${block("📝 Acciones correctivas:", numerada(d.corrective_actions) || d.action_description)}
+      ${block("🚀 Acciones de mejora:", d.improvement_description)}
+      ${block("💰 Presupuesto:", d.resources_budget)}
       ${button("/mejoramiento-continuo", "Ver Acción de Mejora")}
     </div>`);
 };

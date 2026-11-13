@@ -1,6 +1,7 @@
 // src/components/modules/MejoramientoContinuo/AccionesMejora/AccionesMejoraManager.jsx
 // v2.0 — Con botones de 3 momentos + permisos por proceso y auditor
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Input }  from '@/app/components/ui/input';
@@ -21,32 +22,122 @@ import AccionMejoraModal from './AccionMejoraModal';
 import CierreAccionModal from './CierreAccionModal';
 
 // ── Paleta Excel ──────────────────────────────────────────────────────────────
+// Colores tomados del formato RE-GS-06 v2
 const XL = {
-  identificacion: '#FFD966', analisis: '#9DC3E6', plan: '#2E75B6',
-  verificacion: '#70AD47',   subOrigen: '#BDD7EE', subAccion: '#BDD7EE',
-  subFecha: '#C6EFCE',       subCierre: '#C6EFCE', colBg: '#DEEAF1',
+  identificacion: '#FFC000', analisis: '#FFFF00', plan: '#00B0F0',
+  verificacion: '#92D050',   subOrigen: '#8DB4E2', subAccion: '#8DB4E2',
+  subFecha: '#8DB4E2',       subCierre: '#8DB4E2', colBg: '#8DB4E2',
+  correccion: '#FCD5B4',     correctiva: '#CCC0DA', mejora: '#FFFF00',
+  tCorreccion: '#FEF4EC',    tCorrectiva: '#F4F1F8', tMejora: '#FFFFE5',
+  tIdent: '#FFF8E5',         tPlan: '#E8F8FE',      tVerif: '#F2F9EA',
   border: '#A6B8C2',         rowOdd: '#FFFFFF',    rowEven: '#F2F9F5',
   rowHover: '#EBF5FB',       rowOverdue: '#FEF2F2',accBg: '#EDF7ED',
 };
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
+// ── Barra de scroll horizontal siempre visible (v2, 13-nov-2026) ───────────
+// Mientras la tabla esté en pantalla y su final quede por debajo del borde
+// inferior, se muestra una barra FIJA abajo de la ventana (portal en <body>,
+// así no la afectan los transform/overflow de los contenedores). Cuando se
+// llega al final de la tabla, se usa la barra normal debajo de ella.
+function BarraScrollFija({ targetRef, deps = [] }) {
+  const inlineRef = useRef(null);
+  const fixedRef  = useRef(null);
+  const [m, setM] = useState({ total: 0, visible: 0, show: false, left: 0, width: 0 });
+
+  useEffect(() => {
+    const t = targetRef.current;
+    if (!t) return;
+    let raf = 0;
+    const medir = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const r  = t.getBoundingClientRect();
+        const vh = window.innerHeight;
+        const show = r.top < vh - 40 && r.bottom > vh;   // tabla visible y su final fuera de pantalla
+        setM(prev => {
+          const n = { total: t.scrollWidth, visible: t.clientWidth, show, left: r.left, width: r.width };
+          return (prev.total === n.total && prev.visible === n.visible && prev.show === n.show &&
+                  Math.abs(prev.left - n.left) < 1 && Math.abs(prev.width - n.width) < 1) ? prev : n;
+        });
+      });
+    };
+    const sync = () => {
+      for (const b of [inlineRef.current, fixedRef.current])
+        if (b && Math.abs(b.scrollLeft - t.scrollLeft) > 1) b.scrollLeft = t.scrollLeft;
+    };
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(t);
+    if (t.firstElementChild) ro.observe(t.firstElementChild);
+    t.addEventListener('scroll', sync);
+    document.addEventListener('scroll', medir, true);   // captura: cualquier contenedor que haga scroll
+    window.addEventListener('resize', medir);
+    return () => {
+      cancelAnimationFrame(raf); ro.disconnect();
+      t.removeEventListener('scroll', sync);
+      document.removeEventListener('scroll', medir, true);
+      window.removeEventListener('resize', medir);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetRef, ...deps]);
+
+  // Al aparecer la barra fija, ponerla en la misma posición que la tabla
+  useEffect(() => {
+    const t = targetRef.current, b = fixedRef.current;
+    if (t && b) b.scrollLeft = t.scrollLeft;
+  }, [m.show, targetRef]);
+
+  if (m.total <= m.visible + 1) return null;
+
+  const onBar = (e) => {
+    const t = targetRef.current;
+    if (t && Math.abs(t.scrollLeft - e.currentTarget.scrollLeft) > 1) t.scrollLeft = e.currentTarget.scrollLeft;
+  };
+  const estilo = { overflowX:'auto', overflowY:'hidden', height:16, background:'#f1f5f9' };
+
+  return (
+    <>
+      <div ref={inlineRef} className="am-barra" onScroll={onBar}
+        style={{ ...estilo, borderTop:'1px solid #e2e8f0', visibility: m.show ? 'hidden' : 'visible' }}>
+        <div style={{ width: m.total, height: 1 }} />
+      </div>
+      {m.show && createPortal(
+        <div ref={fixedRef} className="am-barra" onScroll={onBar}
+          style={{ ...estilo, position:'fixed', bottom:0, left:m.left, width:m.width, zIndex:60,
+                   height:18, borderTop:'1px solid #cbd5e1', boxShadow:'0 -2px 6px rgba(0,0,0,.12)' }}>
+          <div style={{ width: m.total, height: 1 }} />
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 // ── Helpers de tabla ──────────────────────────────────────────────────────────
-const HHead = ({ children, bg, colSpan=1, rowSpan=1, textColor='#1F2937', small=false }) => (
+// 13-nov-2026: encabezado fijo, columnas ACC/Consecutivo fijas y separadores por grupo
+const SEP = '2px solid #475569';
+const fija = (left) => (left === undefined ? {} : { position:'sticky', left, zIndex:3 });
+const HHead = ({ children, bg, colSpan=1, rowSpan=1, textColor='#1F2937', small=false, sep, stick }) => (
   <th colSpan={colSpan} rowSpan={rowSpan} style={{
+    ...fija(stick), ...(sep ? { borderLeft:SEP } : {}),
     backgroundColor: bg, border:`1px solid ${XL.border}`,
     textAlign:'center', verticalAlign:'middle',
     padding: small ? '2px 2px' : '3px 4px',
     fontSize: small ? 8 : 9, fontWeight:700,
     textTransform:'uppercase', color:textColor, whiteSpace:'nowrap',
+    ...(sep ? { borderLeft:SEP } : {}),
   }}>{children}</th>
 );
-const VHead = ({ children, rowSpan=1, colSpan=1, w=26 }) => {
+const VHead = ({ children, rowSpan=1, colSpan=1, w=26, bg, sep, stick }) => {
   const lines = typeof children === 'string' ? children.split('|') : [children];
   return (
     <th rowSpan={rowSpan} colSpan={colSpan} style={{
-      backgroundColor:XL.colBg, border:`1px solid ${XL.border}`,
+      ...fija(stick),
+      backgroundColor:bg || XL.colBg, border:`1px solid ${XL.border}`,
       padding:0, width:w, minWidth:w, maxWidth:w,
+      ...(sep ? { borderLeft:SEP } : {}),
     }}>
       <div style={{ display:'flex', justifyContent:'center', alignItems:'flex-end', height:90, paddingBottom:4 }}>
         <div style={{
@@ -61,12 +152,14 @@ const VHead = ({ children, rowSpan=1, colSpan=1, w=26 }) => {
     </th>
   );
 };
-const Cell = ({ children, center, bold, color, maxW, bg }) => (
+const Cell = ({ children, center, bold, color, maxW, bg, sep, stick }) => (
   <td style={{
+    ...(stick === undefined ? {} : { position:'sticky', left:stick, zIndex:1, boxShadow:'2px 0 3px -1px rgba(0,0,0,.18)' }),
     border:`1px solid ${XL.border}`, padding:'3px 4px', fontSize:10,
     textAlign: center ? 'center' : 'left', fontWeight: bold ? 600 : 400,
     color: color || '#1F2937', maxWidth:maxW, verticalAlign:'middle',
     backgroundColor:bg, wordBreak:'break-word', overflowWrap:'break-word',
+    ...(sep ? { borderLeft:SEP } : {}),
   }}>{children}</td>
 );
 const Fecha = ({ v }) => {
@@ -76,11 +169,14 @@ const Fecha = ({ v }) => {
 const Tick = ({ v }) =>
   v ? <span style={{ color:'#2e5244', fontSize:12, fontWeight:700 }}>✓</span>
     : <span style={{ color:'#E0E0E0' }}>-</span>;
+// RE-GS-06 v2: listas numeradas (5 porqués / acciones)
+const listaTexto = (arr) =>
+  Array.isArray(arr) && arr.length ? arr.map((x, i) => `${i + 1}. ${x}`).join('\n') : '';
 const Clamp = ({ v, muted }) => (
   <div style={{
     display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical',
     overflow:'hidden', color: muted ? '#6B7280' : '#1F2937',
-    fontSize:10, wordBreak:'break-word', overflowWrap:'break-word', whiteSpace:'normal',
+    fontSize:10, wordBreak:'break-word', overflowWrap:'break-word', whiteSpace:'pre-line',
   }} title={v||''}>{v||'-'}</div>
 );
 function Semaforo({ proposedDate, isClosed }) {
@@ -157,6 +253,7 @@ function MomentoTag({ status }) {
 export default function AccionesMejoraManager({ onBack }) {
   const { user, profile, hasPermission } = useAuth();
   const { formato } = useFormato('registro_acciones_mejora');   // RE-GS-06 desde Gestión Documental
+  const tablaRef = useRef(null);   // contenedor con scroll horizontal (ver BarraScrollFija)
   const role = profile?.role;
 
   // ── Permisos ────────────────────────────────────────────────────────────────
@@ -387,7 +484,17 @@ export default function AccionesMejoraManager({ onBack }) {
           )}
 
           {/* Tabla Excel */}
-          <div className="border rounded-lg" style={{ overflowX:'auto', paddingBottom:2 }}>
+          {/* Tabla completa (sin recuadro de alto fijo). La barra horizontal propia
+              se oculta y se usa <BarraScrollFija>, pegada al borde inferior de la pantalla */}
+          <div ref={tablaRef} className="border rounded-t-lg am-scroll" style={{
+            overflowX:'auto', overflowY:'hidden', scrollbarWidth:'none',
+          }}>
+            <style>{`
+              .am-scroll::-webkit-scrollbar{display:none}
+              .am-barra::-webkit-scrollbar{height:12px}
+              .am-barra::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:6px;border:2px solid #f1f5f9}
+              .am-barra::-webkit-scrollbar-track{background:#f1f5f9}
+            `}</style>
             <div style={{ zoom:'0.75', minWidth:'fit-content', paddingBottom:8 }}>
               {loading ? (
                 <div className="flex items-center justify-center p-12">
@@ -418,35 +525,38 @@ export default function AccionesMejoraManager({ onBack }) {
                     <col style={{width:90}}/><col style={{width:26}}/><col style={{width:26}}/>
                     <col style={{width:26}}/><col style={{width:26}}/><col style={{width:26}}/>
                     <col style={{width:26}}/><col style={{width:130}}/><col style={{width:26}}/>
-                    <col style={{width:26}}/><col style={{width:26}}/><col style={{width:100}}/>
-                    <col style={{width:120}}/><col style={{width:90}}/><col style={{width:75}}/>
-                    <col style={{width:80}}/><col style={{width:52}}/><col style={{width:100}}/>
-                    <col style={{width:100}}/><col style={{width:50}}/><col style={{width:50}}/>
-                    <col style={{width:30}}/><col style={{width:30}}/><col style={{width:30}}/>
-                    <col style={{width:80}}/>
+                    <col style={{width:100}}/><col style={{width:26}}/><col style={{width:110}}/>
+                    <col style={{width:130}}/><col style={{width:26}}/><col style={{width:100}}/>
+                    <col style={{width:75}}/><col style={{width:80}}/><col style={{width:52}}/>
+                    <col style={{width:100}}/><col style={{width:100}}/><col style={{width:50}}/>
+                    <col style={{width:50}}/><col style={{width:30}}/><col style={{width:30}}/>
+                    <col style={{width:30}}/><col style={{width:80}}/>
                   </colgroup>
                   <thead>
                     <tr>
-                      <HHead bg="#E2EFDA" rowSpan={3}>ACC.</HHead>
-                      <HHead bg={XL.identificacion} colSpan={10}>IDENTIFICACIÓN</HHead>
-                      <HHead bg={XL.analisis}       colSpan={4}>ANÁLISIS</HHead>
-                      <HHead bg={XL.plan}           colSpan={5} textColor="#FFFFFF">PLAN DE ACCIÓN</HHead>
-                      <HHead bg={XL.verificacion}   colSpan={8} textColor="#FFFFFF">VERIFICACIÓN</HHead>
+                      <HHead bg="#E2EFDA" rowSpan={3} stick={0}>ACC.</HHead>
+                      <HHead bg={XL.identificacion} colSpan={10} sep>IDENTIFICACIÓN</HHead>
+                      <HHead bg={XL.analisis}       colSpan={7} sep>ANÁLISIS Y ACCIONES</HHead>
+                      <HHead bg={XL.plan}           colSpan={3} sep>CRONOGRAMA</HHead>
+                      <HHead bg={XL.verificacion}   colSpan={8} sep>VERIFICACIÓN</HHead>
                     </tr>
                     <tr>
-                      <VHead rowSpan={2} w={70}>Consecutivo</VHead>
+                      <VHead rowSpan={2} w={70} sep stick={70}>Consecutivo</VHead>
                       <VHead rowSpan={2} w={52}>Fecha</VHead>
                       <VHead rowSpan={2} w={90}>Proceso</VHead>
                       <HHead bg={XL.subOrigen} colSpan={6} small>ORIGEN</HHead>
                       <VHead rowSpan={2} w={130}>Descripción|del Hallazgo</VHead>
-                      <HHead bg={XL.subAccion} colSpan={3} small>ACCIÓN</HHead>
-                      <VHead rowSpan={2} w={100}>Causas</VHead>
-                      <VHead rowSpan={2} w={120}>Descripción|de las Acciones</VHead>
-                      <VHead rowSpan={2} w={90}>Logros|Esperados</VHead>
-                      <VHead rowSpan={2} w={75}>Recursos /|Presupuesto</VHead>
+                      <VHead rowSpan={2} w={26} bg={XL.correccion} sep>Corrección</VHead>
+                      <VHead rowSpan={2} w={100} bg={XL.correccion}>Descripción de|la corrección</VHead>
+                      <VHead rowSpan={2} w={26} bg={XL.correctiva}>Correctiva</VHead>
+                      <VHead rowSpan={2} w={110} bg={XL.correctiva}>Causa|5 ¿Por qué?</VHead>
+                      <VHead rowSpan={2} w={130} bg={XL.correctiva}>Descripción de las|acciones correctivas</VHead>
+                      <VHead rowSpan={2} w={26} bg={XL.mejora}>Mejora</VHead>
+                      <VHead rowSpan={2} w={100} bg={XL.mejora}>Descripción de las|acciones de mejora</VHead>
+                      <VHead rowSpan={2} w={75} sep>Presupuesto</VHead>
                       <VHead rowSpan={2} w={80}>Responsable</VHead>
-                      <VHead rowSpan={2} w={52}>Fecha|Propuesta</VHead>
-                      <VHead rowSpan={2} w={100}>Criterios de|Verificación</VHead>
+                      <VHead rowSpan={2} w={52}>Fecha</VHead>
+                      <VHead rowSpan={2} w={100} sep>Criterios de|Verificación</VHead>
                       <VHead rowSpan={2} w={100}>Hallazgo de|Verificación</VHead>
                       <HHead bg={XL.subFecha}  colSpan={2} small>FECHA</HHead>
                       <VHead rowSpan={2} w={30}>Estado</VHead>
@@ -457,7 +567,6 @@ export default function AccionesMejoraManager({ onBack }) {
                       <VHead w={26}>Auditoría</VHead><VHead w={26}>QRS</VHead>
                       <VHead w={26}>Satisfacción</VHead><VHead w={26}>Autocontrol /|Gest. cambio</VHead>
                       <VHead w={26}>Análisis de|riesgos</VHead><VHead w={26}>Pto no conforme</VHead>
-                      <VHead w={26}>Corrección</VHead><VHead w={26}>Correctiva</VHead><VHead w={26}>Mejora</VHead>
                       <VHead w={50}>Verificación</VHead><VHead w={50}>Eficacia</VHead>
                       <VHead w={30}>SI</VHead><VHead w={30}>NO</VHead>
                     </tr>
@@ -467,6 +576,8 @@ export default function AccionesMejoraManager({ onBack }) {
                       const light     = getTrafficLight(a.proposed_date, a.is_closed);
                       const isOverdue = light.color === 'red' && !a.is_closed;
                       const bg        = isOverdue ? XL.rowOverdue : idx%2===0 ? XL.rowOdd : XL.rowEven;
+                      // Tono suave por grupo, como en el formato (no tapa el rojo de vencidas)
+                      const tb        = (c) => (isOverdue ? undefined : c);
 
                       // ── Permisos por fila ───────────────────────────────
                       const myProcess = isMyProcess(a);
@@ -483,7 +594,8 @@ export default function AccionesMejoraManager({ onBack }) {
                           {/* ── Columna acciones ── */}
                           <td style={{
                             border:`1px solid ${XL.border}`, padding:'2px',
-                            textAlign:'center', verticalAlign:'middle', backgroundColor:XL.accBg
+                            textAlign:'center', verticalAlign:'middle', backgroundColor:XL.accBg,
+                            position:'sticky', left:0, zIndex:1,
                           }}>
                             <div style={{ display:'flex', gap:2, justifyContent:'center', flexWrap:'wrap', padding:'1px' }}>
 
@@ -541,9 +653,9 @@ export default function AccionesMejoraManager({ onBack }) {
                             </div>
                           </td>
 
-                          <Cell center bold color="#2e5244">{a.consecutive}</Cell>
-                          <Cell center><Fecha v={a.date} /></Cell>
-                          <Cell>
+                          <Cell center bold color="#2e5244" bg={isOverdue ? XL.rowOverdue : XL.tIdent} sep stick={70}>{a.consecutive}</Cell>
+                          <Cell center bg={tb(XL.tIdent)}><Fecha v={a.date} /></Cell>
+                          <Cell bg={tb(XL.tIdent)}>
                             <span style={{
                               background:'#6dbd9618', color:'#2e5244', padding:'1px 4px',
                               borderRadius:3, fontSize:9, whiteSpace:'nowrap',
@@ -552,30 +664,31 @@ export default function AccionesMejoraManager({ onBack }) {
                               {procName(a.process_id)}
                             </span>
                           </Cell>
-                          <Cell center><Tick v={a.origin_audit} /></Cell>
-                          <Cell center><Tick v={a.origin_qrs} /></Cell>
-                          <Cell center><Tick v={a.origin_satisfaction} /></Cell>
-                          <Cell center><Tick v={a.origin_autocontrol} /></Cell>
-                          <Cell center><Tick v={a.origin_risk_analysis} /></Cell>
-                          <Cell center><Tick v={a.origin_nonconforming} /></Cell>
-                          <Cell><Clamp v={a.finding_description} /></Cell>
-                          <Cell center><Tick v={a.action_correction} /></Cell>
-                          <Cell center><Tick v={a.action_corrective} /></Cell>
-                          <Cell center><Tick v={a.action_improvement} /></Cell>
-                          <Cell><Clamp v={a.causes} muted /></Cell>
-                          <Cell><Clamp v={a.action_description} /></Cell>
-                          <Cell><Clamp v={a.expected_results} muted /></Cell>
-                          <Cell><Clamp v={a.resources_budget} muted /></Cell>
-                          <Cell bold>{a.responsible?.full_name || a.responsible_name || '-'}</Cell>
-                          <Cell center><Fecha v={a.proposed_date} /></Cell>
-                          <Cell><Clamp v={a.verification_criteria} muted /></Cell>
-                          <Cell><Clamp v={a.verification_finding} /></Cell>
-                          <Cell center><Fecha v={a.verification_date} /></Cell>
-                          <Cell center><Fecha v={a.efficacy_date} /></Cell>
-                          <Cell center><Semaforo proposedDate={a.proposed_date} isClosed={a.is_closed} /></Cell>
+                          <Cell center bg={tb(XL.tIdent)}><Tick v={a.origin_audit} /></Cell>
+                          <Cell center bg={tb(XL.tIdent)}><Tick v={a.origin_qrs} /></Cell>
+                          <Cell center bg={tb(XL.tIdent)}><Tick v={a.origin_satisfaction} /></Cell>
+                          <Cell center bg={tb(XL.tIdent)}><Tick v={a.origin_autocontrol} /></Cell>
+                          <Cell center bg={tb(XL.tIdent)}><Tick v={a.origin_risk_analysis} /></Cell>
+                          <Cell center bg={tb(XL.tIdent)}><Tick v={a.origin_nonconforming} /></Cell>
+                          <Cell bg={tb(XL.tIdent)}><Clamp v={a.finding_description} /></Cell>
+                          <Cell center bg={tb(XL.tCorreccion)} sep><Tick v={a.action_correction} /></Cell>
+                          <Cell bg={tb(XL.tCorreccion)}><Clamp v={a.correction_description} /></Cell>
+                          <Cell center bg={tb(XL.tCorrectiva)}><Tick v={a.action_corrective} /></Cell>
+                          <Cell bg={tb(XL.tCorrectiva)}><Clamp v={listaTexto(a.causes_whys) || a.causes} muted /></Cell>
+                          <Cell bg={tb(XL.tCorrectiva)}><Clamp v={listaTexto(a.corrective_actions) || a.action_description} /></Cell>
+                          <Cell center bg={tb(XL.tMejora)}><Tick v={a.action_improvement} /></Cell>
+                          <Cell bg={tb(XL.tMejora)}><Clamp v={a.improvement_description} /></Cell>
+                          <Cell bg={tb(XL.tPlan)} sep><Clamp v={a.resources_budget} muted /></Cell>
+                          <Cell bold bg={tb(XL.tPlan)}>{a.responsible?.full_name || a.responsible_name || '-'}</Cell>
+                          <Cell center bg={tb(XL.tPlan)}><Fecha v={a.proposed_date} /></Cell>
+                          <Cell bg={tb(XL.tVerif)} sep><Clamp v={a.verification_criteria} muted /></Cell>
+                          <Cell bg={tb(XL.tVerif)}><Clamp v={a.verification_finding} /></Cell>
+                          <Cell center bg={tb(XL.tVerif)}><Fecha v={a.verification_date} /></Cell>
+                          <Cell center bg={tb(XL.tVerif)}><Fecha v={a.efficacy_date} /></Cell>
+                          <Cell center bg={tb(XL.tVerif)}><Semaforo proposedDate={a.proposed_date} isClosed={a.is_closed} /></Cell>
 
                           {/* Cierre SI */}
-                          <td style={{ border:`1px solid ${XL.border}`, textAlign:'center', verticalAlign:'middle', padding:'2px' }}>
+                          <td style={{ border:`1px solid ${XL.border}`, textAlign:'center', verticalAlign:'middle', padding:'2px', backgroundColor: tb(XL.tVerif) }}>
                             {canCierre ? (
                               <button onClick={() => openCierre(a)} style={{
                                 backgroundColor:'#22c55e', color:'white', border:'none',
@@ -589,7 +702,7 @@ export default function AccionesMejoraManager({ onBack }) {
                           </td>
 
                           {/* Cierre NO */}
-                          <td style={{ border:`1px solid ${XL.border}`, textAlign:'center', verticalAlign:'middle', padding:'2px' }}>
+                          <td style={{ border:`1px solid ${XL.border}`, textAlign:'center', verticalAlign:'middle', padding:'2px', backgroundColor: tb(XL.tVerif) }}>
                             {canCierre ? (
                               <button onClick={() => openCierre(a)} style={{
                                 backgroundColor:'#9CA3AF', color:'white', border:'none',
@@ -602,7 +715,7 @@ export default function AccionesMejoraManager({ onBack }) {
                             )}
                           </td>
 
-                          <Cell>{a.auditor?.full_name || '-'}</Cell>
+                          <Cell bg={tb(XL.tVerif)}>{a.auditor?.full_name || '-'}</Cell>
                         </tr>
                       );
                     })}
@@ -611,6 +724,7 @@ export default function AccionesMejoraManager({ onBack }) {
               )}
             </div>
           </div>
+          <BarraScrollFija targetRef={tablaRef} deps={[pageRows.length, loading, pageSize]} />
 
           {!loading && rows.length > 0 && (
             <Pagination
